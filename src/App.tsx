@@ -106,6 +106,7 @@ export function App() {
             colorTheme: etat.theme,
             locale: 'fr',
           }}
+          caches={[{ coin: 'haut-droite', largeur: 56, hauteur: 46, couleur: 'var(--fond)' }]}
         />
       </div>
       <RailGauche page={etat.page} changer={(page) => maj({ page })} />

@@ -62,6 +62,9 @@ export function Graphique({ etat, emplacementActif, choisirEmplacement, ouvrirRe
                 studies: etat.etudes,
                 show_popup_button: false,
               }}
+              caches={[
+                { coin: 'bas-gauche', x: multi ? 0 : 46, y: 74, largeur: 64, hauteur: 52, couleur: 'var(--fond)' },
+              ]}
             />
           </section>
         );

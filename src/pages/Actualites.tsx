@@ -50,7 +50,7 @@ export function Actualites({ etat }: Props) {
         ))}
       </div>
       <div className="plein">
-        <WidgetTradingView widget="timeline" config={config} />
+        <WidgetTradingView widget="timeline" config={config} caches={[{ coin: 'haut-droite', y: 8, couleur: 'var(--fond)' }]} />
       </div>
     </div>
   );

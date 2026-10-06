@@ -76,6 +76,7 @@ export function Screener({ theme }: Props) {
         {actions && (
           <WidgetTradingView
             widget="screener"
+            caches={[{ coin: 'bas-droite', couleur: 'var(--fond)' }]}
             config={{
               width: '100%',
               height: '100%',
@@ -92,6 +93,7 @@ export function Screener({ theme }: Props) {
         {marche === 'crypto' && (
           <WidgetTradingView
             widget="screener"
+            caches={[{ coin: 'bas-droite', couleur: 'var(--fond)' }]}
             config={{
               width: '100%',
               height: '100%',
@@ -107,6 +109,7 @@ export function Screener({ theme }: Props) {
         {marche === 'forex' && (
           <WidgetTradingView
             widget="screener"
+            caches={[{ coin: 'bas-droite', couleur: 'var(--fond)' }]}
             config={{
               width: '100%',
               height: '100%',

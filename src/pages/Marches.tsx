@@ -140,6 +140,7 @@ export function Marches({ theme }: Props) {
         <div className="plein">
           <WidgetTradingView
             widget="stock-heatmap"
+            caches={[{ coin: 'bas-droite', couleur: 'var(--fond)' }]}
             config={{
               exchanges: [],
               dataSource: indice,
@@ -163,6 +164,7 @@ export function Marches({ theme }: Props) {
         <div className="plein">
           <WidgetTradingView
             widget="crypto-coins-heatmap"
+            caches={[{ coin: 'bas-droite', couleur: 'var(--fond)' }]}
             config={{
               dataSource: 'Crypto',
               blockSize: 'market_cap_calc',
@@ -184,6 +186,7 @@ export function Marches({ theme }: Props) {
         <div className="plein">
           <WidgetTradingView
             widget="forex-heat-map"
+            caches={[{ coin: 'bas-droite', couleur: 'var(--fond)' }]}
             config={{
               width: '100%',
               height: '100%',
@@ -200,6 +203,7 @@ export function Marches({ theme }: Props) {
         <div className="plein">
           <WidgetTradingView
             widget="forex-cross-rates"
+            caches={[{ coin: 'bas-droite', couleur: 'var(--fond)' }]}
             config={{
               width: '100%',
               height: '100%',

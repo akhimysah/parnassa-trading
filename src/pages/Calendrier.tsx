@@ -51,6 +51,7 @@ export function Calendrier({ theme }: Props) {
       <div className="plein">
         <WidgetTradingView
           widget="events"
+          caches={[{ coin: 'bas-droite', couleur: 'var(--fond)' }]}
           config={{
             colorTheme: theme,
             isTransparent: true,

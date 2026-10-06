@@ -18,6 +18,7 @@ export function Symbole({ etat, ouvrirRecherche }: Props) {
       <div className="carte info-symbole">
         <WidgetTradingView
           widget="symbol-info"
+          caches={[{ coin: 'haut-droite', y: 8 }]}
           config={{ symbol: symbole, width: '100%', locale: 'fr', colorTheme: theme, isTransparent: true }}
         />
         <button className="bouton-secondaire" onClick={ouvrirRecherche}>
@@ -30,6 +31,7 @@ export function Symbole({ etat, ouvrirRecherche }: Props) {
           <h3>Graphique</h3>
           <WidgetTradingView
             widget="symbol-overview"
+            caches={[{ coin: 'bas-gauche' }]}
             config={{
               symbols: [[symbole]],
               chartOnly: false,
