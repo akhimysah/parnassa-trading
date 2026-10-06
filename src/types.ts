@@ -1,6 +1,6 @@
 export type Theme = 'dark' | 'light';
 
-export type Page = 'graphique' | 'marches' | 'screener' | 'symbole' | 'actualites' | 'calendrier';
+export type Page = 'graphique' | 'marches' | 'screener' | 'symbole' | 'actualites' | 'calendrier' | 'alertes';
 
 /** Intervalle au format attendu par le widget TradingView. */
 export type Intervalle = '1' | '5' | '15' | '60' | '240' | 'D' | 'W';
@@ -31,4 +31,35 @@ export interface Etat {
   panneauDroit: boolean;
   /** Symboles superposés au graphique principal (comparaison). */
   comparaisons: string[];
+  /** En disposition multiple : changer de symbole change tous les graphiques. */
+  lier: boolean;
+  dispositionsSauvees: DispositionSauvee[];
+  alertes: Alerte[];
+}
+
+export interface DispositionSauvee {
+  id: string;
+  nom: string;
+  creeLe: number;
+  disposition: Disposition;
+  emplacements: string[];
+  symbole: string;
+  intervalle: Intervalle;
+  style: StyleGraphique;
+  etudes: string[];
+  comparaisons: string[];
+}
+
+export interface Alerte {
+  id: string;
+  /** Symbole Binance en notation TradingView, ex. "BINANCE:BTCUSDT". */
+  symbole: string;
+  condition: 'au-dessus' | 'en-dessous';
+  seuil: number;
+  note?: string;
+  creeLe: number;
+  /** Dernier prix observé : le déclenchement exige un franchissement du seuil. */
+  dernierPrix?: number;
+  declencheeLe?: number;
+  prixDeclenchement?: number;
 }

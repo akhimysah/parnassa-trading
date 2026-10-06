@@ -1,16 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Etat, Intervalle, StyleGraphique } from '../types';
+import type { DispositionSauvee, Etat, Intervalle, StyleGraphique } from '../types';
 import { bourse, nomSymbole, ticker } from '../symboles';
 import {
   IconeChevron,
+  IconeCloche,
   IconeCroix,
   IconeDisposition,
   IconeEtoile,
+  IconeLien,
   IconeLune,
   IconePanneau,
   IconePartage,
   IconePleinEcran,
   IconeRecherche,
+  IconeSauvegarde,
   IconeSoleil,
 } from './Icones';
 
@@ -21,6 +24,9 @@ interface Props {
   ouvrirComparaison: () => void;
   ouvrirListeSuivi: () => void;
   partager: () => void;
+  sauverDisposition: (nom: string) => void;
+  chargerDisposition: (d: DispositionSauvee) => void;
+  nbAlertes: number;
 }
 
 export const INTERVALLES: { valeur: Intervalle; libelle: string }[] = [
@@ -77,9 +83,19 @@ function useFermerAuClic(ouvert: boolean, fermer: () => void) {
   return ref;
 }
 
-type Menu = 'style' | 'etudes' | 'comparer' | null;
+type Menu = 'style' | 'etudes' | 'comparer' | 'dispositions' | null;
 
-export function BarreHaut({ etat, maj, ouvrirRecherche, ouvrirComparaison, ouvrirListeSuivi, partager }: Props) {
+export function BarreHaut({
+  etat,
+  maj,
+  ouvrirRecherche,
+  ouvrirComparaison,
+  ouvrirListeSuivi,
+  partager,
+  sauverDisposition,
+  chargerDisposition,
+  nbAlertes,
+}: Props) {
   const [menu, setMenu] = useState<Menu>(null);
   const refMenu = useFermerAuClic(menu !== null, () => setMenu(null));
   const surGraphique = etat.page === 'graphique';
@@ -233,6 +249,60 @@ export function BarreHaut({ etat, maj, ouvrirRecherche, ouvrirComparaison, ouvri
                 <IconeDisposition n={n} />
               </button>
             ))}
+            {etat.disposition > 1 && (
+              <button
+                className={etat.lier ? 'actif' : ''}
+                title={etat.lier ? 'Graphiques liés : un changement de symbole s\'applique à tous' : 'Lier les graphiques'}
+                onClick={() => maj({ lier: !etat.lier })}
+              >
+                <IconeLien />
+              </button>
+            )}
+          </div>
+
+          <div className="menu-ancre" ref={menu === 'dispositions' ? refMenu : undefined}>
+            <button className="icone" title="Dispositions sauvegardées" onClick={() => basculer('dispositions')}>
+              <IconeSauvegarde />
+            </button>
+            {menu === 'dispositions' && (
+              <div className="menu-deroulant large">
+                <div className="menu-titre">Dispositions sauvegardées</div>
+                {etat.dispositionsSauvees.length === 0 && <div className="menu-vide">Aucune disposition enregistrée.</div>}
+                {etat.dispositionsSauvees.map((d) => (
+                  <div key={d.id} className="menu-ligne">
+                    <button
+                      className="menu-charger"
+                      onClick={() => {
+                        chargerDisposition(d);
+                        setMenu(null);
+                      }}
+                    >
+                      <strong>{d.nom}</strong>
+                      <span className="muet">
+                        {d.disposition} graph. · {d.emplacements.slice(0, d.disposition).map(ticker).join(', ')}
+                      </span>
+                    </button>
+                    <button
+                      className="icone petit"
+                      aria-label={`Supprimer ${d.nom}`}
+                      onClick={() => maj({ dispositionsSauvees: etat.dispositionsSauvees.filter((x) => x.id !== d.id) })}
+                    >
+                      <IconeCroix width={14} height={14} />
+                    </button>
+                  </div>
+                ))}
+                <button
+                  className="menu-action"
+                  onClick={() => {
+                    const nom = window.prompt('Nom de la disposition :', `${ticker(etat.symbole)} ${etat.disposition > 1 ? `×${etat.disposition}` : ''}`.trim());
+                    if (nom && nom.trim()) sauverDisposition(nom.trim());
+                    setMenu(null);
+                  }}
+                >
+                  + Enregistrer la disposition actuelle
+                </button>
+              </div>
+            )}
           </div>
         </>
       )}
@@ -241,6 +311,10 @@ export function BarreHaut({ etat, maj, ouvrirRecherche, ouvrirComparaison, ouvri
 
       <button className="icone" title="Gérer la liste de suivi" onClick={ouvrirListeSuivi}>
         <IconeEtoile />
+      </button>
+      <button className={`icone ${etat.page === 'alertes' ? 'actif' : ''}`} title="Alertes de prix" onClick={() => maj({ page: 'alertes' })}>
+        <IconeCloche />
+        {nbAlertes > 0 && <span className="badge">{nbAlertes}</span>}
       </button>
       {surGraphique && (
         <button

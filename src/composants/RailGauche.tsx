@@ -2,6 +2,7 @@ import type { Page } from '../types';
 import {
   IconeActualites,
   IconeCalendrier,
+  IconeCloche,
   IconeGraphique,
   IconeMarches,
   IconeScreener,
@@ -20,6 +21,7 @@ const ENTREES: { page: Page; libelle: string; Icone: typeof IconeGraphique }[] =
   { page: 'symbole', libelle: 'Symbole', Icone: IconeSymbole },
   { page: 'actualites', libelle: 'Actualités', Icone: IconeActualites },
   { page: 'calendrier', libelle: 'Calendrier', Icone: IconeCalendrier },
+  { page: 'alertes', libelle: 'Alertes', Icone: IconeCloche },
 ];
 
 export function RailGauche({ page, changer }: Props) {

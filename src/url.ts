@@ -1,6 +1,6 @@
 import type { Etat, Intervalle, Page } from './types';
 
-const PAGES: Page[] = ['graphique', 'marches', 'screener', 'symbole', 'actualites', 'calendrier'];
+const PAGES: Page[] = ['graphique', 'marches', 'screener', 'symbole', 'actualites', 'calendrier', 'alertes'];
 const INTERVALLES: Intervalle[] = ['1', '5', '15', '60', '240', 'D', 'W'];
 
 /** Lit « #page/SYMBOLE/intervalle » dans l'adresse (lien de partage). */

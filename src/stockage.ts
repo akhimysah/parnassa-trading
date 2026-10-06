@@ -15,6 +15,9 @@ export const ETAT_DEFAUT: Etat = {
   etudes: ['STD;RSI'],
   panneauDroit: true,
   comparaisons: [],
+  lier: false,
+  dispositionsSauvees: [],
+  alertes: [],
 };
 
 export function chargerEtat(): Etat {

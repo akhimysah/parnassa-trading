@@ -105,6 +105,24 @@ export const IconePartage = (p: P) => (
     <path d="M8.2 10.8l7.6-4.6M8.2 13.2l7.6 4.6" />
   </svg>
 );
+export const IconeCloche = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z" />
+    <path d="M10 20a2 2 0 0 0 4 0" />
+  </svg>
+);
+export const IconeLien = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1.3 1.3" />
+    <path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1.3-1.3" />
+  </svg>
+);
+export const IconeSauvegarde = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M5 4h11l3 3v13H5z" />
+    <path d="M8 4v5h7V4M8 20v-6h8v6" />
+  </svg>
+);
 export const IconeChevron = (p: P) => (
   <svg {...base(p)}>
     <path d="M6 9l6 6 6-6" />
