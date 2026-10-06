@@ -16,7 +16,6 @@
   --barre-h: 44px;
   --bandeau-h: 46px;
   --rail-l: 68px;
-  color-scheme: dark;
 }
 :root[data-theme='light'] {
   --fond: #ffffff;
@@ -29,7 +28,6 @@
   --accent: #2962ff;
   --accent-fond: rgba(41, 98, 255, 0.1);
   --ombre: 0 8px 32px rgba(0, 0, 0, 0.18);
-  color-scheme: light;
 }
 
 * {
@@ -630,4 +628,15 @@ a {
   .carte.haute {
     height: 400px;
   }
+}
+
+/* Pas de « color-scheme » sur la page : Chrome peindrait en blanc les cadres transparents des widgets. */
+* {
+  scrollbar-color: var(--bordure-2) transparent;
+  scrollbar-width: thin;
+}
+select,
+option {
+  background: var(--panneau);
+  color: var(--texte);
 }
