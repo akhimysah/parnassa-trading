@@ -123,6 +123,13 @@ export const IconeSauvegarde = (p: P) => (
     <path d="M8 4v5h7V4M8 20v-6h8v6" />
   </svg>
 );
+export const IconeTrading = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M7 4v4M7 16v4M17 4v3M17 15v5" />
+    <rect x="4.5" y="8" width="5" height="8" rx="1" />
+    <rect x="14.5" y="7" width="5" height="8" rx="1" />
+  </svg>
+);
 export const IconeChevron = (p: P) => (
   <svg {...base(p)}>
     <path d="M6 9l6 6 6-6" />

@@ -13,6 +13,7 @@ import { Symbole } from './pages/Symbole';
 import { Actualites } from './pages/Actualites';
 import { Calendrier } from './pages/Calendrier';
 import { Alertes } from './pages/Alertes';
+import { Trading } from './pages/Trading';
 import { useMoteurAlertes } from './alertes';
 import { estBinance, paireBinance } from './binance';
 import { nomSymbole } from './symboles';
@@ -57,7 +58,11 @@ export function App() {
     (f: (a: Etat['alertes']) => Etat['alertes']) => setEtat((e) => ({ ...e, alertes: f(e.alertes) })),
     [],
   );
-  const pairesSuivies = etat.listeSuivi.filter(estBinance).map(paireBinance);
+  const pairesSuivies = [
+    ...etat.listeSuivi.filter(estBinance).map(paireBinance),
+    ...etat.portefeuille.positions.map((pos) => paireBinance(pos.symbole)),
+    ...(etat.page === 'trading' || etat.page === 'alertes' ? ['BTCUSDT', 'ETHUSDT'] : []),
+  ];
   const ticks = useMoteurAlertes(etat.alertes, pairesSuivies, majAlertes, setToast);
 
   useEffect(() => {
@@ -235,6 +240,17 @@ export function App() {
         {etat.page === 'symbole' && <Symbole etat={etat} ouvrirRecherche={ouvrirRecherche} />}
         {etat.page === 'actualites' && <Actualites etat={etat} />}
         {etat.page === 'calendrier' && <Calendrier theme={etat.theme} />}
+        {etat.page === 'trading' && (
+          <Trading
+            etat={etat}
+            ticks={ticks}
+            maj={maj}
+            ouvrirSymbole={(id) => {
+              choisirSymbole(id);
+              maj({ page: 'graphique' });
+            }}
+          />
+        )}
         {etat.page === 'alertes' && (
           <Alertes
             etat={etat}

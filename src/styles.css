@@ -1065,7 +1065,7 @@ option {
 }
 .tableau-prix th,
 .tableau-prix td {
-  padding: 9px 14px;
+  padding: 9px 10px;
   text-align: left;
   border-top: 1px solid var(--bordure);
   white-space: nowrap;
@@ -1098,4 +1098,134 @@ option {
   .tableau-prix td:nth-child(7) {
     display: none;
   }
+}
+
+/* ---- Trading papier ---- */
+.trading {
+  gap: 12px;
+}
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+.kpi {
+  background: var(--panneau);
+  border: 1px solid var(--bordure);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.kpi span {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--texte-muet);
+}
+.kpi strong {
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+}
+.kpi em {
+  font-style: normal;
+  font-size: 12px;
+}
+.grille-trading {
+  display: grid;
+  grid-template-columns: minmax(300px, 360px) 1fr;
+  gap: 12px;
+  align-items: start;
+}
+.formulaire-ordre {
+  padding-bottom: 12px;
+}
+.formulaire-ordre label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 14px 0;
+  font-size: 12px;
+  color: var(--texte-muet);
+}
+.formulaire-ordre input {
+  height: 36px;
+  padding: 0 10px;
+  border-radius: var(--rayon);
+  border: 1px solid var(--bordure-2);
+  background: var(--fond);
+  color: var(--texte);
+  font: inherit;
+  font-size: 14px;
+}
+.formulaire-ordre .puces {
+  padding: 10px 14px 0;
+}
+.formulaire-ordre .erreur {
+  margin: 10px 14px 0;
+  color: var(--baisse);
+}
+.recap-ordre {
+  margin: 12px 14px 0;
+  padding: 10px 12px;
+  border-radius: var(--rayon);
+  background: var(--fond);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.recap-ordre div {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+}
+.recap-ordre dt {
+  color: var(--texte-muet);
+}
+.recap-ordre dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+.boutons-ordre {
+  display: flex;
+  gap: 8px;
+  padding: 14px 14px 0;
+}
+.bouton-achat,
+.bouton-vente {
+  flex: 1;
+  height: 40px;
+  border-radius: var(--rayon);
+  color: #fff;
+  font-weight: 700;
+}
+.bouton-achat {
+  background: var(--hausse);
+}
+.bouton-vente {
+  background: var(--baisse);
+}
+.bouton-achat:disabled,
+.bouton-vente:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.onglets-carte {
+  padding: 8px 10px;
+}
+.onglets-carte .bouton-secondaire {
+  height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+@media (max-width: 900px) {
+  .grille-trading {
+    grid-template-columns: 1fr;
+  }
+}
+
+.defilement-x {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }

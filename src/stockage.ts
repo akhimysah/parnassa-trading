@@ -18,6 +18,7 @@ export const ETAT_DEFAUT: Etat = {
   lier: false,
   dispositionsSauvees: [],
   alertes: [],
+  portefeuille: { capitalInitial: 100000, solde: 100000, positions: [], operations: [] },
 };
 
 export function chargerEtat(): Etat {
@@ -32,6 +33,7 @@ export function chargerEtat(): Etat {
       emplacements: etat.emplacements.map(corriger),
       listeSuivi: Array.from(new Set(etat.listeSuivi.map(corriger))),
       comparaisons: (etat.comparaisons ?? []).map(corriger),
+      portefeuille: { ...ETAT_DEFAUT.portefeuille, ...(etat.portefeuille ?? {}) },
     };
   } catch {
     return ETAT_DEFAUT;

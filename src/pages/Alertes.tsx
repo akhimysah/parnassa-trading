@@ -191,7 +191,8 @@ export function Alertes({ etat, ticks, maj, ouvrirSymbole }: Props) {
       <div className="carte">
         <h3>Crypto en direct (liste de suivi)</h3>
         {suivisCrypto.length === 0 && <p className="vide">Ajoutez des paires Binance à votre liste de suivi pour les voir ici.</p>}
-        <table className="tableau-prix">
+        <div className="defilement-x">
+<table className="tableau-prix">
           <thead>
             <tr>
               <th>Paire</th>
@@ -225,6 +226,7 @@ export function Alertes({ etat, ticks, maj, ouvrirSymbole }: Props) {
             })}
           </tbody>
         </table>
+</div>
       </div>
     </div>
   );

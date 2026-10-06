@@ -1,6 +1,6 @@
 export type Theme = 'dark' | 'light';
 
-export type Page = 'graphique' | 'marches' | 'screener' | 'symbole' | 'actualites' | 'calendrier' | 'alertes';
+export type Page = 'graphique' | 'marches' | 'screener' | 'symbole' | 'actualites' | 'calendrier' | 'alertes' | 'trading';
 
 /** Intervalle au format attendu par le widget TradingView. */
 export type Intervalle = '1' | '5' | '15' | '60' | '240' | 'D' | 'W';
@@ -35,6 +35,40 @@ export interface Etat {
   lier: boolean;
   dispositionsSauvees: DispositionSauvee[];
   alertes: Alerte[];
+  portefeuille: Portefeuille;
+}
+
+export type Sens = 'achat' | 'vente';
+
+export interface Position {
+  id: string;
+  symbole: string;
+  sens: Sens;
+  quantite: number;
+  prixEntree: number;
+  /** Notionnel immobilisé à l'ouverture (quantité × prix). */
+  cout: number;
+  ouvertLe: number;
+}
+
+export interface Operation {
+  id: string;
+  symbole: string;
+  sens: Sens;
+  type: 'ouverture' | 'cloture';
+  quantite: number;
+  prix: number;
+  frais: number;
+  /** Résultat réalisé (clôtures uniquement). */
+  resultat?: number;
+  date: number;
+}
+
+export interface Portefeuille {
+  capitalInitial: number;
+  solde: number;
+  positions: Position[];
+  operations: Operation[];
 }
 
 export interface DispositionSauvee {
