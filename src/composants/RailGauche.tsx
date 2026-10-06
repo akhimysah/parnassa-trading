@@ -36,16 +36,6 @@ export function RailGauche({ page, changer }: Props) {
           <span>{libelle}</span>
         </button>
       ))}
-      <div className="espace" />
-      <a
-        className="credit"
-        href="https://www.tradingview.com/"
-        target="_blank"
-        rel="noopener noreferrer"
-        title="Données et graphiques fournis par TradingView"
-      >
-        <span>TV</span>
-      </a>
     </nav>
   );
 }

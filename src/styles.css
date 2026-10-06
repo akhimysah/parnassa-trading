@@ -296,23 +296,6 @@ a {
   color: var(--accent);
   background: var(--accent-fond);
 }
-.rail-gauche .credit {
-  align-self: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 11px;
-  font-weight: 800;
-  text-decoration: none;
-  color: var(--texte-muet);
-  border: 1px solid var(--bordure-2);
-}
-.rail-gauche .credit:hover {
-  color: var(--texte);
-}
 
 /* ---- Pages ---- */
 .page {

@@ -1,4 +1,5 @@
 import { useEffect, useRef, type CSSProperties } from 'react';
+import { URL_SITE } from '../site';
 
 interface Props {
   /** Nom du widget libre-service TradingView, ex. "advanced-chart", "ticker-tape", "screener". */
@@ -9,13 +10,15 @@ interface Props {
 }
 
 /**
- * Intègre un widget officiel TradingView (https://www.tradingview.com/widget-docs/).
+ * Intègre un widget officiel TradingView.
  * Le script est réinjecté à chaque changement de configuration : c'est le seul moyen
  * de changer de symbole, de thème ou d'intervalle sur un widget déjà monté.
  */
 export function WidgetTradingView({ widget, config, className, style }: Props) {
   const ref = useRef<HTMLDivElement>(null);
-  const cle = widget + JSON.stringify(config);
+  // Tout clic sur un symbole dans un widget ouvre ce symbole ici plutôt que sur tradingview.com.
+  const configComplete = { largeChartUrl: URL_SITE, symbolUrl: URL_SITE, ...config };
+  const cle = widget + JSON.stringify(configComplete);
 
   useEffect(() => {
     const conteneur = ref.current;
@@ -38,7 +41,7 @@ export function WidgetTradingView({ widget, config, className, style }: Props) {
     script.type = 'text/javascript';
     script.async = true;
     script.src = `https://s3.tradingview.com/external-embedding/embed-widget-${widget}.js`;
-    script.innerHTML = JSON.stringify(config);
+    script.innerHTML = JSON.stringify(configComplete);
     let charge = false;
     const marquer = () => {
       charge = true;

@@ -12,6 +12,7 @@ import { Symbole } from './pages/Symbole';
 import { Actualites } from './pages/Actualites';
 import { Calendrier } from './pages/Calendrier';
 import { nomSymbole } from './symboles';
+import { symboleDepuisUrl } from './site';
 
 const TICKER = [
   { proName: 'BINANCE:BTCUSDT', title: 'Bitcoin' },
@@ -29,7 +30,14 @@ const TICKER = [
 ];
 
 export function App() {
-  const [etat, setEtat] = useState<Etat>(chargerEtat);
+  const [etat, setEtat] = useState<Etat>(() => {
+    const charge = chargerEtat();
+    const recu = symboleDepuisUrl();
+    if (!recu) return charge;
+    const emplacements = [...charge.emplacements];
+    emplacements[0] = recu;
+    return { ...charge, page: 'graphique', symbole: recu, emplacements };
+  });
   const [recherche, setRecherche] = useState<{ ouvert: boolean; saisie?: string }>({ ouvert: false });
   const [emplacementActif, setEmplacementActif] = useState(0);
 

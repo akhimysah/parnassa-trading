@@ -99,7 +99,6 @@ export function Symbole({ etat, ouvrirRecherche }: Props) {
                 widget="financials"
                 config={{
                   isTransparent: true,
-                  largeChartUrl: '',
                   displayMode: 'regular',
                   width: '100%',
                   height: '100%',

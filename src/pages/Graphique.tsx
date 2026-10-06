@@ -60,10 +60,7 @@ export function Graphique({ etat, emplacementActif, choisirEmplacement, ouvrirRe
                 calendar: !multi && etat.panneauDroit,
                 watchlist: !multi && etat.panneauDroit ? etat.listeSuivi : undefined,
                 studies: etat.etudes,
-                show_popup_button: true,
-                popup_width: '1200',
-                popup_height: '720',
-                support_host: 'https://www.tradingview.com',
+                show_popup_button: false,
               }}
             />
           </section>
