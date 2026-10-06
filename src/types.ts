@@ -49,6 +49,26 @@ export interface Position {
   /** Notionnel immobilisé à l'ouverture (quantité × prix). */
   cout: number;
   ouvertLe: number;
+  stopLoss?: number;
+  takeProfit?: number;
+}
+
+export interface OrdreEnAttente {
+  id: string;
+  symbole: string;
+  sens: Sens;
+  /** Limite : s'exécute à un prix plus favorable ; stop : s'exécute au franchissement. */
+  type: 'limite' | 'stop';
+  prix: number;
+  montant: number;
+  stopLoss?: number;
+  takeProfit?: number;
+  creeLe: number;
+}
+
+export interface PointCapital {
+  t: number;
+  v: number;
 }
 
 export interface Operation {
@@ -56,6 +76,8 @@ export interface Operation {
   symbole: string;
   sens: Sens;
   type: 'ouverture' | 'cloture';
+  /** Origine : marché, limite, stop, stop-loss, take-profit. */
+  origine?: 'marche' | 'limite' | 'stop' | 'stop-loss' | 'take-profit';
   quantite: number;
   prix: number;
   frais: number;
@@ -69,6 +91,8 @@ export interface Portefeuille {
   solde: number;
   positions: Position[];
   operations: Operation[];
+  ordres: OrdreEnAttente[];
+  historiqueCapital: PointCapital[];
 }
 
 export interface DispositionSauvee {

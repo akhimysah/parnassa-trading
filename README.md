@@ -21,7 +21,7 @@ corepack pnpm dev        # http://localhost:5200
 | Actualités | Fil d'actualités par symbole ou par marché |
 | Calendrier | Calendrier économique filtrable par pays et importance |
 | Alertes | Alertes de prix en temps réel sur les paires Binance (flux WebSocket public, son + notification), tableau crypto en direct |
-| Trading | Trading papier : portefeuille virtuel de 100 000 USDT, ordres au marché long/short aux prix Binance en direct, P&L latent et réalisé, historique |
+| Trading | Trading papier : portefeuille virtuel de 100 000 USDT, ordres marché / limite / stop long et short aux prix Binance en direct, stop-loss et take-profit automatiques, P&L latent et réalisé, courbe de capital, historique |
 
 Bandeau de cotations défilant en haut, thème sombre / clair, comparaison de symboles superposés au graphique,
 dispositions nommées sauvegardées, liaison des graphiques en disposition multiple,

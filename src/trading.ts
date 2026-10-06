@@ -1,4 +1,4 @@
-import type { Operation, Portefeuille, Position, Sens } from './types';
+import type { Operation, OrdreEnAttente, Portefeuille, Position, Sens } from './types';
 import type { Tick } from './binance';
 import { paireBinance } from './binance';
 
@@ -28,17 +28,59 @@ export function realiseTotal(p: Portefeuille): number {
   return p.operations.reduce((s, o) => s + (o.resultat ?? 0) - o.frais, 0);
 }
 
-export function ouvrir(p: Portefeuille, symbole: string, sens: Sens, quantite: number, prix: number): Portefeuille | string {
+export interface Protections {
+  stopLoss?: number;
+  takeProfit?: number;
+}
+
+export function verifierProtections(sens: Sens, prix: number, prot: Protections): string | null {
+  if (prot.stopLoss !== undefined) {
+    if (sens === 'achat' && prot.stopLoss >= prix) return 'Le stop-loss d\'un long doit être sous le prix d\'entrée.';
+    if (sens === 'vente' && prot.stopLoss <= prix) return 'Le stop-loss d\'un short doit être au-dessus du prix d\'entrée.';
+  }
+  if (prot.takeProfit !== undefined) {
+    if (sens === 'achat' && prot.takeProfit <= prix) return 'Le take-profit d\'un long doit être au-dessus du prix d\'entrée.';
+    if (sens === 'vente' && prot.takeProfit >= prix) return 'Le take-profit d\'un short doit être sous le prix d\'entrée.';
+  }
+  return null;
+}
+
+export function ouvrir(
+  p: Portefeuille,
+  symbole: string,
+  sens: Sens,
+  quantite: number,
+  prix: number,
+  prot: Protections = {},
+  origine: Operation['origine'] = 'marche',
+): Portefeuille | string {
   if (!(quantite > 0) || !(prix > 0)) return 'Quantité ou prix invalide.';
+  const erreur = verifierProtections(sens, prix, prot);
+  if (erreur) return erreur;
   const cout = quantite * prix;
   const frais = cout * TAUX_FRAIS;
   if (cout + frais > p.solde) return `Solde insuffisant : il faut ${(cout + frais).toFixed(2)} USDT.`;
-  const position: Position = { id: identifiant(), symbole, sens, quantite, prixEntree: prix, cout, ouvertLe: Date.now() };
-  const operation: Operation = { id: identifiant(), symbole, sens, type: 'ouverture', quantite, prix, frais, date: Date.now() };
+  const position: Position = {
+    id: identifiant(),
+    symbole,
+    sens,
+    quantite,
+    prixEntree: prix,
+    cout,
+    ouvertLe: Date.now(),
+    stopLoss: prot.stopLoss,
+    takeProfit: prot.takeProfit,
+  };
+  const operation: Operation = { id: identifiant(), symbole, sens, type: 'ouverture', origine, quantite, prix, frais, date: Date.now() };
   return { ...p, solde: p.solde - cout - frais, positions: [position, ...p.positions], operations: [operation, ...p.operations] };
 }
 
-export function cloturer(p: Portefeuille, positionId: string, prix: number): Portefeuille | string {
+export function cloturer(
+  p: Portefeuille,
+  positionId: string,
+  prix: number,
+  origine: Operation['origine'] = 'marche',
+): Portefeuille | string {
   const position = p.positions.find((x) => x.id === positionId);
   if (!position) return 'Position introuvable.';
   if (!(prix > 0)) return 'Prix indisponible.';
@@ -49,6 +91,7 @@ export function cloturer(p: Portefeuille, positionId: string, prix: number): Por
     symbole: position.symbole,
     sens: position.sens === 'achat' ? 'vente' : 'achat',
     type: 'cloture',
+    origine,
     quantite: position.quantite,
     prix,
     frais,
@@ -63,8 +106,96 @@ export function cloturer(p: Portefeuille, positionId: string, prix: number): Por
   };
 }
 
+export function modifierProtections(p: Portefeuille, positionId: string, prot: Protections): Portefeuille | string {
+  const position = p.positions.find((x) => x.id === positionId);
+  if (!position) return 'Position introuvable.';
+  const erreur = verifierProtections(position.sens, position.prixEntree, prot);
+  if (erreur) return erreur;
+  return { ...p, positions: p.positions.map((x) => (x.id === positionId ? { ...x, stopLoss: prot.stopLoss, takeProfit: prot.takeProfit } : x)) };
+}
+
+export function placerOrdre(
+  p: Portefeuille,
+  ordre: Omit<OrdreEnAttente, 'id' | 'creeLe'>,
+  prixActuel: number,
+): Portefeuille | string {
+  if (!(ordre.prix > 0) || !(ordre.montant > 0)) return 'Prix ou montant invalide.';
+  if (ordre.montant * (1 + TAUX_FRAIS) > p.solde) return 'Solde insuffisant pour cet ordre.';
+  const erreur = verifierProtections(ordre.sens, ordre.prix, ordre);
+  if (erreur) return erreur;
+  // Un ordre déjà déclenchable serait exécuté immédiatement : on refuse pour éviter la confusion.
+  if (ordre.type === 'limite') {
+    if (ordre.sens === 'achat' && ordre.prix >= prixActuel) return 'Une limite d\'achat doit être sous le prix actuel (sinon passez un ordre au marché).';
+    if (ordre.sens === 'vente' && ordre.prix <= prixActuel) return 'Une limite de vente doit être au-dessus du prix actuel.';
+  } else {
+    if (ordre.sens === 'achat' && ordre.prix <= prixActuel) return 'Un stop d\'achat doit être au-dessus du prix actuel.';
+    if (ordre.sens === 'vente' && ordre.prix >= prixActuel) return 'Un stop de vente doit être sous le prix actuel.';
+  }
+  return { ...p, ordres: [{ ...ordre, id: identifiant(), creeLe: Date.now() }, ...p.ordres] };
+}
+
+export function annulerOrdre(p: Portefeuille, ordreId: string): Portefeuille {
+  return { ...p, ordres: p.ordres.filter((o) => o.id !== ordreId) };
+}
+
+function ordreDeclenchable(o: OrdreEnAttente, prix: number): boolean {
+  if (o.type === 'limite') return o.sens === 'achat' ? prix <= o.prix : prix >= o.prix;
+  return o.sens === 'achat' ? prix >= o.prix : prix <= o.prix;
+}
+
+/**
+ * Applique le flux de prix : exécute les ordres en attente déclenchés, puis les stop-loss / take-profit.
+ * Retourne le portefeuille mis à jour et les messages à afficher.
+ */
+export function appliquerFlux(p: Portefeuille, ticks: Record<string, Tick>): { portefeuille: Portefeuille; messages: string[] } {
+  let courant = p;
+  const messages: string[] = [];
+
+  for (const o of p.ordres) {
+    const tick = ticks[paireBinance(o.symbole)];
+    if (!tick || !ordreDeclenchable(o, tick.prix)) continue;
+    // Une limite s'exécute à son prix ; un stop au prix du marché qui l'a franchi.
+    const prixExecution = o.type === 'limite' ? o.prix : tick.prix;
+    const quantite = o.montant / prixExecution;
+    const r = ouvrir(courant, o.symbole, o.sens, quantite, prixExecution, o, o.type);
+    courant = annulerOrdre(typeof r === 'string' ? courant : r, o.id);
+    messages.push(
+      typeof r === 'string'
+        ? `Ordre ${o.type} ${o.symbole.split(':').pop()} annulé : ${r}`
+        : `Ordre ${o.type} exécuté : ${o.sens === 'achat' ? 'achat' : 'vente'} ${o.symbole.split(':').pop()} à ${prixExecution.toLocaleString('fr-FR')}`,
+    );
+  }
+
+  for (const pos of courant.positions) {
+    const tick = ticks[paireBinance(pos.symbole)];
+    if (!tick) continue;
+    const prix = tick.prix;
+    const touchéSL = pos.stopLoss !== undefined && (pos.sens === 'achat' ? prix <= pos.stopLoss : prix >= pos.stopLoss);
+    const touchéTP = pos.takeProfit !== undefined && (pos.sens === 'achat' ? prix >= pos.takeProfit : prix <= pos.takeProfit);
+    if (!touchéSL && !touchéTP) continue;
+    const r = cloturer(courant, pos.id, prix, touchéSL ? 'stop-loss' : 'take-profit');
+    if (typeof r === 'string') continue;
+    courant = r;
+    const resultat = pnlLatent(pos, prix);
+    messages.push(
+      `${touchéSL ? 'Stop-loss' : 'Take-profit'} ${pos.symbole.split(':').pop()} : position fermée à ${prix.toLocaleString('fr-FR')} (${resultat >= 0 ? '+' : ''}${resultat.toFixed(2)} USDT)`,
+    );
+  }
+
+  return { portefeuille: courant, messages };
+}
+
+/** Ajoute un point à la courbe de capital au plus toutes les 60 s (2 000 points max, soit ~33 h en continu). */
+export function enregistrerCapital(p: Portefeuille, capital: number, force = false): Portefeuille {
+  const dernier = p.historiqueCapital[p.historiqueCapital.length - 1];
+  const maintenant = Date.now();
+  if (!force && dernier && maintenant - dernier.t < 60000) return p;
+  const historique = [...p.historiqueCapital, { t: maintenant, v: Math.round(capital * 100) / 100 }].slice(-2000);
+  return { ...p, historiqueCapital: historique };
+}
+
 export function reinitialiser(capital = 100000): Portefeuille {
-  return { capitalInitial: capital, solde: capital, positions: [], operations: [] };
+  return { capitalInitial: capital, solde: capital, positions: [], operations: [], ordres: [], historiqueCapital: [{ t: Date.now(), v: capital }] };
 }
 
 export function formaterUsdt(v: number, signe = false): string {

@@ -18,7 +18,7 @@ export const ETAT_DEFAUT: Etat = {
   lier: false,
   dispositionsSauvees: [],
   alertes: [],
-  portefeuille: { capitalInitial: 100000, solde: 100000, positions: [], operations: [] },
+  portefeuille: { capitalInitial: 100000, solde: 100000, positions: [], operations: [], ordres: [], historiqueCapital: [] },
 };
 
 export function chargerEtat(): Etat {

@@ -308,6 +308,10 @@ a {
   padding: 12px;
   gap: 12px;
 }
+/* Les blocs d'une page défilable gardent leur hauteur naturelle (sinon flex les écrase). */
+.page.defilable > * {
+  flex-shrink: 0;
+}
 .onglets {
   display: flex;
   align-items: center;
@@ -1228,4 +1232,109 @@ option {
 .defilement-x {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
+}
+
+/* ---- Ordres avancés, courbe de capital ---- */
+.segmente.trois {
+  margin: 10px 14px 0;
+}
+.segmente button.actif.neutre {
+  background: var(--accent-fond);
+  color: var(--accent);
+  font-weight: 600;
+}
+.formulaire-ordre .aide {
+  font-size: 11px;
+  color: var(--texte-muet);
+}
+.formulaire-ordre .case {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  padding-top: 12px;
+  color: var(--texte);
+  font-size: 13px;
+}
+.formulaire-ordre .case input {
+  height: auto;
+  width: 16px;
+  accent-color: var(--accent);
+}
+.champs-protection {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.champs-protection label {
+  padding-top: 6px;
+}
+.lien.discret {
+  color: var(--texte-muet);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.lien.discret:hover {
+  color: var(--accent);
+}
+.bouton-trader {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: var(--rayon);
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  margin-right: 4px;
+}
+.bouton-trader:hover {
+  filter: brightness(1.1);
+}
+.courbe-capital {
+  padding: 8px 10px 10px;
+}
+.courbe-capital svg {
+  width: 100%;
+  height: 180px;
+  display: block;
+}
+.courbe-capital .grille {
+  stroke: var(--bordure);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.courbe-capital .ligne-base {
+  stroke: var(--texte-muet);
+  stroke-dasharray: 4 4;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.courbe-capital .curseur {
+  stroke: var(--texte-muet);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.courbe-capital .etiquette {
+  fill: var(--texte-muet);
+  font-size: 11px;
+}
+.courbe-legende {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 6px 4px 0;
+}
+.courbe-legende strong {
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 1280px) {
+  .barre-haut .bouton-trader span,
+  .barre-haut .plein-ecran {
+    display: none;
+  }
+  .barre-haut .bouton-trader {
+    padding: 0 8px;
+  }
 }

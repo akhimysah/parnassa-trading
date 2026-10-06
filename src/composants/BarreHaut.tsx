@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { DispositionSauvee, Etat, Intervalle, StyleGraphique } from '../types';
 import { bourse, nomSymbole, ticker } from '../symboles';
+import { estBinance } from '../binance';
 import {
   IconeChevron,
   IconeCloche,
@@ -15,6 +16,7 @@ import {
   IconeRecherche,
   IconeSauvegarde,
   IconeSoleil,
+  IconeTrading,
 } from './Icones';
 
 interface Props {
@@ -309,6 +311,12 @@ export function BarreHaut({
 
       <div className="espace" />
 
+      {surGraphique && estBinance(etat.symbole) && (
+        <button className="bouton-trader" title="Trader ce symbole (portefeuille papier)" onClick={() => maj({ page: 'trading' })}>
+          <IconeTrading width={16} height={16} />
+          <span>Trader</span>
+        </button>
+      )}
       <button className="icone" title="Gérer la liste de suivi" onClick={ouvrirListeSuivi}>
         <IconeEtoile />
       </button>
@@ -335,7 +343,7 @@ export function BarreHaut({
       >
         {etat.theme === 'dark' ? <IconeSoleil /> : <IconeLune />}
       </button>
-      <button className="icone" title="Plein écran" onClick={pleinEcran}>
+      <button className="icone plein-ecran" title="Plein écran" onClick={pleinEcran}>
         <IconePleinEcran />
       </button>
     </header>

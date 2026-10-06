@@ -16,6 +16,7 @@ import { Alertes } from './pages/Alertes';
 import { Trading } from './pages/Trading';
 import { useMoteurAlertes } from './alertes';
 import { estBinance, paireBinance } from './binance';
+import { appliquerFlux, enregistrerCapital, valeurPortefeuille } from './trading';
 import { nomSymbole } from './symboles';
 import { symboleDepuisUrl } from './site';
 import { ecrireHash, lienPartage, lireHash } from './url';
@@ -61,9 +62,22 @@ export function App() {
   const pairesSuivies = [
     ...etat.listeSuivi.filter(estBinance).map(paireBinance),
     ...etat.portefeuille.positions.map((pos) => paireBinance(pos.symbole)),
+    ...etat.portefeuille.ordres.map((o) => paireBinance(o.symbole)),
     ...(etat.page === 'trading' || etat.page === 'alertes' ? ['BTCUSDT', 'ETHUSDT'] : []),
   ];
   const ticks = useMoteurAlertes(etat.alertes, pairesSuivies, majAlertes, setToast);
+
+  // Moteur de trading papier : ordres en attente, stop-loss / take-profit, courbe de capital.
+  useEffect(() => {
+    if (Object.keys(ticks).length === 0) return;
+    setEtat((e) => {
+      const { portefeuille, messages } = appliquerFlux(e.portefeuille, ticks);
+      const { capital } = valeurPortefeuille(portefeuille, ticks);
+      const avecCapital = enregistrerCapital(portefeuille, capital, messages.length > 0);
+      if (messages.length > 0) setTimeout(() => setToast(messages.join(' · ')), 0);
+      return avecCapital === e.portefeuille ? e : { ...e, portefeuille: avecCapital };
+    });
+  }, [ticks]);
 
   useEffect(() => {
     sauverEtat(etat);
