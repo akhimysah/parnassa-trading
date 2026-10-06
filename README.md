@@ -1,0 +1,31 @@
+# Parnassa Trading
+
+Plateforme de graphiques et d'analyse de marché façon TradingView, construite sur les
+**widgets libre-service officiels de TradingView** (gratuits, sans clé d'API, sans serveur de données).
+
+## Lancer
+
+```bash
+corepack pnpm install
+corepack pnpm dev        # http://localhost:5200
+```
+
+## Sections
+
+| Section | Widgets TradingView utilisés |
+| --- | --- |
+| Graphique | Graphique avancé (outils de dessin, indicateurs, liste de suivi, détails, hotlists, calendrier) en disposition 1, 2 ou 4 graphiques |
+| Marchés | Vue d'ensemble, hotlists US, heatmaps actions / crypto / forex, taux croisés |
+| Screener | Screener actions (US, France, Allemagne, UK), crypto et forex |
+| Symbole | Infos, mini-graphique, analyse technique, actualités, données financières, profil |
+| Actualités | Fil d'actualités par symbole ou par marché |
+| Calendrier | Calendrier économique filtrable par pays et importance |
+
+Bandeau de cotations défilant en haut, thème sombre / clair, raccourci clavier : taper une lettre ouvre la recherche de symbole.
+Les préférences (symbole, intervalle, style, indicateurs, liste de suivi, disposition, thème) sont conservées dans le navigateur.
+
+## Limites des widgets gratuits
+
+- Certains indices ne sont servis que via des CFD (ex. `FOREXCOM:SPXUSD` pour le S&P 500) ; `src/symboles.ts` contient la table de correspondance.
+- Le widget ne remonte pas au parent le symbole choisi dans sa propre barre de recherche : utiliser la recherche de l'application pour garder la liste de suivi et la fiche Symbole synchronisées.
+- La bibliothèque complète « Charting Library » (données personnalisées, trading intégré) nécessite une demande de licence gratuite auprès de TradingView ; elle n'est pas en libre service.
