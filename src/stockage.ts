@@ -14,6 +14,7 @@ export const ETAT_DEFAUT: Etat = {
   listeSuivi: LISTE_SUIVI_DEFAUT,
   etudes: ['STD;RSI'],
   panneauDroit: true,
+  comparaisons: [],
 };
 
 export function chargerEtat(): Etat {
@@ -27,6 +28,7 @@ export function chargerEtat(): Etat {
       symbole: corriger(etat.symbole),
       emplacements: etat.emplacements.map(corriger),
       listeSuivi: Array.from(new Set(etat.listeSuivi.map(corriger))),
+      comparaisons: (etat.comparaisons ?? []).map(corriger),
     };
   } catch {
     return ETAT_DEFAUT;

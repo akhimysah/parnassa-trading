@@ -29,4 +29,6 @@ export interface Etat {
   listeSuivi: string[];
   etudes: string[];
   panneauDroit: boolean;
+  /** Symboles superposés au graphique principal (comparaison). */
+  comparaisons: string[];
 }

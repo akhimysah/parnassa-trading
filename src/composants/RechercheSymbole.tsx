@@ -10,11 +10,13 @@ interface Props {
   listeSuivi: string[];
   basculerSuivi: (id: string) => void;
   saisieInitiale?: string;
+  /** « comparer » : le symbole choisi est superposé au graphique au lieu de le remplacer. */
+  mode?: 'symbole' | 'comparer';
 }
 
 type Filtre = 'tous' | Symbole['categorie'];
 
-export function RechercheSymbole({ ouvert, fermer, choisir, listeSuivi, basculerSuivi, saisieInitiale }: Props) {
+export function RechercheSymbole({ ouvert, fermer, choisir, listeSuivi, basculerSuivi, saisieInitiale, mode = 'symbole' }: Props) {
   const [saisie, setSaisie] = useState('');
   const [filtre, setFiltre] = useState<Filtre>('tous');
   const [surbrillance, setSurbrillance] = useState(0);
@@ -67,12 +69,13 @@ export function RechercheSymbole({ ouvert, fermer, choisir, listeSuivi, basculer
   return (
     <div className="voile" onMouseDown={fermer}>
       <div className="modale recherche" onMouseDown={(e) => e.stopPropagation()} role="dialog" aria-label="Recherche de symbole">
+        {mode === 'comparer' && <div className="recherche-bandeau">Comparer avec…</div>}
         <div className="recherche-entete">
           <IconeRecherche />
           <input
             ref={refSaisie}
             value={saisie}
-            placeholder="Symbole, nom ou BOURSE:TICKER (ex. NASDAQ:AAPL)"
+            placeholder={mode === 'comparer' ? 'Symbole à superposer au graphique…' : 'Symbole, nom ou BOURSE:TICKER (ex. NASDAQ:AAPL)'}
             onChange={(e) => {
               setSaisie(e.target.value);
               setSurbrillance(0);

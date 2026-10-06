@@ -21,8 +21,12 @@ corepack pnpm dev        # http://localhost:5200
 | Actualités | Fil d'actualités par symbole ou par marché |
 | Calendrier | Calendrier économique filtrable par pays et importance |
 
-Bandeau de cotations défilant en haut, thème sombre / clair, raccourci clavier : taper une lettre ouvre la recherche de symbole.
-Les préférences (symbole, intervalle, style, indicateurs, liste de suivi, disposition, thème) sont conservées dans le navigateur.
+Bandeau de cotations défilant en haut, thème sombre / clair, comparaison de symboles superposés au graphique,
+gestion de la liste de suivi (ordre, ajout, suppression), lien de partage reprenant la vue courante
+(`#page/SYMBOLE/intervalle`), installation comme application (PWA) et barre de navigation en bas sur téléphone.
+
+Raccourcis clavier : une lettre ouvre la recherche de symbole, `/` aussi, `1` à `7` changent l'intervalle, `Échap` ferme.
+Les préférences (symbole, intervalle, style, indicateurs, comparaisons, liste de suivi, disposition, thème) sont conservées dans le navigateur.
 
 ## Limites des widgets gratuits
 

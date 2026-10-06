@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { Etat } from './types';
 import { chargerEtat, sauverEtat } from './stockage';
-import { BarreHaut } from './composants/BarreHaut';
+import { BarreHaut, INTERVALLES } from './composants/BarreHaut';
 import { RailGauche } from './composants/RailGauche';
 import { RechercheSymbole } from './composants/RechercheSymbole';
+import { GestionListeSuivi } from './composants/GestionListeSuivi';
 import { WidgetTradingView } from './composants/WidgetTradingView';
 import { Graphique } from './pages/Graphique';
 import { Marches } from './pages/Marches';
@@ -13,6 +14,7 @@ import { Actualites } from './pages/Actualites';
 import { Calendrier } from './pages/Calendrier';
 import { nomSymbole } from './symboles';
 import { symboleDepuisUrl } from './site';
+import { ecrireHash, lienPartage, lireHash } from './url';
 
 const TICKER = [
   { proName: 'BINANCE:BTCUSDT', title: 'Bitcoin' },
@@ -29,37 +31,61 @@ const TICKER = [
   { proName: 'EURONEXT:MC', title: 'LVMH' },
 ];
 
+type Recherche = { ouvert: boolean; saisie?: string; mode: 'symbole' | 'comparer' };
+
 export function App() {
   const [etat, setEtat] = useState<Etat>(() => {
-    const charge = chargerEtat();
+    const charge = { ...chargerEtat(), ...lireHash() };
     const recu = symboleDepuisUrl();
     if (!recu) return charge;
     const emplacements = [...charge.emplacements];
     emplacements[0] = recu;
     return { ...charge, page: 'graphique', symbole: recu, emplacements };
   });
-  const [recherche, setRecherche] = useState<{ ouvert: boolean; saisie?: string }>({ ouvert: false });
+  const [recherche, setRecherche] = useState<Recherche>({ ouvert: false, mode: 'symbole' });
+  const [gestionSuivi, setGestionSuivi] = useState(false);
   const [emplacementActif, setEmplacementActif] = useState(0);
+  const [toast, setToast] = useState<string | null>(null);
 
   const maj = useCallback((p: Partial<Etat>) => setEtat((e) => ({ ...e, ...p })), []);
 
-  useEffect(() => sauverEtat(etat), [etat]);
+  useEffect(() => {
+    sauverEtat(etat);
+    ecrireHash(etat);
+  }, [etat]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = etat.theme;
     document.title = `${nomSymbole(etat.symbole)} — Parnassa Trading`;
+    document
+      .querySelector('meta[name="theme-color"]')
+      ?.setAttribute('content', etat.theme === 'dark' ? '#131722' : '#ffffff');
   }, [etat.theme, etat.symbole]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 2600);
+    return () => clearTimeout(t);
+  }, [toast]);
 
   const choisirSymbole = useCallback(
     (id: string) => {
       setEtat((e) => {
         const emplacements = [...e.emplacements];
         emplacements[e.disposition > 1 ? emplacementActif : 0] = id;
-        return { ...e, symbole: id, emplacements };
+        const resteSurPage = e.page === 'graphique' || e.page === 'symbole' || e.page === 'actualites';
+        return { ...e, page: resteSurPage ? e.page : 'graphique', symbole: id, emplacements };
       });
     },
     [emplacementActif],
   );
+
+  const ajouterComparaison = useCallback((id: string) => {
+    setEtat((e) =>
+      e.comparaisons.includes(id) || id === e.symbole ? e : { ...e, comparaisons: [...e.comparaisons, id] },
+    );
+    setToast(`${nomSymbole(id)} ajouté à la comparaison`);
+  }, []);
 
   const choisirEmplacement = useCallback((i: number) => {
     setEmplacementActif(i);
@@ -73,28 +99,54 @@ export function App() {
     }));
   }, []);
 
-  // Comme sur TradingView : taper une lettre ouvre la recherche de symbole.
+  const partager = useCallback(async () => {
+    const lien = lienPartage(etat);
+    try {
+      if (navigator.share && /Mobi|Android/i.test(navigator.userAgent)) {
+        await navigator.share({ title: document.title, url: lien });
+        return;
+      }
+      await navigator.clipboard.writeText(lien);
+      setToast('Lien copié dans le presse-papiers');
+    } catch {
+      window.prompt('Copiez ce lien :', lien);
+    }
+  }, [etat]);
+
+  // Raccourcis façon TradingView : une lettre ouvre la recherche, 1-7 changent l'intervalle, « / » cherche.
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
-      if (recherche.ouvert || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (recherche.ouvert || gestionSuivi || e.metaKey || e.ctrlKey || e.altKey) return;
       const cible = e.target as HTMLElement | null;
       if (cible && ['INPUT', 'TEXTAREA', 'SELECT'].includes(cible.tagName)) return;
-      if (/^[a-zA-Z0-9]$/.test(e.key)) setRecherche({ ouvert: true, saisie: e.key });
+      if (/^[1-7]$/.test(e.key) && etat.page === 'graphique') {
+        maj({ intervalle: INTERVALLES[Number(e.key) - 1].valeur });
+        return;
+      }
+      if (/^[a-zA-Z]$/.test(e.key)) setRecherche({ ouvert: true, saisie: e.key, mode: 'symbole' });
       if (e.key === '/') {
         e.preventDefault();
-        setRecherche({ ouvert: true });
+        setRecherche({ ouvert: true, mode: 'symbole' });
       }
     };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
-  }, [recherche.ouvert]);
+  }, [recherche.ouvert, gestionSuivi, etat.page, maj]);
 
-  const ouvrirRecherche = useCallback(() => setRecherche({ ouvert: true }), []);
-  const fermerRecherche = useCallback(() => setRecherche({ ouvert: false }), []);
+  const ouvrirRecherche = useCallback(() => setRecherche({ ouvert: true, mode: 'symbole' }), []);
+  const ouvrirComparaison = useCallback(() => setRecherche({ ouvert: true, mode: 'comparer' }), []);
+  const fermerRecherche = useCallback(() => setRecherche((r) => ({ ...r, ouvert: false })), []);
 
   return (
     <div className="application">
-      <BarreHaut etat={etat} maj={maj} ouvrirRecherche={ouvrirRecherche} />
+      <BarreHaut
+        etat={etat}
+        maj={maj}
+        ouvrirRecherche={ouvrirRecherche}
+        ouvrirComparaison={ouvrirComparaison}
+        ouvrirListeSuivi={() => setGestionSuivi(true)}
+        partager={() => void partager()}
+      />
       <div className="bandeau">
         <WidgetTradingView
           widget="ticker-tape"
@@ -127,12 +179,28 @@ export function App() {
       </main>
       <RechercheSymbole
         ouvert={recherche.ouvert}
+        mode={recherche.mode}
         saisieInitiale={recherche.saisie}
         fermer={fermerRecherche}
-        choisir={choisirSymbole}
+        choisir={recherche.mode === 'comparer' ? ajouterComparaison : choisirSymbole}
         listeSuivi={etat.listeSuivi}
         basculerSuivi={basculerSuivi}
       />
+      <GestionListeSuivi
+        ouvert={gestionSuivi}
+        fermer={() => setGestionSuivi(false)}
+        liste={etat.listeSuivi}
+        changer={(listeSuivi) => maj({ listeSuivi })}
+        ouvrirSymbole={(id) => {
+          choisirSymbole(id);
+          maj({ page: 'graphique' });
+        }}
+      />
+      {toast && (
+        <div className="toast" role="status">
+          {toast}
+        </div>
+      )}
     </div>
   );
 }

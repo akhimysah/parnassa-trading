@@ -60,6 +60,7 @@ export function Graphique({ etat, emplacementActif, choisirEmplacement, ouvrirRe
                 calendar: !multi && etat.panneauDroit,
                 watchlist: !multi && etat.panneauDroit ? etat.listeSuivi : undefined,
                 studies: etat.etudes,
+                compareSymbols: i === 0 || !multi ? etat.comparaisons.map((symbol) => ({ symbol, position: 'SameScale' })) : [],
                 show_popup_button: false,
               }}
               caches={[

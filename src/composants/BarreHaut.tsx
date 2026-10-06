@@ -3,9 +3,12 @@ import type { Etat, Intervalle, StyleGraphique } from '../types';
 import { bourse, nomSymbole, ticker } from '../symboles';
 import {
   IconeChevron,
+  IconeCroix,
   IconeDisposition,
+  IconeEtoile,
   IconeLune,
   IconePanneau,
+  IconePartage,
   IconePleinEcran,
   IconeRecherche,
   IconeSoleil,
@@ -15,9 +18,12 @@ interface Props {
   etat: Etat;
   maj: (p: Partial<Etat>) => void;
   ouvrirRecherche: () => void;
+  ouvrirComparaison: () => void;
+  ouvrirListeSuivi: () => void;
+  partager: () => void;
 }
 
-const INTERVALLES: { valeur: Intervalle; libelle: string }[] = [
+export const INTERVALLES: { valeur: Intervalle; libelle: string }[] = [
   { valeur: '1', libelle: '1m' },
   { valeur: '5', libelle: '5m' },
   { valeur: '15', libelle: '15m' },
@@ -55,24 +61,32 @@ function useFermerAuClic(ouvert: boolean, fermer: () => void) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!ouvert) return;
-    const h = (e: MouseEvent) => {
+    const clic = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) fermer();
     };
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
+    const touche = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') fermer();
+    };
+    document.addEventListener('mousedown', clic);
+    document.addEventListener('keydown', touche);
+    return () => {
+      document.removeEventListener('mousedown', clic);
+      document.removeEventListener('keydown', touche);
+    };
   }, [ouvert, fermer]);
   return ref;
 }
 
-export function BarreHaut({ etat, maj, ouvrirRecherche }: Props) {
-  const [menu, setMenu] = useState<'style' | 'etudes' | null>(null);
+type Menu = 'style' | 'etudes' | 'comparer' | null;
+
+export function BarreHaut({ etat, maj, ouvrirRecherche, ouvrirComparaison, ouvrirListeSuivi, partager }: Props) {
+  const [menu, setMenu] = useState<Menu>(null);
   const refMenu = useFermerAuClic(menu !== null, () => setMenu(null));
   const surGraphique = etat.page === 'graphique';
+  const basculer = (m: Menu) => setMenu(menu === m ? null : m);
 
   const basculerEtude = (id: string) => {
-    const etudes = etat.etudes.includes(id)
-      ? etat.etudes.filter((e) => e !== id)
-      : [...etat.etudes, id];
+    const etudes = etat.etudes.includes(id) ? etat.etudes.filter((e) => e !== id) : [...etat.etudes, id];
     maj({ etudes });
   };
 
@@ -102,13 +116,14 @@ export function BarreHaut({ etat, maj, ouvrirRecherche }: Props) {
         <>
           <div className="separateur" />
           <div className="groupe-intervalles" role="tablist" aria-label="Intervalle">
-            {INTERVALLES.map((i) => (
+            {INTERVALLES.map((i, n) => (
               <button
                 key={i.valeur}
                 role="tab"
                 aria-selected={etat.intervalle === i.valeur}
                 className={etat.intervalle === i.valeur ? 'actif' : ''}
                 onClick={() => maj({ intervalle: i.valeur })}
+                title={`${i.libelle} (touche ${n + 1})`}
               >
                 {i.libelle}
               </button>
@@ -117,7 +132,7 @@ export function BarreHaut({ etat, maj, ouvrirRecherche }: Props) {
 
           <div className="separateur" />
           <div className="menu-ancre" ref={menu === 'style' ? refMenu : undefined}>
-            <button className="bouton-menu" onClick={() => setMenu(menu === 'style' ? null : 'style')}>
+            <button className="bouton-menu" onClick={() => basculer('style')}>
               {STYLES.find((s) => s.valeur === etat.style)?.libelle}
               <IconeChevron width={14} height={14} />
             </button>
@@ -140,7 +155,7 @@ export function BarreHaut({ etat, maj, ouvrirRecherche }: Props) {
           </div>
 
           <div className="menu-ancre" ref={menu === 'etudes' ? refMenu : undefined}>
-            <button className="bouton-menu" onClick={() => setMenu(menu === 'etudes' ? null : 'etudes')}>
+            <button className="bouton-menu" onClick={() => basculer('etudes')}>
               Indicateurs
               {etat.etudes.length > 0 && <span className="compteur">{etat.etudes.length}</span>}
               <IconeChevron width={14} height={14} />
@@ -152,11 +167,7 @@ export function BarreHaut({ etat, maj, ouvrirRecherche }: Props) {
                     <div className="menu-titre">{g}</div>
                     {ETUDES.filter((e) => e.groupe === g).map((e) => (
                       <label key={e.id} className="menu-case">
-                        <input
-                          type="checkbox"
-                          checked={etat.etudes.includes(e.id)}
-                          onChange={() => basculerEtude(e.id)}
-                        />
+                        <input type="checkbox" checked={etat.etudes.includes(e.id)} onChange={() => basculerEtude(e.id)} />
                         {e.libelle}
                       </label>
                     ))}
@@ -165,6 +176,47 @@ export function BarreHaut({ etat, maj, ouvrirRecherche }: Props) {
                 <button className="menu-vider" onClick={() => maj({ etudes: [] })} disabled={etat.etudes.length === 0}>
                   Tout retirer
                 </button>
+              </div>
+            )}
+          </div>
+
+          <div className="menu-ancre" ref={menu === 'comparer' ? refMenu : undefined}>
+            <button className="bouton-menu" onClick={() => basculer('comparer')} title="Superposer d'autres symboles au graphique">
+              Comparer
+              {etat.comparaisons.length > 0 && <span className="compteur">{etat.comparaisons.length}</span>}
+              <IconeChevron width={14} height={14} />
+            </button>
+            {menu === 'comparer' && (
+              <div className="menu-deroulant large">
+                <div className="menu-titre">Symboles superposés</div>
+                {etat.comparaisons.length === 0 && <div className="menu-vide">Aucun symbole comparé.</div>}
+                {etat.comparaisons.map((id) => (
+                  <div key={id} className="menu-ligne">
+                    <strong>{ticker(id)}</strong>
+                    <span className="muet">{nomSymbole(id)}</span>
+                    <button
+                      className="icone petit"
+                      aria-label={`Retirer ${ticker(id)}`}
+                      onClick={() => maj({ comparaisons: etat.comparaisons.filter((c) => c !== id) })}
+                    >
+                      <IconeCroix width={14} height={14} />
+                    </button>
+                  </div>
+                ))}
+                <button
+                  className="menu-action"
+                  onClick={() => {
+                    setMenu(null);
+                    ouvrirComparaison();
+                  }}
+                >
+                  + Ajouter un symbole à comparer
+                </button>
+                {etat.comparaisons.length > 0 && (
+                  <button className="menu-vider" onClick={() => maj({ comparaisons: [] })}>
+                    Tout retirer
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -187,6 +239,9 @@ export function BarreHaut({ etat, maj, ouvrirRecherche }: Props) {
 
       <div className="espace" />
 
+      <button className="icone" title="Gérer la liste de suivi" onClick={ouvrirListeSuivi}>
+        <IconeEtoile />
+      </button>
       {surGraphique && (
         <button
           className={`icone ${etat.panneauDroit ? 'actif' : ''}`}
@@ -196,6 +251,9 @@ export function BarreHaut({ etat, maj, ouvrirRecherche }: Props) {
           <IconePanneau />
         </button>
       )}
+      <button className="icone" title="Copier un lien vers cette vue" onClick={partager}>
+        <IconePartage />
+      </button>
       <button
         className="icone"
         title={etat.theme === 'dark' ? 'Passer en mode clair' : 'Passer en mode sombre'}
