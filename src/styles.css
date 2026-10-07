@@ -2072,6 +2072,7 @@ th.trie {
 .prochaine-annonce + .bouton-nouvelles {
   margin-left: 8px;
 }
+.sous-titre,
 .calendrier-annonces .sous-titre {
   margin: 0;
   padding: 8px 14px 2px;
@@ -2595,4 +2596,176 @@ th.trie {
 }
 .banque-dates dt {
   white-space: nowrap;
+}
+
+/* ---- Rappels ---- */
+.cellule-rappel {
+  width: 40px;
+  text-align: center;
+}
+.bouton-rappel {
+  width: 30px;
+  height: 28px;
+  border-radius: var(--rayon);
+  opacity: 0.35;
+  font-size: 14px;
+}
+.bouton-rappel:hover {
+  opacity: 0.8;
+  background: var(--panneau-2);
+}
+.bouton-rappel.actif {
+  opacity: 1;
+  background: var(--accent-fond);
+}
+.case-rappel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--texte);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.case-rappel input {
+  accent-color: var(--accent);
+}
+@media (max-width: 640px) {
+  .tableau-calendrier tr {
+    grid-template-columns: 62px 1fr auto auto;
+    grid-template-areas:
+      'heure evenement impact rappel'
+      'heure valeurs valeurs valeurs';
+  }
+  .tableau-calendrier td.cellule-rappel {
+    grid-area: rappel;
+    width: auto;
+  }
+}
+
+/* ---- Accueil ---- */
+.accueil-entete {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.accueil-entete h2 {
+  margin: 0;
+  font-size: 22px;
+}
+.accueil-entete .muet {
+  text-transform: capitalize;
+}
+.grille-accueil {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+.grille-accueil .carte.large {
+  grid-column: span 2;
+  grid-row: span 2;
+}
+.accueil-annonces li {
+  grid-template-columns: 52px minmax(0, 1fr);
+}
+.liste-crypto,
+.liste-positions,
+.liste-banques,
+.liste-surprises {
+  list-style: none;
+  margin: 0;
+  padding: 6px 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.liste-crypto li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 70px auto 64px;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 6px;
+  border-radius: var(--rayon);
+  cursor: pointer;
+  font-size: 12.5px;
+}
+.liste-crypto li:hover,
+.liste-positions li:hover {
+  background: var(--panneau-2);
+}
+.liste-crypto .num,
+.liste-positions .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.liste-crypto li > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.liste-positions li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px;
+  border-radius: var(--rayon);
+  font-size: 12.5px;
+}
+.resume-portefeuille {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 14px 4px;
+}
+.resume-portefeuille strong {
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+}
+.resume-portefeuille span {
+  font-size: 12px;
+}
+.ligne-alertes {
+  padding: 4px 14px 12px;
+  font-size: 12px;
+}
+.liste-banques li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  font-size: 12.5px;
+}
+.liste-banques .rebours {
+  white-space: nowrap;
+  font-size: 12px;
+}
+.liste-surprises li {
+  display: grid;
+  grid-template-columns: 54px 1fr 40px;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px;
+  font-size: 12.5px;
+}
+.liste-surprises strong {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 1100px) {
+  .grille-accueil {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 700px) {
+  .grille-accueil {
+    grid-template-columns: 1fr;
+  }
+  .grille-accueil .carte.large {
+    grid-column: auto;
+    grid-row: auto;
+  }
 }

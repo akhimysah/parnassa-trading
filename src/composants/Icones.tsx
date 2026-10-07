@@ -142,6 +142,13 @@ export const IconeTelecharger = (p: P) => (
     <path d="M4 19h16" />
   </svg>
 );
+export const IconeAccueil = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M4 11l8-7 8 7" />
+    <path d="M6 9.5V20h12V9.5" />
+    <path d="M10 20v-5h4v5" />
+  </svg>
+);
 export const IconeChevron = (p: P) => (
   <svg {...base(p)}>
     <path d="M6 9l6 6 6-6" />

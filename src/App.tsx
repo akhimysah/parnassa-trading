@@ -15,9 +15,11 @@ import { Actualites } from './pages/Actualites';
 import { Calendrier } from './pages/Calendrier';
 import { Alertes } from './pages/Alertes';
 import { Trading } from './pages/Trading';
+import { Accueil } from './pages/Accueil';
 import { notifier, sonner, useMoteurAlertes } from './alertes';
 import { motsClesTrouves, texteRecherche, titrePrincipal, useFilActualites } from './actualites';
 import { annoncer, couperSquawk, doitEtreLue, langueParlee, texteParle } from './squawk';
+import { useMoteurRappels } from './rappels';
 import { estBinance, paireBinance } from './binance';
 import { appliquerFlux, enregistrerCapital, valeurPortefeuille } from './trading';
 import { nomSymbole } from './symboles';
@@ -76,7 +78,7 @@ export function App() {
   const squawk = etat.parametres.squawk;
   const fil = useFilActualites(
     etat.page === 'actualites' || squawk.actif ? 20000 : 60000,
-    etat.page === 'actualites' || motsCles.length > 0 || squawk.actif,
+    etat.page === 'actualites' || etat.page === 'accueil' || motsCles.length > 0 || squawk.actif,
   );
 
   // Squawk : lecture à voix haute des nouvelles dépêches retenues, sur toutes les pages.
@@ -105,6 +107,9 @@ export function App() {
     if (etat.parametres.son) sonner();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fil.nouvelles]);
+
+  // Rappels d'événements économiques (avant publication, puis chiffre réel), sur toutes les pages.
+  useMoteurRappels(etat, maj, setToast);
 
   // Moteur de trading papier : ordres en attente, stop-loss / take-profit, courbe de capital.
   useEffect(() => {
@@ -284,6 +289,19 @@ export function App() {
       </div>
       <RailGauche page={etat.page} changer={(page) => maj({ page })} />
       <main className="contenu">
+        {etat.page === 'accueil' && (
+          <Accueil
+            etat={etat}
+            fil={fil}
+            ticks={ticks}
+            maj={maj}
+            aller={(page) => maj({ page })}
+            ouvrirSymbole={(id) => {
+              choisirSymbole(id);
+              maj({ page: 'graphique' });
+            }}
+          />
+        )}
         {etat.page === 'graphique' && (
           <Graphique
             etat={etat}

@@ -125,6 +125,24 @@ export function Parametres({ ouvert, fermer, etat, maj, remplacerEtat, signaler 
               <span>Son au déclenchement</span>
               <input type="checkbox" checked={p.son} onChange={(e) => maj({ parametres: { ...p, son: e.target.checked } })} />
             </label>
+            <label className="ligne-parametre">
+              <span>Rappel avant un événement du calendrier</span>
+              <select
+                className="selecteur"
+                value={p.rappels.delaiMinutes}
+                onChange={(e) => maj({ parametres: { ...p, rappels: { ...p.rappels, delaiMinutes: Number(e.target.value) } } })}
+              >
+                {[1, 2, 5, 10, 15, 30, 60].map((m) => (
+                  <option key={m} value={m}>
+                    {m} min avant
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="ligne-parametre">
+              <span>Rappel automatique des annonces à fort impact</span>
+              <input type="checkbox" checked={p.rappels.fortImpactAuto} onChange={(e) => maj({ parametres: { ...p, rappels: { ...p.rappels, fortImpactAuto: e.target.checked } } })} />
+            </label>
             <div className="ligne-parametre">
               <span>Notifications du navigateur</span>
               <button className="bouton-secondaire" onClick={() => void testerNotification()}>

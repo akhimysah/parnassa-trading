@@ -4,7 +4,7 @@ import { LISTE_SUIVI_DEFAUT, corriger } from './symboles';
 const CLE = 'parnassa-trading:etat:v1';
 
 export const ETAT_DEFAUT: Etat = {
-  page: 'graphique',
+  page: 'accueil',
   theme: 'dark',
   symbole: 'BINANCE:BTCUSDT',
   intervalle: '60',
@@ -19,7 +19,8 @@ export const ETAT_DEFAUT: Etat = {
   dispositionsSauvees: [],
   alertes: [],
   portefeuille: { capitalInitial: 100000, solde: 100000, positions: [], operations: [], ordres: [], historiqueCapital: [] },
-  parametres: { fuseau: 'Europe/Paris', frais: 0.001, son: true, motsCles: [], langueActualites: 'fr+en', squawk: { actif: false, filtre: 'annonces', vitesse: 1.1 } },
+  parametres: { fuseau: 'Europe/Paris', frais: 0.001, son: true, motsCles: [], langueActualites: 'fr+en', squawk: { actif: false, filtre: 'annonces', vitesse: 1.1 }, rappels: { delaiMinutes: 5, fortImpactAuto: false } },
+  rappels: [],
 };
 
 export function chargerEtat(): Etat {

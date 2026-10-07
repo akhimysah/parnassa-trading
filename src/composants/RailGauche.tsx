@@ -1,5 +1,6 @@
 import type { Page } from '../types';
 import {
+  IconeAccueil,
   IconeActualites,
   IconeCalendrier,
   IconeCloche,
@@ -16,6 +17,7 @@ interface Props {
 }
 
 const ENTREES: { page: Page; libelle: string; Icone: typeof IconeGraphique }[] = [
+  { page: 'accueil', libelle: 'Accueil', Icone: IconeAccueil },
   { page: 'graphique', libelle: 'Graphique', Icone: IconeGraphique },
   { page: 'marches', libelle: 'Marchés', Icone: IconeMarches },
   { page: 'screener', libelle: 'Screener', Icone: IconeScreener },

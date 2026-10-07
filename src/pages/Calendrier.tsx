@@ -13,6 +13,8 @@ import {
   type Resultat,
 } from '../actualites';
 import { Sessions } from '../composants/Sessions';
+import { rappelDepuis } from '../rappels';
+import { demanderNotifications } from '../alertes';
 import { Surprises } from '../composants/Surprises';
 
 interface Props {
@@ -107,6 +109,7 @@ export function Calendrier({ etat, maj }: Props) {
   }, [evenements, filtres, recherche]);
 
   const prochain = filtres_.find((e) => e.actuel === null && e.date > Date.now());
+  const suivis = useMemo(() => new Set(etat.rappels.map((r) => r.id)), [etat.rappels]);
 
   const parJour = useMemo(() => {
     const groupes: { cle: string; libelle: string; date: number; evenements: EvenementCalendrier[] }[] = [];
@@ -191,6 +194,18 @@ export function Calendrier({ etat, maj }: Props) {
         <span className="muet">
           <span className="point-direct" aria-hidden /> {filtres_.length} événement{filtres_.length > 1 ? 's' : ''} · d'hier à J+6 · heure locale
         </span>
+        <label className="case-rappel" title="Rappel automatique avant chaque annonce à fort impact, puis à la publication">
+          <input
+            type="checkbox"
+            checked={etat.parametres.rappels.fortImpactAuto}
+            onChange={(ev) => {
+              if (ev.target.checked) demanderNotifications();
+              maj({ parametres: { ...etat.parametres, rappels: { ...etat.parametres.rappels, fortImpactAuto: ev.target.checked } } });
+            }}
+          />
+          Rappels fort impact
+        </label>
+        {etat.rappels.length > 0 && <span className="muet">🔔 {etat.rappels.length} rappel{etat.rappels.length > 1 ? 's' : ''}</span>}
         {prochain && (
           <span className="prochaine-annonce">
             Prochain : {drapeau(prochain.pays)} {langue === 'en' ? prochain.titre : (prochain.titreFr ?? prochain.titre)} <strong>{compteARebours(prochain.date)}</strong>
@@ -220,6 +235,7 @@ export function Calendrier({ etat, maj }: Props) {
                     <th className="num">{l.reel}</th>
                     <th className="num">{l.prev}</th>
                     <th className="num">{l.prec}</th>
+                    <th aria-label="Rappel" />
                   </tr>
                 </thead>
                 <tbody>
@@ -257,6 +273,28 @@ export function Calendrier({ etat, maj }: Props) {
                         </td>
                         <td className="num muet">{valeurCalendrier(e.prevision, e.unite, e.echelle)}</td>
                         <td className="num muet">{valeurCalendrier(e.precedent, e.unite, e.echelle)}</td>
+                        <td className="cellule-rappel">
+                          {!passe && (
+                            <button
+                              className={`bouton-rappel ${suivis.has(e.id) ? 'actif' : ''}`}
+                              title={
+                                suivis.has(e.id)
+                                  ? 'Rappel programmé : cliquer pour l\'annuler'
+                                  : `Me prévenir ${etat.parametres.rappels.delaiMinutes} min avant, puis à la publication`
+                              }
+                              aria-pressed={suivis.has(e.id)}
+                              onClick={() => {
+                                if (suivis.has(e.id)) maj({ rappels: etat.rappels.filter((r) => r.id !== e.id) });
+                                else {
+                                  demanderNotifications();
+                                  maj({ rappels: [...etat.rappels, rappelDepuis(e)] });
+                                }
+                              }}
+                            >
+                              {suivis.has(e.id) ? '🔔' : '🔕'}
+                            </button>
+                          )}
+                        </td>
                       </tr>
                     );
                   })}

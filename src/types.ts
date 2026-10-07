@@ -1,6 +1,6 @@
 export type Theme = 'dark' | 'light';
 
-export type Page = 'graphique' | 'marches' | 'screener' | 'symbole' | 'actualites' | 'calendrier' | 'alertes' | 'trading';
+export type Page = 'accueil' | 'graphique' | 'marches' | 'screener' | 'symbole' | 'actualites' | 'calendrier' | 'alertes' | 'trading';
 
 /** Intervalle au format attendu par le widget TradingView. */
 export type Intervalle = '1' | '5' | '15' | '60' | '240' | 'D' | 'W';
@@ -36,6 +36,8 @@ export interface Etat {
   dispositionsSauvees: DispositionSauvee[];
   alertes: Alerte[];
   portefeuille: Portefeuille;
+  /** Événements du calendrier pour lesquels l'utilisateur a demandé un rappel. */
+  rappels: Rappel[];
   parametres: Parametres;
 }
 
@@ -52,6 +54,16 @@ export interface Parametres {
   langueActualites: 'fr' | 'en' | 'fr+en';
   /** Lecture vocale des nouvelles dépêches, façon « squawk » de salle de marché. */
   squawk: { actif: boolean; filtre: 'annonces' | 'importantes' | 'tout'; vitesse: number };
+  /** Rappels : délai avant l'événement, et rappel automatique des annonces à fort impact. */
+  rappels: { delaiMinutes: number; fortImpactAuto: boolean };
+}
+
+export interface Rappel {
+  id: string;
+  titre: string;
+  titreFr?: string;
+  pays: string;
+  date: number;
 }
 
 export type Sens = 'achat' | 'vente';
