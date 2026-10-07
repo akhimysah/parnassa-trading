@@ -6,6 +6,8 @@ export type CategorieDepeche = 'annonces' | 'marches' | 'forex' | 'crypto' | 'ba
 
 export interface Donnee {
   indicateur: string;
+  indicateurFr?: string;
+  indicateurEn?: string;
   actuel: string;
   prevision: string | null;
   precedent: string | null;
@@ -15,6 +17,7 @@ export interface Donnee {
 export interface EvenementCalendrier {
   id: string;
   titre: string;
+  titreFr?: string;
   pays: string;
   devise: string;
   periode: string;
@@ -37,7 +40,41 @@ export interface Depeche {
   date: number;
   important: boolean;
   donnee?: Donnee;
+  titreFr?: string;
+  titreEn?: string;
 }
+
+export type LangueAffichage = 'fr' | 'en' | 'fr+en';
+
+/** Titre affiché en premier selon la langue choisie (le français en mode bilingue). */
+export function titrePrincipal(d: Depeche, langue: LangueAffichage): string {
+  return langue === 'en' ? (d.titreEn ?? d.titre) : (d.titreFr ?? d.titre);
+}
+
+/** En mode bilingue : la version anglaise, si elle diffère du titre principal. */
+export function titreSecondaire(d: Depeche, langue: LangueAffichage): string | null {
+  if (langue !== 'fr+en') return null;
+  const en = d.titreEn ?? d.titre;
+  return en !== titrePrincipal(d, langue) ? en : null;
+}
+
+/** Texte complet (FR + EN) sur lequel portent la recherche et les mots-clés. */
+export function texteRecherche(d: Depeche): string {
+  return `${d.titreFr ?? ''} ${d.titreEn ?? ''} ${d.titre}`;
+}
+
+export function indicateurAffiche(d: Donnee, langue: LangueAffichage): { principal: string; secondaire: string | null } {
+  const fr = d.indicateurFr ?? d.indicateur;
+  const en = d.indicateurEn ?? d.indicateur;
+  if (langue === 'en') return { principal: en, secondaire: null };
+  return { principal: fr, secondaire: langue === 'fr+en' && en !== fr ? en : null };
+}
+
+export const LIBELLES_DONNEE: Record<LangueAffichage, { reel: string; prev: string; prec: string }> = {
+  fr: { reel: 'Réel', prev: 'Prév.', prec: 'Préc.' },
+  'fr+en': { reel: 'Réel', prev: 'Prév.', prec: 'Préc.' },
+  en: { reel: 'Actual', prev: 'Fcst', prec: 'Prev.' },
+};
 
 export const CATEGORIES_DEPECHES: { id: CategorieDepeche; libelle: string }[] = [
   { id: 'annonces', libelle: 'Annonces' },

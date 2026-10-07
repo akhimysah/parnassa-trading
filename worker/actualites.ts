@@ -14,6 +14,8 @@ interface Flux {
 
 interface Donnee {
   indicateur: string;
+  indicateurFr?: string;
+  indicateurEn?: string;
   actuel: string;
   prevision: string | null;
   precedent: string | null;
@@ -31,11 +33,14 @@ interface Depeche {
   date: number;
   important: boolean;
   donnee?: Donnee;
+  titreFr?: string;
+  titreEn?: string;
 }
 
 interface EvenementCalendrier {
   id: string;
   titre: string;
+  titreFr?: string;
   pays: string;
   devise: string;
   periode: string;
@@ -188,16 +193,39 @@ function normaliserTitre(t: string): string {
 }
 
 /**
- * Récupère un texte distant avec deux niveaux de cache : une copie fraîche (`fraicheur` s) qui évite de
- * solliciter la source à chaque visite, et une copie de secours (24 h) servie si la source refuse
- * temporairement (FinancialJuice limite à quelques appels par minute).
+ * Récupère un texte distant. Une copie en mémoire de l'isolat évite de solliciter la source plus d'une fois
+ * par `fraicheur` secondes ; si la source refuse (FinancialJuice limite les appels), on sert la dernière copie
+ * connue, en mémoire ou dans la copie de secours groupée du cache Cloudflare (une seule entrée pour tous les flux,
+ * car l'offre gratuite limite chaque appel du relais à 50 sous-requêtes).
  */
-async function recupererTexte(url: string, fraicheur: number, ctx?: ExecutionContext): Promise<string | null> {
-  const cache = caches.default;
-  const cleFraiche = new Request(`https://cache.parnassa/frais?u=${encodeURIComponent(url)}`);
-  const cleSecours = new Request(`https://cache.parnassa/secours?u=${encodeURIComponent(url)}`);
-  const frais = await cache.match(cleFraiche);
-  if (frais) return frais.text();
+const memoireFlux = new Map<string, { recuLe: number; texte: string }>();
+let secoursCharge: Record<string, string> | null = null;
+let secoursModifie = false;
+/** Origine réelle du relais : le cache Cloudflare ignore les clés sur un domaine étranger. */
+let origine = 'https://parnassa-actualites.neobank.workers.dev';
+const cleSecours = () => new Request(`${origine}/__cache/secours-flux-v3`);
+
+async function chargerSecours(forcer = false): Promise<Record<string, string>> {
+  if (secoursCharge && !forcer) return secoursCharge;
+  const r = await caches.default.match(cleSecours());
+  secoursCharge = r ? ((await r.json()) as Record<string, string>) : {};
+  return secoursCharge;
+}
+
+async function sauverSecours(): Promise<void> {
+  if (!secoursModifie || !secoursCharge) return;
+  secoursModifie = false;
+  await caches.default.put(cleSecours(), new Response(JSON.stringify(secoursCharge), { headers: { 'Cache-Control': 'max-age=86400' } }));
+}
+
+const echecsRecents = new Map<string, number>();
+
+async function recupererTexte(url: string, fraicheur: number): Promise<string | null> {
+  const enMemoire = memoireFlux.get(url);
+  if (enMemoire && Date.now() - enMemoire.recuLe < fraicheur * 1000) return enMemoire.texte;
+  // Après un refus (429…), on laisse la source tranquille une minute et on sert la copie connue.
+  const dernierEchec = echecsRecents.get(url);
+  if (dernierEchec && Date.now() - dernierEchec < 60000) return enMemoire?.texte ?? (await chargerSecours())[url] ?? (await chargerSecours(true))[url] ?? null;
   try {
     const reponse = await fetch(url, {
       headers: {
@@ -209,26 +237,176 @@ async function recupererTexte(url: string, fraicheur: number, ctx?: ExecutionCon
     });
     if (reponse.ok) {
       const texte = await reponse.text();
-      const ecrire = Promise.all([
-        cache.put(cleFraiche, new Response(texte, { headers: { 'Cache-Control': `max-age=${fraicheur}` } })),
-        cache.put(cleSecours, new Response(texte, { headers: { 'Cache-Control': 'max-age=86400' } })),
-      ]);
-      if (ctx) ctx.waitUntil(ecrire);
-      else await ecrire;
+      memoireFlux.set(url, { recuLe: Date.now(), texte });
+      const secours = await chargerSecours();
+      if (secours[url] !== texte) {
+        secours[url] = texte;
+        secoursModifie = true;
+      }
       return texte;
     }
+    echecsRecents.set(url, Date.now());
   } catch {
-    // réseau ou délai dépassé : on tente la copie de secours
+    // réseau ou délai dépassé : on tente une copie connue
+    echecsRecents.set(url, Date.now());
   }
-  const secours = await cache.match(cleSecours);
-  return secours ? secours.text() : null;
+  if (enMemoire) return enMemoire.texte;
+  // La copie de l'isolat peut être plus ancienne que celle enregistrée par un autre isolat : on relit.
+  const secours = await chargerSecours();
+  return secours[url] ?? (await chargerSecours(true))[url] ?? null;
 }
 
-let contexte: ExecutionContext | undefined;
+
+// ---------- Traduction FR ⇄ EN ----------
+
+type Langue = 'fr' | 'en';
+/**
+ * Dictionnaire de traductions par langue cible : en mémoire de l'isolat et dans une seule entrée du cache
+ * Cloudflare (7 jours), pour que chaque titre ne soit traduit qu'une fois sans multiplier les sous-requêtes.
+ */
+const dictionnaires: Record<Langue, Map<string, string> | null> = { fr: null, en: null };
+const dictionnaireModifie: Record<Langue, boolean> = { fr: false, en: false };
+const cleDictionnaire = (cible: Langue) => new Request(`${origine}/__cache/dictionnaire-${cible}-v2`);
+
+async function dictionnaire(cible: Langue): Promise<Map<string, string>> {
+  const existant = dictionnaires[cible];
+  if (existant) return existant;
+  const r = await caches.default.match(cleDictionnaire(cible));
+  const carte = new Map<string, string>(r ? Object.entries((await r.json()) as Record<string, string>) : []);
+  dictionnaires[cible] = carte;
+  return carte;
+}
+
+async function sauverDictionnaires(): Promise<void> {
+  for (const cible of ['fr', 'en'] as Langue[]) {
+    const carte = dictionnaires[cible];
+    if (!carte || !dictionnaireModifie[cible]) continue;
+    dictionnaireModifie[cible] = false;
+    // On garde les 5 000 traductions les plus récentes (ordre d'insertion).
+    const entrees = [...carte.entries()].slice(-5000);
+    if (entrees.length < carte.size) dictionnaires[cible] = new Map(entrees);
+    await caches.default.put(
+      cleDictionnaire(cible),
+      new Response(JSON.stringify(Object.fromEntries(entrees)), { headers: { 'Cache-Control': 'max-age=604800' } }),
+    );
+  }
+}
+
+async function appelTraduction(textes: string[], source: Langue, cible: Langue): Promise<string[] | null> {
+  const corps = new URLSearchParams();
+  for (const t of textes) corps.append('q', t);
+  try {
+    const r = await fetch(`https://translate.googleapis.com/translate_a/t?client=gtx&sl=${source}&tl=${cible}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'Mozilla/5.0 (compatible; ParnassaTrading/1.0)' },
+      body: corps.toString(),
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!r.ok) return null;
+    const brut = (await r.json()) as unknown;
+    const liste = Array.isArray(brut) ? brut : [brut];
+    // Un seul texte → chaîne ; plusieurs → tableau de chaînes ou de [traduction, langue].
+    const sortie = liste.map((x) => (Array.isArray(x) ? String(x[0]) : String(x)));
+    return sortie.length === textes.length ? sortie : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Traduit une liste de textes de `source` vers `cible` ; renvoie l'original pour ce qui n'a pas pu être traduit. */
+async function traduire(textes: string[], source: Langue, cible: Langue): Promise<string[]> {
+  if (textes.length === 0) return [];
+  const carte = await dictionnaire(cible);
+  const manquants = [...new Set(textes.filter((t) => !carte.has(t)))];
+  // Lots d'environ 60 titres / 6 000 caractères ; 12 lots au plus par appel (le reste au passage suivant).
+  const lots: string[][] = [];
+  let lot: string[] = [];
+  let taille = 0;
+  for (const t of manquants) {
+    if (lot.length >= 60 || taille + t.length > 6000) {
+      lots.push(lot);
+      lot = [];
+      taille = 0;
+    }
+    lot.push(t);
+    taille += t.length;
+  }
+  if (lot.length) lots.push(lot);
+  await Promise.all(
+    lots.slice(0, 12).map(async (l) => {
+      const traductions = await appelTraduction(l, source, cible);
+      if (!traductions) return;
+      l.forEach((t, k) => carte.set(t, traductions[k]));
+      dictionnaireModifie[cible] = true;
+    }),
+  );
+  return textes.map((t) => carte.get(t) ?? t);
+}
+
+/** Ajoute titreFr / titreEn à chaque dépêche (et l'indicateur des données économiques). */
+async function bilingue(depeches: Depeche[]): Promise<Depeche[]> {
+  const versFr = depeches.filter((d) => d.langue === 'en');
+  const versEn = depeches.filter((d) => d.langue === 'fr');
+  const indicateurs = versFr.filter((d) => d.donnee).map((d) => d.donnee!.indicateur);
+  const [fr, en, indicFr] = await Promise.all([
+    traduire(versFr.map((d) => d.titre), 'en', 'fr'),
+    traduire(versEn.map((d) => d.titre), 'fr', 'en'),
+    traduire(indicateurs, 'en', 'fr'),
+  ]);
+  const tradFr = new Map(versFr.map((d, i) => [d.id, fr[i]]));
+  const tradEn = new Map(versEn.map((d, i) => [d.id, en[i]]));
+  const tradIndic = new Map(indicateurs.map((t, i) => [t, indicFr[i]]));
+  return depeches.map((d) => ({
+    ...d,
+    titreFr: d.langue === 'fr' ? d.titre : tradFr.get(d.id) ?? d.titre,
+    titreEn: d.langue === 'en' ? d.titre : tradEn.get(d.id) ?? d.titre,
+    donnee: d.donnee ? { ...d.donnee, indicateurEn: d.donnee.indicateur, indicateurFr: tradIndic.get(d.donnee.indicateur) ?? d.donnee.indicateur } : undefined,
+  }));
+}
+
+interface Env {
+  ANNONCES: KVNamespace;
+}
+
+let envGlobal: Env | undefined;
+const CLE_KV_FJ = 'financialjuice-rss';
+let memoireFJ: { lueLe: number; texte: string | null } | null = null;
+
+/**
+ * FinancialJuice bloque les adresses qui l'interrogent trop souvent. Seule la tâche planifiée l'appelle
+ * (toutes les 2 min) et dépose le flux dans KV ; les requêtes lisent cette copie (mémoire de l'isolat 20 s).
+ */
+async function texteFinancialJuice(): Promise<string | null> {
+  if (memoireFJ && Date.now() - memoireFJ.lueLe < 20000) return memoireFJ.texte;
+  const texte = envGlobal ? await envGlobal.ANNONCES.get(CLE_KV_FJ) : null;
+  memoireFJ = { lueLe: Date.now(), texte };
+  return texte;
+}
+
+async function rafraichirFinancialJuice(env: Env): Promise<string> {
+  try {
+    const r = await fetch(FLUX_FINANCIALJUICE.url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ParnassaTrading/1.0; +https://akhimysah.github.io/parnassa-trading/)', Accept: 'application/rss+xml, application/xml;q=0.9, */*;q=0.8' },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!r.ok) return `refus ${r.status}`;
+    const texte = await r.text();
+    if (!/<item>/i.test(texte)) return 'flux vide';
+    const actuel = await env.ANNONCES.get(CLE_KV_FJ);
+    if (actuel === texte) return 'inchangé';
+    await env.ANNONCES.put(CLE_KV_FJ, texte);
+    return 'mis à jour';
+  } catch (e) {
+    return `erreur ${e instanceof Error ? e.message : ''}`;
+  }
+}
 
 async function lireFlux(flux: Flux): Promise<Depeche[]> {
-  const fraicheur = flux.source === 'FinancialJuice' ? 30 : 90;
-  const texte = await recupererTexte(flux.url, fraicheur, contexte);
+  if (flux.source === 'FinancialJuice') {
+    const texte = await texteFinancialJuice();
+    return texte ? parser(texte, flux) : [];
+  }
+  const texte = await recupererTexte(flux.url, 90);
   return texte ? parser(texte, flux) : [];
 }
 
@@ -240,21 +418,12 @@ async function calendrier(): Promise<EvenementCalendrier[]> {
   const debut = new Date(Math.floor(Date.now() / jour) * jour - jour).toISOString();
   const fin = new Date(Math.floor(Date.now() / jour) * jour + 7 * jour).toISOString();
   const url = `https://economic-calendar.tradingview.com/events?from=${debut}&to=${fin}&countries=${PAYS_CALENDRIER}`;
-  const cache = caches.default;
-  const cle = new Request(`https://cache.parnassa/calendrier?d=${debut}`);
-  const enCache = await cache.match(cle);
-  let texte = enCache ? await enCache.text() : null;
-  if (!texte) {
-    try {
-      const r = await fetch(url, { headers: { Origin: 'https://www.tradingview.com', 'User-Agent': 'Mozilla/5.0 (compatible; ParnassaTrading/1.0)' }, signal: AbortSignal.timeout(8000) });
-      if (r.ok) {
-        texte = await r.text();
-        const ecrire = cache.put(cle, new Response(texte, { headers: { 'Cache-Control': 'max-age=60' } }));
-        if (contexte) contexte.waitUntil(ecrire);
-      }
-    } catch {
-      texte = null;
-    }
+  let texte: string | null = null;
+  try {
+    const r = await fetch(url, { headers: { Origin: 'https://www.tradingview.com', 'User-Agent': 'Mozilla/5.0 (compatible; ParnassaTrading/1.0)' }, signal: AbortSignal.timeout(8000) });
+    if (r.ok) texte = await r.text();
+  } catch {
+    texte = null;
   }
   if (!texte) return [];
   try {
@@ -279,6 +448,14 @@ async function calendrier(): Promise<EvenementCalendrier[]> {
   } catch {
     return [];
   }
+}
+
+async function calendrierBilingue(): Promise<EvenementCalendrier[]> {
+  const evenements = await calendrier();
+  const titres = [...new Set(evenements.map((e) => e.titre))];
+  const fr = await traduire(titres, 'en', 'fr');
+  const carte = new Map(titres.map((t, i) => [t, fr[i]]));
+  return evenements.map((e) => ({ ...e, titreFr: carte.get(e.titre) ?? e.titre }));
 }
 
 async function agreger(fluxs: Flux[], limite: number): Promise<Depeche[]> {
@@ -310,10 +487,16 @@ function json(donnees: unknown, maxAge: number): Response {
 }
 
 export default {
-  async fetch(requete: Request, _env: unknown, ctx: ExecutionContext): Promise<Response> {
-    contexte = ctx;
+  async scheduled(_evenement: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(rafraichirFinancialJuice(env).then((etat) => console.log(`FinancialJuice : ${etat}`)));
+  },
+
+  async fetch(requete: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    envGlobal = env;
     if (requete.method === 'OPTIONS') return json(null, 86400);
     const url = new URL(requete.url);
+    origine = url.origin;
+    if (url.pathname.startsWith('/__cache/')) return json({ erreur: 'Route inconnue.' }, 0);
     const cache = caches.default;
     const cleCache = new Request(url.toString(), { method: 'GET' });
     const enCache = await cache.match(cleCache);
@@ -321,13 +504,13 @@ export default {
 
     let reponse: Response;
     if (url.pathname === '/flux') {
-      const depeches = await agreger(FLUX, 500);
+      const depeches = await bilingue(await agreger(FLUX, 500));
       reponse = json({ generéLe: Date.now(), depeches }, 30);
     } else if (url.pathname === '/annonces') {
-      const depeches = await agreger([FLUX_FINANCIALJUICE], 200);
+      const depeches = await bilingue(await agreger([FLUX_FINANCIALJUICE], 200));
       reponse = json({ generéLe: Date.now(), depeches }, 20);
     } else if (url.pathname === '/calendrier') {
-      reponse = json({ generéLe: Date.now(), evenements: await calendrier() }, 60);
+      reponse = json({ generéLe: Date.now(), evenements: await calendrierBilingue() }, 60);
     } else if (url.pathname === '/recherche') {
       const q = (url.searchParams.get('q') ?? '').trim().slice(0, 80);
       const ticker = (url.searchParams.get('ticker') ?? '').trim().slice(0, 20);
@@ -341,14 +524,14 @@ export default {
       if (ticker && /^[A-Z0-9.^=-]+$/i.test(ticker)) {
         fluxs.push({ url: `https://feeds.finance.yahoo.com/rss/2.0/headline?s=${encodeURIComponent(ticker)}&region=US&lang=en-US`, source: 'Yahoo Finance', categorie: 'marches', langue: 'en' });
       }
-      const depeches = await agreger(fluxs, 80);
+      const depeches = await bilingue(await agreger(fluxs, 80));
       reponse = json({ generéLe: Date.now(), depeches }, 120);
     } else if (url.pathname === '/' || url.pathname === '/sante') {
       reponse = json({ service: 'parnassa-actualites', flux: FLUX.length, routes: ['/flux', '/annonces', '/calendrier', '/recherche?q=…&ticker=…'] }, 0);
     } else {
       return json({ erreur: 'Route inconnue.' }, 0);
     }
-    ctx.waitUntil(cache.put(cleCache, reponse.clone()));
+    ctx.waitUntil(Promise.all([cache.put(cleCache, reponse.clone()), sauverSecours(), sauverDictionnaires()]));
     return reponse;
   },
 };

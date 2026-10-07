@@ -5,6 +5,11 @@ import {
   CATEGORIES_DEPECHES,
   heureCourte,
   ilYA,
+  indicateurAffiche,
+  LIBELLES_DONNEE,
+  texteRecherche,
+  titrePrincipal,
+  titreSecondaire,
   motsClesTrouves,
   compteARebours,
   drapeau,
@@ -55,7 +60,6 @@ function TitreSurligne({ titre, mots }: { titre: string; mots: string[] }) {
   return <>{morceaux}</>;
 }
 
-const SOURCES_FR = new Set(['fr']);
 
 export function Actualites({ etat, fil, maj }: Props) {
   const { depeches, erreur, chargement, majLe, nouvelles, effacerNouvelles } = fil;
@@ -72,7 +76,9 @@ export function Actualites({ etat, fil, maj }: Props) {
   const [filtre, setFiltre] = useState<Filtre>('annonces');
   const calendrier = useCalendrier(true);
   const prochaine = calendrier.evenements.find((e) => e.importance >= 1 && e.actuel === null && e.date > Date.now());
-  const [langue, setLangue] = useState<'toutes' | 'fr' | 'en'>('toutes');
+  const langue = etat.parametres.langueActualites;
+  const setLangue = (l: typeof langue) => maj({ parametres: { ...etat.parametres, langueActualites: l } });
+  const libelles = LIBELLES_DONNEE[langue];
   const [importantsSeuls, setImportantsSeuls] = useState(false);
   const [recherche, setRecherche] = useState('');
   const [sonBreaking, setSonBreaking] = useState(false);
@@ -99,15 +105,14 @@ export function Actualites({ etat, fil, maj }: Props) {
       (d) =>
         (filtre === 'tous' ||
           (filtre === 'selection'
-            ? motsClesTrouves(d.titre, motsCles).length > 0
+            ? motsClesTrouves(texteRecherche(d), motsCles).length > 0
             : filtre === 'annonces'
               ? d.source === 'FinancialJuice'
               : d.categorie === filtre)) &&
-        (langue === 'toutes' || (langue === 'fr' ? SOURCES_FR.has(d.langue) : !SOURCES_FR.has(d.langue))) &&
         (!importantsSeuls || d.important) &&
-        (!q || d.titre.toLowerCase().includes(q) || d.source.toLowerCase().includes(q)),
+        (!q || texteRecherche(d).toLowerCase().includes(q) || d.source.toLowerCase().includes(q)),
     );
-  }, [depeches, filtre, langue, importantsSeuls, recherche, motsCles]);
+  }, [depeches, filtre, importantsSeuls, recherche, motsCles]);
 
   const derniereImportante = depeches.find((d) => d.important && Date.now() - d.date < 2 * 3600000);
   const nouvellesIds = useMemo(() => new Set(nouvelles.map((d) => d.id)), [nouvelles]);
@@ -137,7 +142,7 @@ export function Actualites({ etat, fil, maj }: Props) {
       {derniereImportante && (
         <a className="bandeau-breaking" href={derniereImportante.lien} target="_blank" rel="noopener noreferrer">
           <span className="etiquette-breaking">Important</span>
-          <span className="texte-breaking">{derniereImportante.titre}</span>
+          <span className="texte-breaking">{titrePrincipal(derniereImportante, langue)}</span>
           <span className="muet">{derniereImportante.source} · {ilYA(derniereImportante.date)}</span>
         </a>
       )}
@@ -148,7 +153,7 @@ export function Actualites({ etat, fil, maj }: Props) {
         </button>
         {motsCles.length > 0 && (
           <button className={filtre === 'selection' ? 'actif' : ''} onClick={() => setFiltre('selection')} title="Dépêches contenant vos mots-clés">
-            Ma sélection <span className="compteur-onglet">{depeches.filter((d) => motsClesTrouves(d.titre, motsCles).length > 0).length}</span>
+            Ma sélection <span className="compteur-onglet">{depeches.filter((d) => motsClesTrouves(texteRecherche(d), motsCles).length > 0).length}</span>
           </button>
         )}
         {CATEGORIES_DEPECHES.map((c) => (
@@ -167,9 +172,14 @@ export function Actualites({ etat, fil, maj }: Props) {
             )}
           </label>
           <div className="segmente compact">
-            {(['toutes', 'fr', 'en'] as const).map((l) => (
-              <button key={l} className={langue === l ? 'actif neutre' : ''} onClick={() => setLangue(l)}>
-                {l === 'toutes' ? 'FR + EN' : l.toUpperCase()}
+            {(['fr+en', 'fr', 'en'] as const).map((l) => (
+              <button
+                key={l}
+                className={langue === l ? 'actif neutre' : ''}
+                onClick={() => setLangue(l)}
+                title={l === 'fr+en' ? 'Chaque dépêche en français, avec la version anglaise dessous' : l === 'fr' ? 'Toutes les dépêches en français' : 'All headlines in English'}
+              >
+                {l === 'fr+en' ? 'FR + EN' : l.toUpperCase()}
               </button>
             ))}
           </div>
@@ -218,7 +228,7 @@ export function Actualites({ etat, fil, maj }: Props) {
             )}
             {prochaine && (
               <span className="prochaine-annonce" title={new Date(prochaine.date).toLocaleString('fr-FR')}>
-                Prochaine : {drapeau(prochaine.pays)} {prochaine.titre} <strong>{compteARebours(prochaine.date)}</strong>
+                Prochaine : {drapeau(prochaine.pays)} {langue === 'en' ? prochaine.titre : (prochaine.titreFr ?? prochaine.titre)} <strong>{compteARebours(prochaine.date)}</strong>
               </span>
             )}
             {nouvelles.length > 0 && (
@@ -239,7 +249,10 @@ export function Actualites({ etat, fil, maj }: Props) {
               <h4 className="jour">{groupe.jour}</h4>
               <ul className="depeches">
                 {groupe.depeches.map((d) => {
-                  const trouves = motsClesTrouves(d.titre, motsCles);
+                  const trouves = motsClesTrouves(texteRecherche(d), motsCles);
+                  const principal = titrePrincipal(d, langue);
+                  const secondaire = titreSecondaire(d, langue);
+                  const indic = d.donnee ? indicateurAffiche(d.donnee, langue) : null;
                   return (
                   <li key={d.id} className={`${d.important ? 'importante' : ''} ${nouvellesIds.has(d.id) ? 'nouvelle' : ''} ${trouves.length ? 'selectionnee' : ''}`}>
                     <time dateTime={new Date(d.date).toISOString()} title={new Date(d.date).toLocaleString('fr-FR')}>
@@ -247,21 +260,35 @@ export function Actualites({ etat, fil, maj }: Props) {
                     </time>
                     <a href={d.lien} target="_blank" rel="noopener noreferrer">
                       {d.important && <span className="etoile-importante" aria-label="Important">★</span>}
-                      {d.donnee ? (
-                        <span className="donnee-eco">
-                          <span className="indicateur">
-                            <TitreSurligne titre={d.donnee.indicateur} mots={trouves} />
+                      {d.donnee && indic ? (
+                        <>
+                          <span className="donnee-eco">
+                            <span className="indicateur">
+                              <TitreSurligne titre={indic.principal} mots={trouves} />
+                            </span>
+                            <span className={`puce-valeur reel ${d.donnee.ecart === 1 ? 'hausse' : d.donnee.ecart === -1 ? 'baisse' : ''}`}>
+                              {libelles.reel} <strong>{d.donnee.actuel}</strong>
+                              {d.donnee.ecart === 1 && ' ▲'}
+                              {d.donnee.ecart === -1 && ' ▼'}
+                            </span>
+                            <span className="puce-valeur">
+                              {libelles.prev} {d.donnee.prevision ?? '–'}
+                            </span>
+                            <span className="puce-valeur">
+                              {libelles.prec} {d.donnee.precedent ?? '–'}
+                            </span>
                           </span>
-                          <span className={`puce-valeur reel ${d.donnee.ecart === 1 ? 'hausse' : d.donnee.ecart === -1 ? 'baisse' : ''}`}>
-                            Réel <strong>{d.donnee.actuel}</strong>
-                            {d.donnee.ecart === 1 && ' ▲'}
-                            {d.donnee.ecart === -1 && ' ▼'}
-                          </span>
-                          <span className="puce-valeur">Prév. {d.donnee.prevision ?? '–'}</span>
-                          <span className="puce-valeur">Préc. {d.donnee.precedent ?? '–'}</span>
-                        </span>
+                          {indic.secondaire && <span className="titre-traduit">{indic.secondaire}</span>}
+                        </>
                       ) : (
-                        <TitreSurligne titre={d.titre} mots={trouves} />
+                        <>
+                          <TitreSurligne titre={principal} mots={trouves} />
+                          {secondaire && (
+                            <span className="titre-traduit">
+                              <TitreSurligne titre={secondaire} mots={trouves} />
+                            </span>
+                          )}
+                        </>
                       )}
                     </a>
                     <span className="source-depeche">{d.source}</span>
@@ -276,7 +303,7 @@ export function Actualites({ etat, fil, maj }: Props) {
         </div>
 
         <aside className="colonne-droite">
-          <CalendrierAnnonces evenements={calendrier.evenements} chargement={calendrier.chargement} />
+          <CalendrierAnnonces evenements={calendrier.evenements} chargement={calendrier.chargement} langue={langue} />
           <div className="carte">
             <h3>
               {ticker(etat.symbole)} · {nomSymbole(etat.symbole)}
@@ -288,7 +315,8 @@ export function Actualites({ etat, fil, maj }: Props) {
                 <li key={d.id} className={d.important ? 'importante' : ''}>
                   <time>{heureCourte(d.date)}</time>
                   <a href={d.lien} target="_blank" rel="noopener noreferrer">
-                    {d.titre}
+                    {titrePrincipal(d, langue)}
+                    {titreSecondaire(d, langue) && <span className="titre-traduit">{titreSecondaire(d, langue)}</span>}
                   </a>
                   <span className="source-depeche">{d.source}</span>
                 </li>

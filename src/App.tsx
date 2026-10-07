@@ -16,7 +16,7 @@ import { Calendrier } from './pages/Calendrier';
 import { Alertes } from './pages/Alertes';
 import { Trading } from './pages/Trading';
 import { notifier, sonner, useMoteurAlertes } from './alertes';
-import { motsClesTrouves, useFilActualites } from './actualites';
+import { motsClesTrouves, texteRecherche, titrePrincipal, useFilActualites } from './actualites';
 import { estBinance, paireBinance } from './binance';
 import { appliquerFlux, enregistrerCapital, valeurPortefeuille } from './trading';
 import { nomSymbole } from './symboles';
@@ -75,12 +75,13 @@ export function App() {
   const fil = useFilActualites(etat.page === 'actualites' ? 20000 : 60000, etat.page === 'actualites' || motsCles.length > 0);
   useEffect(() => {
     if (motsCles.length === 0 || fil.nouvelles.length === 0) return;
-    const touchees = fil.nouvelles.filter((d) => motsClesTrouves(d.titre, motsCles).length > 0);
+    const touchees = fil.nouvelles.filter((d) => motsClesTrouves(texteRecherche(d), motsCles).length > 0);
     if (touchees.length === 0) return;
     const premiere = touchees[0];
-    const mots = motsClesTrouves(premiere.titre, motsCles).join(', ');
-    setToast(`📰 ${mots} : ${premiere.titre}${touchees.length > 1 ? ` (+${touchees.length - 1})` : ''}`);
-    notifier(`Actualité : ${mots}`, `${premiere.titre} — ${premiere.source}`);
+    const mots = motsClesTrouves(texteRecherche(premiere), motsCles).join(', ');
+    const titre = titrePrincipal(premiere, etat.parametres.langueActualites);
+    setToast(`📰 ${mots} : ${titre}${touchees.length > 1 ? ` (+${touchees.length - 1})` : ''}`);
+    notifier(`Actualité : ${mots}`, `${titre} — ${premiere.source}`);
     if (etat.parametres.son) sonner();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fil.nouvelles]);

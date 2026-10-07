@@ -2183,3 +2183,19 @@ th.trie {
 .valeurs-annonce span {
   white-space: nowrap;
 }
+
+/* ---- Dépêches bilingues ---- */
+.titre-traduit {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--texte-muet);
+  line-height: 1.35;
+}
+.depeches li.importante .titre-traduit {
+  font-weight: 400;
+}
+.titre-annonce .titre-traduit {
+  font-size: 11px;
+}

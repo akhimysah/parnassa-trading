@@ -3,5 +3,9 @@
   "name": "parnassa-actualites",
   "main": "actualites.ts",
   "compatibility_date": "2026-07-25",
-  "observability": { "enabled": true }
+  "observability": { "enabled": true },
+  // Copie partagée du flux FinancialJuice, alimentée par la tâche planifiée (FinancialJuice limite les appels).
+  "kv_namespaces": [{ "binding": "ANNONCES", "id": "e8746e16a0564cff809b5ef4ba18965e" }],
+  // Toutes les 2 minutes : 720 écritures KV par jour au plus, sous la limite gratuite de 1 000.
+  "triggers": { "crons": ["*/2 * * * *"] }
 }

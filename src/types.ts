@@ -48,6 +48,8 @@ export interface Parametres {
   son: boolean;
   /** Mots-clés surveillés dans le fil d'actualités (alerte à chaque nouvelle dépêche correspondante). */
   motsCles: string[];
+  /** Langue d'affichage des dépêches : tout en français, tout en anglais, ou les deux. */
+  langueActualites: 'fr' | 'en' | 'fr+en';
 }
 
 export type Sens = 'achat' | 'vente';

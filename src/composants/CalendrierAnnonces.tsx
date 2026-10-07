@@ -1,9 +1,21 @@
 import { useEffect, useMemo, useState } from 'react';
-import { compteARebours, drapeau, heureCourte, valeurCalendrier, type EvenementCalendrier } from '../actualites';
+import { compteARebours, drapeau, heureCourte, LIBELLES_DONNEE, valeurCalendrier, type EvenementCalendrier, type LangueAffichage } from '../actualites';
 
 interface Props {
   evenements: EvenementCalendrier[];
   chargement: boolean;
+  langue: LangueAffichage;
+}
+
+function TitreEvenement({ e, langue }: { e: EvenementCalendrier; langue: LangueAffichage }) {
+  const fr = e.titreFr ?? e.titre;
+  const principal = langue === 'en' ? e.titre : fr;
+  return (
+    <span className="titre-annonce">
+      {principal} {e.periode && <span className="muet">({e.periode})</span>}
+      {langue === 'fr+en' && e.titre !== fr && <span className="titre-traduit">{e.titre}</span>}
+    </span>
+  );
 }
 
 function Importance({ niveau }: { niveau: number }) {
@@ -17,20 +29,21 @@ function Importance({ niveau }: { niveau: number }) {
   );
 }
 
-function Valeurs({ e }: { e: EvenementCalendrier }) {
+function Valeurs({ e, langue }: { e: EvenementCalendrier; langue: LangueAffichage }) {
+  const l = LIBELLES_DONNEE[langue];
   const ecart = e.actuel !== null && e.prevision !== null ? Math.sign(e.actuel - e.prevision) : null;
   return (
     <div className="valeurs-annonce">
       <span>
-        <em>Réel</em>
+        <em>{l.reel}</em>
         <strong className={ecart === 1 ? 'hausse' : ecart === -1 ? 'baisse' : ''}>{valeurCalendrier(e.actuel, e.unite, e.echelle)}</strong>
       </span>
       <span>
-        <em>Prév.</em>
+        <em>{l.prev}</em>
         {valeurCalendrier(e.prevision, e.unite, e.echelle)}
       </span>
       <span>
-        <em>Préc.</em>
+        <em>{l.prec}</em>
         {valeurCalendrier(e.precedent, e.unite, e.echelle)}
       </span>
     </div>
@@ -38,7 +51,8 @@ function Valeurs({ e }: { e: EvenementCalendrier }) {
 }
 
 /** Panneau façon FinancialJuice : prochaines annonces économiques et dernières publications. */
-export function CalendrierAnnonces({ evenements, chargement }: Props) {
+export function CalendrierAnnonces({ evenements, chargement, langue }: Props) {
+  const l = LIBELLES_DONNEE[langue];
   const [fortSeul, setFortSeul] = useState(false);
   const [, tic] = useState(0);
   useEffect(() => {
@@ -80,16 +94,14 @@ export function CalendrierAnnonces({ evenements, chargement }: Props) {
                 <span className="drapeau" aria-hidden>
                   {drapeau(e.pays)}
                 </span>
-                <span className="titre-annonce">
-                  {e.titre} {e.periode && <span className="muet">({e.periode})</span>}
-                </span>
+                <TitreEvenement e={e} langue={langue} />
                 <Importance niveau={e.importance} />
               </div>
               <div className="meta-annonce">
                 <span className={imminent ? 'rebours imminent' : 'rebours'}>{compteARebours(e.date)}</span>
                 <span className="muet">{heureCourte(e.date)}</span>
                 <span className="muet">
-                  prév. {valeurCalendrier(e.prevision, e.unite, e.echelle)} · préc. {valeurCalendrier(e.precedent, e.unite, e.echelle)}
+                  {l.prev.toLowerCase()} {valeurCalendrier(e.prevision, e.unite, e.echelle)} · {l.prec.toLowerCase()} {valeurCalendrier(e.precedent, e.unite, e.echelle)}
                 </span>
               </div>
             </li>
@@ -106,14 +118,12 @@ export function CalendrierAnnonces({ evenements, chargement }: Props) {
               <span className="drapeau" aria-hidden>
                 {drapeau(e.pays)}
               </span>
-              <span className="titre-annonce">
-                {e.titre} {e.periode && <span className="muet">({e.periode})</span>}
-              </span>
+              <TitreEvenement e={e} langue={langue} />
               <Importance niveau={e.importance} />
             </div>
             <div className="meta-annonce">
               <span className="muet">{heureCourte(e.date)}</span>
-              <Valeurs e={e} />
+              <Valeurs e={e} langue={langue} />
             </div>
           </li>
         ))}
