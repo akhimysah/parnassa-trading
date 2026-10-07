@@ -740,6 +740,42 @@ async function agreger(fluxs: Flux[], limite: number): Promise<Depeche[]> {
   return toutes.slice(0, limite);
 }
 
+// ---------- Bougies (Yahoo Finance) ----------
+
+const INTERVALLES_YAHOO = new Set(['1m', '5m', '15m', '30m', '60m', '1d', '1wk', '1mo']);
+const PERIODES_YAHOO = new Set(['5d', '1mo', '3mo', '6mo', '1y', '2y', '5y', '10y', 'max']);
+
+/** Bougies [temps (s), ouverture, plus haut, plus bas, clôture, volume], des plus anciennes aux plus récentes. */
+async function bougiesYahoo(symbole: string, intervalle: string, periode: string): Promise<number[][] | null> {
+  for (const hote of ['query1', 'query2']) {
+    try {
+      const r = await fetch(`https://${hote}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbole)}?interval=${intervalle}&range=${periode}`, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36' },
+      });
+      if (!r.ok) continue;
+      const d = (await r.json()) as {
+        chart?: { result?: { timestamp?: number[]; indicators?: { quote?: { open: (number | null)[]; high: (number | null)[]; low: (number | null)[]; close: (number | null)[]; volume?: (number | null)[] }[] } }[] };
+      };
+      const res = d.chart?.result?.[0];
+      const q = res?.indicators?.quote?.[0];
+      if (!res?.timestamp || !q) continue;
+      const sortie: number[][] = [];
+      res.timestamp.forEach((t, k) => {
+        const o = q.open[k];
+        const h = q.high[k];
+        const l = q.low[k];
+        const c = q.close[k];
+        if (o == null || h == null || l == null || c == null) return;
+        sortie.push([t, o, h, l, c, q.volume?.[k] ?? 0]);
+      });
+      return sortie;
+    } catch {
+      // essai sur l'autre hôte
+    }
+  }
+  return null;
+}
+
 function json(donnees: unknown, maxAge: number): Response {
   return new Response(JSON.stringify(donnees), {
     headers: {
@@ -816,8 +852,17 @@ export default {
       }
       const depeches = await bilingue(await agreger(fluxs, 80));
       reponse = json({ generéLe: Date.now(), depeches }, 120);
+    } else if (url.pathname === '/bougies') {
+      // Historique des graphiques de Parnassa Trader (forex, indices, actions) : l'API Yahoo n'a pas de CORS.
+      const s = (url.searchParams.get('s') ?? '').trim();
+      const i = url.searchParams.get('i') ?? '';
+      const r = url.searchParams.get('r') ?? '';
+      if (!/^[A-Z0-9.^=-]{1,20}$/i.test(s) || !INTERVALLES_YAHOO.has(i) || !PERIODES_YAHOO.has(r)) return json({ erreur: 'Paramètres s, i et r requis.' }, 0);
+      const bougies = await bougiesYahoo(s, i, r);
+      if (!bougies) return json({ erreur: 'Historique indisponible.' }, 0);
+      reponse = json({ generéLe: Date.now(), bougies }, i === '1m' || i === '5m' ? 30 : 120);
     } else if (url.pathname === '/' || url.pathname === '/sante') {
-      reponse = json({ service: 'parnassa-actualites', flux: FLUX.length, routes: ['/flux', '/annonces', '/calendrier', '/surprises', '/banques-centrales', '/resultats', '/recherche?q=…&ticker=…'] }, 0);
+      reponse = json({ service: 'parnassa-actualites', flux: FLUX.length, routes: ['/flux', '/annonces', '/calendrier', '/surprises', '/banques-centrales', '/resultats', '/recherche?q=…&ticker=…', '/bougies?s=…&i=…&r=…'] }, 0);
     } else {
       return json({ erreur: 'Route inconnue.' }, 0);
     }
