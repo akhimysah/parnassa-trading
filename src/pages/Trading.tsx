@@ -20,6 +20,7 @@ import {
 } from '../instruments';
 import { SelecteurInstrument } from '../composants/SelecteurInstrument';
 import { PrixAnime } from '../composants/PrixAnime';
+import { CalendrierTrades } from '../composants/CalendrierTrades';
 import { nomSymbole, ticker } from '../symboles';
 import {
   annoterOperation,
@@ -884,6 +885,8 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
           )}
         </div>
       </div>
+
+      <CalendrierTrades operations={p.operations} ouvrirSymbole={ouvrirSymbole} />
     </div>
   );
 }

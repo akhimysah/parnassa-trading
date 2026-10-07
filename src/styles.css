@@ -3007,3 +3007,196 @@ th.trie {
     animation: none;
   }
 }
+
+/* ---- Calendrier des trades ---- */
+.calendrier-trades {
+  padding-bottom: 12px;
+}
+.ct-entete {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--bordure);
+  padding-right: 12px;
+}
+.ct-entete h3 {
+  border-bottom: 0;
+}
+.ct-navigation {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ct-navigation strong {
+  text-transform: capitalize;
+  min-width: 130px;
+  text-align: center;
+}
+.ct-navigation .icone {
+  font-size: 18px;
+}
+.ct-resume {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1px;
+  background: var(--bordure);
+  border-bottom: 1px solid var(--bordure);
+}
+.ct-resume > div {
+  background: var(--panneau);
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ct-resume span {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--texte-muet);
+}
+.ct-resume strong {
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+}
+.ct-resume strong span {
+  font-size: 15px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.ct-resume em {
+  font-style: normal;
+  font-size: 12px;
+}
+.ct-grille {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr)) minmax(0, 0.9fr);
+  gap: 6px;
+  padding: 12px 14px 0;
+}
+.ct-ligne {
+  display: contents;
+}
+.ct-jour-semaine {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--texte-muet);
+  text-align: center;
+  padding-bottom: 2px;
+}
+.ct-case {
+  min-height: 74px;
+  border-radius: 8px;
+  border: 1px solid var(--bordure);
+  background: var(--fond);
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+  min-width: 0;
+}
+.ct-case.vide {
+  border: 0;
+  background: transparent;
+}
+.ct-case:disabled {
+  cursor: default;
+}
+.ct-case.active:hover,
+.ct-case.choisie {
+  border-color: var(--accent);
+}
+.ct-case.aujourdhui .ct-num {
+  background: var(--accent);
+  color: #fff;
+  border-radius: 999px;
+  padding: 0 6px;
+}
+.ct-num {
+  font-size: 12px;
+  color: var(--texte-muet);
+}
+.ct-case strong {
+  font-size: 13.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.ct-trades {
+  font-size: 10.5px;
+  color: var(--texte-muet);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.ct-case.semaine {
+  background: var(--panneau-2);
+  justify-content: center;
+}
+.ct-detail {
+  margin: 12px 14px 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--fond);
+  border: 1px solid var(--bordure);
+}
+.ct-detail h4 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  text-transform: capitalize;
+}
+.ct-detail ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ct-detail li {
+  display: grid;
+  grid-template-columns: 46px 80px minmax(0, 1fr) auto auto auto;
+  gap: 10px;
+  align-items: center;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+.ct-detail li .lien {
+  padding: 0;
+  text-align: left;
+}
+@media (max-width: 700px) {
+  .ct-grille {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 3px;
+    padding: 10px 8px 0;
+  }
+  .ct-case.semaine,
+  .ct-jour-semaine:last-child {
+    display: none;
+  }
+  .ct-case {
+    min-height: 54px;
+    padding: 4px;
+  }
+  .ct-case strong {
+    font-size: 11px;
+  }
+  .ct-trades {
+    display: none;
+  }
+  .ct-detail li {
+    grid-template-columns: 44px 1fr auto;
+  }
+  .ct-detail li > span {
+    display: none;
+  }
+}
