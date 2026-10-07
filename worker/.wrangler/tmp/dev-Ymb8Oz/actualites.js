@@ -768,7 +768,14 @@ function nettoyerPreferences(p) {
       delaiMinutes: Math.min(60, Math.max(1, Number(p?.rappels?.delaiMinutes) || 5)),
       fortImpactAuto: Boolean(p?.rappels?.fortImpactAuto)
     },
-    alertes: (p?.alertes ?? []).filter((a) => a && typeof a.id === "string" && /^BINANCE:[A-Z0-9]{2,20}$/.test(a.symbole) && Number.isFinite(a.seuil)).slice(0, 50).map((a) => ({ id: a.id, symbole: a.symbole, condition: a.condition === "en-dessous" ? "en-dessous" : "au-dessus", seuil: Number(a.seuil), note: a.note?.slice(0, 80) }))
+    alertes: (p?.alertes ?? []).filter((a) => a && typeof a.id === "string" && /^[A-Z_]{2,12}:[A-Z0-9.!_]{1,20}$/.test(a.symbole) && Number.isFinite(a.seuil)).slice(0, 50).map((a) => ({
+      id: a.id,
+      symbole: a.symbole,
+      condition: a.condition === "en-dessous" ? "en-dessous" : "au-dessus",
+      seuil: Number(a.seuil),
+      note: a.note?.slice(0, 80),
+      reference: Number.isFinite(Number(a.reference)) && Number(a.reference) > 0 ? Number(a.reference) : void 0
+    }))
   };
 }
 __name(nettoyerPreferences, "nettoyerPreferences");
@@ -854,7 +861,24 @@ async function tourneePush(env, heurePlanifiee, fenetreFJ) {
   const nouvellesBilingues = nouvelles.length ? await bilingue(nouvelles) : [];
   const besoinCalendrier = enregistrements.some((x) => x.e.preferences.rappels.ids.length > 0 || x.e.preferences.rappels.fortImpactAuto);
   const evenements = besoinCalendrier ? await calendrierBilingue() : [];
-  const paires = [...new Set(enregistrements.flatMap((x) => x.e.preferences.alertes.filter((a) => !x.e.envoyes.includes(`alerte:${a.id}`)).map((a) => a.symbole.split(":")[1])))].slice(0, 10);
+  const alertesActives = enregistrements.flatMap((x) => x.e.preferences.alertes.filter((a) => !x.e.envoyes.includes(`alerte:${a.id}`)));
+  const paires = [...new Set(alertesActives.filter((a) => a.symbole.startsWith("BINANCE:")).map((a) => a.symbole.split(":")[1]))].slice(0, 10);
+  const autres = [...new Set(alertesActives.filter((a) => !a.symbole.startsWith("BINANCE:")).map((a) => a.symbole))].slice(0, 60);
+  const cotations = /* @__PURE__ */ new Map();
+  if (autres.length) {
+    try {
+      const r = await fetch("https://scanner.tradingview.com/global/scan", {
+        method: "POST",
+        body: JSON.stringify({ symbols: { tickers: autres }, columns: ["close"] }),
+        signal: AbortSignal.timeout(6e3)
+      });
+      if (r.ok) {
+        const d = await r.json();
+        for (const l of d.data ?? []) if (typeof l.d[0] === "number") cotations.set(l.s, l.d[0]);
+      }
+    } catch {
+    }
+  }
   const bougies = /* @__PURE__ */ new Map();
   await Promise.all(
     paires.map(async (p) => {
@@ -933,13 +957,22 @@ async function tourneePush(env, heurePlanifiee, fenetreFJ) {
     for (const a of p.alertes) {
       const cleAlerte = `alerte:${a.id}`;
       if (e.envoyes.includes(cleAlerte)) continue;
-      const b = bougies.get(a.symbole.split(":")[1]);
-      if (!b) continue;
-      const franchie = a.condition === "au-dessus" ? b.ouverture < a.seuil && b.haut >= a.seuil : b.ouverture > a.seuil && b.bas <= a.seuil;
+      let franchie = false;
+      let dernier;
+      if (a.symbole.startsWith("BINANCE:")) {
+        const b = bougies.get(a.symbole.split(":")[1]);
+        if (!b) continue;
+        dernier = b.cloture;
+        franchie = a.condition === "au-dessus" ? b.ouverture < a.seuil && b.haut >= a.seuil : b.ouverture > a.seuil && b.bas <= a.seuil;
+      } else {
+        dernier = cotations.get(a.symbole);
+        if (dernier === void 0 || a.reference === void 0) continue;
+        franchie = a.condition === "au-dessus" ? a.reference < a.seuil && dernier >= a.seuil : a.reference > a.seuil && dernier <= a.seuil;
+      }
       if (!franchie) continue;
       messages.push({
         titre: `\u{1F514} ${a.symbole.split(":")[1]} ${a.condition === "au-dessus" ? fr ? "au-dessus de" : "above" : fr ? "sous" : "below"} ${a.seuil}`,
-        corps: `${fr ? "Dernier prix" : "Last price"} ${b.cloture}${a.note ? ` \u2014 ${a.note}` : ""}`,
+        corps: `${fr ? "Dernier prix" : "Last price"} ${dernier}${a.note ? ` \u2014 ${a.note}` : ""}`,
         url: `${URL_APP}#alertes`,
         tag: `alerte-${a.id}`
       });

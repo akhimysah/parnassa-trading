@@ -864,7 +864,7 @@ interface PreferencesPush {
   annonces: 'aucune' | 'importantes' | 'toutes';
   motsCles: string[];
   rappels: { ids: string[]; delaiMinutes: number; fortImpactAuto: boolean };
-  alertes: { id: string; symbole: string; condition: 'au-dessus' | 'en-dessous'; seuil: number; note?: string }[];
+  alertes: { id: string; symbole: string; condition: 'au-dessus' | 'en-dessous'; seuil: number; note?: string; reference?: number }[];
 }
 
 interface EnregistrementPush {
@@ -895,9 +895,16 @@ function nettoyerPreferences(p: Partial<PreferencesPush> | undefined): Preferenc
       fortImpactAuto: Boolean(p?.rappels?.fortImpactAuto),
     },
     alertes: (p?.alertes ?? [])
-      .filter((a) => a && typeof a.id === 'string' && /^BINANCE:[A-Z0-9]{2,20}$/.test(a.symbole) && Number.isFinite(a.seuil))
+      .filter((a) => a && typeof a.id === 'string' && /^[A-Z_]{2,12}:[A-Z0-9.!_]{1,20}$/.test(a.symbole) && Number.isFinite(a.seuil))
       .slice(0, 50)
-      .map((a) => ({ id: a.id, symbole: a.symbole, condition: a.condition === 'en-dessous' ? 'en-dessous' : 'au-dessus', seuil: Number(a.seuil), note: a.note?.slice(0, 80) })),
+      .map((a) => ({
+        id: a.id,
+        symbole: a.symbole,
+        condition: a.condition === 'en-dessous' ? 'en-dessous' : 'au-dessus',
+        seuil: Number(a.seuil),
+        note: a.note?.slice(0, 80),
+        reference: Number.isFinite(Number(a.reference)) && Number(a.reference) > 0 ? Number(a.reference) : undefined,
+      })),
   };
 }
 
@@ -996,8 +1003,26 @@ async function tourneePush(env: Env, heurePlanifiee: number, fenetreFJ: { debut:
   const besoinCalendrier = enregistrements.some((x) => x.e.preferences.rappels.ids.length > 0 || x.e.preferences.rappels.fortImpactAuto);
   const evenements = besoinCalendrier ? await calendrierBilingue() : [];
 
-  // Prix Binance (bougies 1 min) pour les alertes actives.
-  const paires = [...new Set(enregistrements.flatMap((x) => x.e.preferences.alertes.filter((a) => !x.e.envoyes.includes(`alerte:${a.id}`)).map((a) => a.symbole.split(':')[1])))].slice(0, 10);
+  // Prix des alertes actives : bougies 1 min pour Binance, scanner pour l'or, le forex, les indices…
+  const alertesActives = enregistrements.flatMap((x) => x.e.preferences.alertes.filter((a) => !x.e.envoyes.includes(`alerte:${a.id}`)));
+  const paires = [...new Set(alertesActives.filter((a) => a.symbole.startsWith('BINANCE:')).map((a) => a.symbole.split(':')[1]))].slice(0, 10);
+  const autres = [...new Set(alertesActives.filter((a) => !a.symbole.startsWith('BINANCE:')).map((a) => a.symbole))].slice(0, 60);
+  const cotations = new Map<string, number>();
+  if (autres.length) {
+    try {
+      const r = await fetch('https://scanner.tradingview.com/global/scan', {
+        method: 'POST',
+        body: JSON.stringify({ symbols: { tickers: autres }, columns: ['close'] }),
+        signal: AbortSignal.timeout(6000),
+      });
+      if (r.ok) {
+        const d = (await r.json()) as { data?: { s: string; d: (number | null)[] }[] };
+        for (const l of d.data ?? []) if (typeof l.d[0] === 'number') cotations.set(l.s, l.d[0]);
+      }
+    } catch {
+      // cotations indisponibles : alertes vérifiées au passage suivant
+    }
+  }
   const bougies = new Map<string, { ouverture: number; haut: number; bas: number; cloture: number }>();
   await Promise.all(
     paires.map(async (p) => {
@@ -1084,13 +1109,23 @@ async function tourneePush(env: Env, heurePlanifiee: number, fenetreFJ: { debut:
     for (const a of p.alertes) {
       const cleAlerte = `alerte:${a.id}`;
       if (e.envoyes.includes(cleAlerte)) continue;
-      const b = bougies.get(a.symbole.split(':')[1]);
-      if (!b) continue;
-      const franchie = a.condition === 'au-dessus' ? b.ouverture < a.seuil && b.haut >= a.seuil : b.ouverture > a.seuil && b.bas <= a.seuil;
+      let franchie = false;
+      let dernier: number | undefined;
+      if (a.symbole.startsWith('BINANCE:')) {
+        const b = bougies.get(a.symbole.split(':')[1]);
+        if (!b) continue;
+        dernier = b.cloture;
+        franchie = a.condition === 'au-dessus' ? b.ouverture < a.seuil && b.haut >= a.seuil : b.ouverture > a.seuil && b.bas <= a.seuil;
+      } else {
+        // Sans bougies : franchissement par rapport au prix de référence (création de l'alerte ou dernier vu).
+        dernier = cotations.get(a.symbole);
+        if (dernier === undefined || a.reference === undefined) continue;
+        franchie = a.condition === 'au-dessus' ? a.reference < a.seuil && dernier >= a.seuil : a.reference > a.seuil && dernier <= a.seuil;
+      }
       if (!franchie) continue;
       messages.push({
         titre: `🔔 ${a.symbole.split(':')[1]} ${a.condition === 'au-dessus' ? (fr ? 'au-dessus de' : 'above') : fr ? 'sous' : 'below'} ${a.seuil}`,
-        corps: `${fr ? 'Dernier prix' : 'Last price'} ${b.cloture}${a.note ? ` — ${a.note}` : ''}`,
+        corps: `${fr ? 'Dernier prix' : 'Last price'} ${dernier}${a.note ? ` — ${a.note}` : ''}`,
         url: `${URL_APP}#alertes`,
         tag: `alerte-${a.id}`,
       });

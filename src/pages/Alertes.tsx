@@ -1,10 +1,12 @@
 import { useMemo, useState } from 'react';
 import type { Alerte, Etat } from '../types';
 import type { Tick } from '../binance';
-import { estBinance, formaterPrix, paireBinance, useCloturesJournalieres } from '../binance';
+import { estBinance, formaterPrix, paireBinance, useCloturesJournalieres, useFluxBinance } from '../binance';
+import { cleCotation, estNegociable, formaterCotation, instrument, useCotationsScanner } from '../instruments';
+import { SelecteurInstrument } from '../composants/SelecteurInstrument';
 import { MiniCourbe } from '../composants/MiniCourbe';
 import { PrixAnime } from '../composants/PrixAnime';
-import { CATALOGUE, bourse, nomSymbole, normaliser, ticker } from '../symboles';
+import { bourse, nomSymbole, ticker } from '../symboles';
 import { conditionRemplie, demanderNotifications } from '../alertes';
 import { IconeCroix, IconeTelecharger } from '../composants/Icones';
 import { horodatageFichier, telecharger, versCsv } from '../export';
@@ -16,21 +18,24 @@ interface Props {
   ouvrirSymbole: (id: string) => void;
 }
 
-const CRYPTOS = CATALOGUE.filter((s) => s.id.startsWith('BINANCE:'));
-
 function dateCourte(ms: number): string {
   return new Date(ms).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
 
 export function Alertes({ etat, ticks, maj, ouvrirSymbole }: Props) {
-  const defaut = estBinance(etat.symbole) ? etat.symbole : 'BINANCE:BTCUSDT';
+  const defaut = estNegociable(etat.symbole) ? etat.symbole : 'OANDA:XAUUSD';
   const [symbole, setSymbole] = useState(defaut);
   const [condition, setCondition] = useState<Alerte['condition']>('au-dessus');
   const [seuil, setSeuil] = useState('');
   const [note, setNote] = useState('');
   const [erreur, setErreur] = useState<string | null>(null);
 
-  const prixCourant = ticks[paireBinance(symbole)]?.prix;
+  // Prix de l'instrument choisi, même s'il n'a encore aucune alerte.
+  const fluxLocal = useFluxBinance(estBinance(symbole) ? [cleCotation(symbole)] : []);
+  const scannerLocal = useCotationsScanner([symbole]);
+  const ticksSelecteur = useMemo(() => ({ ...scannerLocal, ...fluxLocal, ...ticks }), [scannerLocal, fluxLocal, ticks]);
+  const prixCourant = ticksSelecteur[cleCotation(symbole)]?.prix;
+  const nomCourt = (id: string) => instrument(id)?.code ?? ticker(id);
   const actives = etat.alertes.filter((a) => !a.declencheeLe);
   const historique = etat.alertes.filter((a) => a.declencheeLe).sort((a, b) => (b.declencheeLe ?? 0) - (a.declencheeLe ?? 0));
 
@@ -88,9 +93,9 @@ export function Alertes({ etat, ticks, maj, ouvrirSymbole }: Props) {
 
   const creer = (e: React.FormEvent) => {
     e.preventDefault();
-    const id = normaliser(symbole);
-    if (!estBinance(id)) {
-      setErreur('Les alertes temps réel fonctionnent avec les paires Binance (ex. BTCUSDT, ETHUSDT).');
+    const id = symbole;
+    if (!estNegociable(id)) {
+      setErreur('Choisissez un instrument dans la liste.');
       return;
     }
     const valeur = Number(seuil.replace(/\s/g, '').replace(',', '.'));
@@ -107,6 +112,7 @@ export function Alertes({ etat, ticks, maj, ouvrirSymbole }: Props) {
       seuil: valeur,
       note: note.trim() || undefined,
       creeLe: Date.now(),
+      prixReference: prixCourant,
     };
     maj({ alertes: [...etat.alertes, alerte] });
     setSeuil('');
@@ -123,7 +129,8 @@ export function Alertes({ etat, ticks, maj, ouvrirSymbole }: Props) {
 
   const prefixerSeuil = (pct: number) => {
     if (!prixCourant) return;
-    setSeuil(String(Math.round(prixCourant * (1 + pct / 100) * 100) / 100));
+    const d = instrument(symbole)?.decimales ?? 2;
+    setSeuil((prixCourant * (1 + pct / 100)).toFixed(d));
     setCondition(pct >= 0 ? 'au-dessus' : 'en-dessous');
   };
 
@@ -133,23 +140,8 @@ export function Alertes({ etat, ticks, maj, ouvrirSymbole }: Props) {
         <form className="carte formulaire-alerte" onSubmit={creer}>
           <h3>Nouvelle alerte de prix</h3>
           <label>
-            Paire
-            <div className="champ-double">
-              <input
-                list="paires-binance"
-                value={symbole}
-                onChange={(e) => setSymbole(e.target.value.toUpperCase())}
-                placeholder="BINANCE:BTCUSDT"
-              />
-              <datalist id="paires-binance">
-                {CRYPTOS.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.nom}
-                  </option>
-                ))}
-              </datalist>
-              <span className="prix-direct">{prixCourant ? formaterPrix(prixCourant) : '…'}</span>
-            </div>
+            Instrument
+            <SelecteurInstrument valeur={symbole} onChange={setSymbole} ticks={ticksSelecteur} />
           </label>
           <label>
             Condition
@@ -164,7 +156,7 @@ export function Alertes({ etat, ticks, maj, ouvrirSymbole }: Props) {
           </label>
           <label>
             Prix
-            <input inputMode="decimal" value={seuil} onChange={(e) => setSeuil(e.target.value)} placeholder={prixCourant ? formaterPrix(prixCourant) : '0,00'} />
+            <input inputMode="decimal" value={seuil} onChange={(e) => setSeuil(e.target.value)} placeholder={prixCourant ? formaterCotation(symbole, prixCourant) : '0,00'} />
           </label>
           <div className="puces">
             {[-5, -2, -1, 1, 2, 5].map((p) => (
@@ -219,18 +211,18 @@ export function Alertes({ etat, ticks, maj, ouvrirSymbole }: Props) {
           {actives.length === 0 && <p className="vide">Aucune alerte active.</p>}
           <ul className="liste-alertes">
             {actives.map((a) => {
-              const prix = ticks[paireBinance(a.symbole)]?.prix;
+              const prix = ticks[cleCotation(a.symbole)]?.prix;
               const distance = prix ? ((a.seuil - prix) / prix) * 100 : null;
               const proche = prix !== undefined && conditionRemplie(a, prix);
               return (
                 <li key={a.id}>
                   <button className="ligne" onClick={() => ouvrirSymbole(a.symbole)} title="Ouvrir le graphique">
-                    <strong>{ticker(a.symbole)}</strong>
+                    <strong>{nomCourt(a.symbole)}</strong>
                     <span className={a.condition === 'au-dessus' ? 'hausse' : 'baisse'}>
-                      {a.condition === 'au-dessus' ? '↑ au-dessus de' : '↓ sous'} {formaterPrix(a.seuil)}
+                      {a.condition === 'au-dessus' ? '↑ au-dessus de' : '↓ sous'} {formaterCotation(a.symbole, a.seuil)}
                     </span>
                     <span className="muet">
-                      {prix ? `actuel ${formaterPrix(prix)}` : 'en attente du flux…'}
+                      {prix ? `actuel ${formaterCotation(a.symbole, prix)}` : 'en attente du flux…'}
                       {distance !== null && ` · ${distance > 0 ? '+' : ''}${distance.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} %`}
                       {proche && ' · en attente de franchissement'}
                     </span>
@@ -250,9 +242,9 @@ export function Alertes({ etat, ticks, maj, ouvrirSymbole }: Props) {
             {historique.map((a) => (
               <li key={a.id} className="declenchee">
                 <button className="ligne" onClick={() => ouvrirSymbole(a.symbole)}>
-                  <strong>{ticker(a.symbole)}</strong>
+                  <strong>{nomCourt(a.symbole)}</strong>
                   <span>
-                    {a.condition === 'au-dessus' ? '↑' : '↓'} {formaterPrix(a.seuil)} · déclenchée à {formaterPrix(a.prixDeclenchement ?? 0)}
+                    {a.condition === 'au-dessus' ? '↑' : '↓'} {formaterCotation(a.symbole, a.seuil)} · déclenchée à {formaterCotation(a.symbole, a.prixDeclenchement ?? 0)}
                   </span>
                   <span className="muet">{a.declencheeLe ? dateCourte(a.declencheeLe) : ''}</span>
                   {a.note && <span className="note">{a.note}</span>}

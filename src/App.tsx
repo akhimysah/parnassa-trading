@@ -17,6 +17,7 @@ import { Alertes } from './pages/Alertes';
 import { Trading } from './pages/Trading';
 import { Accueil } from './pages/Accueil';
 import { notifier, sonner, useMoteurAlertes } from './alertes';
+import { useFluxBinance } from './binance';
 import { motsClesTrouves, texteRecherche, titrePrincipal, useFilActualites } from './actualites';
 import { annoncer, couperSquawk, doitEtreLue, langueParlee, texteParle } from './squawk';
 import { useMoteurRappels } from './rappels';
@@ -74,12 +75,19 @@ export function App() {
     ...etat.portefeuille.ordres.filter((o) => estBinance(o.symbole)).map((o) => paireBinance(o.symbole)),
     ...(etat.page === 'trading' || etat.page === 'alertes' ? ['BTCUSDT', 'ETHUSDT'] : []),
   ];
-  const ticksBinance = useMoteurAlertes(etat.alertes, pairesSuivies, majAlertes, setToast, etat.parametres.son);
+  const alertesActives = etat.alertes.filter((a) => !a.declencheeLe);
+  const ticksBinance = useFluxBinance([...pairesSuivies, ...alertesActives.filter((a) => estBinance(a.symbole)).map((a) => paireBinance(a.symbole))]);
   // Or, forex, indices, énergie, actions : cotations du scanner pour les positions, ordres et la page Trading.
-  const symbolesOuverts = [...etat.portefeuille.positions.map((pos) => pos.symbole), ...etat.portefeuille.ordres.map((o) => o.symbole)];
+  const symbolesOuverts = [
+    ...etat.portefeuille.positions.map((pos) => pos.symbole),
+    ...etat.portefeuille.ordres.map((o) => o.symbole),
+    ...alertesActives.map((a) => a.symbole),
+  ];
   // Les taux de change servent à convertir en USD le P&L des instruments cotés en EUR, GBP, JPY…
   const ticksScanner = useCotationsScanner([...symbolesOuverts, ...symbolesConversion(symbolesOuverts)]);
   const ticks = useMemo(() => ({ ...ticksBinance, ...ticksScanner }), [ticksBinance, ticksScanner]);
+  // Alertes de prix sur tous les instruments, vérifiées sur la table de prix commune.
+  useMoteurAlertes(etat.alertes, ticks, majAlertes, setToast, etat.parametres.son);
 
   // Fil d'actualités : chargé sur la page Actualités, ou partout si des mots-clés sont surveillés.
   const motsCles = etat.parametres.motsCles;

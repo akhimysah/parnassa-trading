@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import type { Alerte } from './types';
-import { paireBinance, useFluxBinance, formaterPrix } from './binance';
+import { paireBinance, type Tick } from './binance';
+import { formaterCotation, instrument } from './instruments';
 import { nomSymbole, ticker } from './symboles';
 
 function sonner() {
@@ -54,19 +55,17 @@ export function conditionRemplie(alerte: Alerte, prix: number): boolean {
 }
 
 /**
- * Surveille les alertes actives avec le flux Binance et les déclenche au franchissement du seuil.
- * Retourne les prix en direct pour les paires surveillées (alertes + liste de suivi crypto).
+ * Surveille les alertes actives sur la table de prix commune (crypto, or, forex, indices, actions…)
+ * et les déclenche au franchissement du seuil.
  */
 export function useMoteurAlertes(
   alertes: Alerte[],
-  pairesSupplementaires: string[],
+  ticks: Record<string, Tick>,
   majAlertes: (f: (a: Alerte[]) => Alerte[]) => void,
   signaler: (message: string) => void,
   son = true,
 ) {
   const actives = alertes.filter((a) => !a.declencheeLe);
-  const paires = [...actives.map((a) => paireBinance(a.symbole)), ...pairesSupplementaires];
-  const ticks = useFluxBinance(paires);
   const refSignaler = useRef(signaler);
   refSignaler.current = signaler;
 
@@ -92,13 +91,12 @@ export function useMoteurAlertes(
     );
     for (const a of declenchees) {
       const sens = a.condition === 'au-dessus' ? 'passe au-dessus de' : 'passe sous';
-      const corps = `${nomSymbole(a.symbole)} ${sens} ${formaterPrix(a.seuil)} (${formaterPrix(a.prixDeclenchement ?? 0)})${a.note ? ` — ${a.note}` : ''}`;
-      refSignaler.current(`🔔 ${ticker(a.symbole)} : ${corps}`);
-      notifier(`Alerte ${ticker(a.symbole)}`, corps, undefined, `alerte-${a.id}`);
+      const corps = `${nomSymbole(a.symbole)} ${sens} ${formaterCotation(a.symbole, a.seuil)} (${formaterCotation(a.symbole, a.prixDeclenchement ?? 0)})${a.note ? ` — ${a.note}` : ''}`;
+      const code = instrument(a.symbole)?.code ?? ticker(a.symbole);
+      refSignaler.current(`🔔 ${code} : ${corps}`);
+      notifier(`Alerte ${code}`, corps, undefined, `alerte-${a.id}`);
       if (son) sonner();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ticks]);
-
-  return ticks;
 }

@@ -164,6 +164,8 @@ export interface Alerte {
   creeLe: number;
   /** Dernier prix observé : le déclenchement exige un franchissement du seuil. */
   dernierPrix?: number;
+  /** Prix au moment de la création : sert au relais push pour détecter le franchissement. */
+  prixReference?: number;
   declencheeLe?: number;
   prixDeclenchement?: number;
 }

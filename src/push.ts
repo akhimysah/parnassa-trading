@@ -12,7 +12,7 @@ export function preferencesPush(etat: Etat) {
     rappels: { ids: etat.rappels.map((r) => r.id), delaiMinutes: p.rappels.delaiMinutes, fortImpactAuto: p.rappels.fortImpactAuto },
     alertes: etat.alertes
       .filter((a) => !a.declencheeLe)
-      .map((a) => ({ id: a.id, symbole: a.symbole, condition: a.condition, seuil: a.seuil, note: a.note })),
+      .map((a) => ({ id: a.id, symbole: a.symbole, condition: a.condition, seuil: a.seuil, note: a.note, reference: a.dernierPrix ?? a.prixReference })),
   };
 }
 
