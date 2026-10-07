@@ -19,6 +19,7 @@ export const ETAT_DEFAUT: Etat = {
   dispositionsSauvees: [],
   alertes: [],
   portefeuille: { capitalInitial: 100000, solde: 100000, positions: [], operations: [], ordres: [], historiqueCapital: [] },
+  parametres: { fuseau: 'Europe/Paris', frais: 0.001, son: true },
 };
 
 export function chargerEtat(): Etat {
@@ -34,10 +35,29 @@ export function chargerEtat(): Etat {
       listeSuivi: Array.from(new Set(etat.listeSuivi.map(corriger))),
       comparaisons: (etat.comparaisons ?? []).map(corriger),
       portefeuille: { ...ETAT_DEFAUT.portefeuille, ...(etat.portefeuille ?? {}) },
+      parametres: { ...ETAT_DEFAUT.parametres, ...(etat.parametres ?? {}) },
     };
   } catch {
     return ETAT_DEFAUT;
   }
+}
+
+/** Exporte tout l'état (sauvegarde JSON) ; `importerEtat` fait l'inverse avec validation minimale. */
+export function exporterEtat(etat: Etat): string {
+  return JSON.stringify({ application: 'parnassa-trading', version: 1, exporteLe: new Date().toISOString(), etat }, null, 2);
+}
+
+export function importerEtat(texte: string): Etat {
+  const lu = JSON.parse(texte) as { application?: string; etat?: Partial<Etat> };
+  if (lu.application !== 'parnassa-trading' || !lu.etat || typeof lu.etat !== 'object') {
+    throw new Error('Ce fichier n\'est pas une sauvegarde Parnassa Trading.');
+  }
+  const etat = { ...ETAT_DEFAUT, ...lu.etat };
+  return {
+    ...etat,
+    portefeuille: { ...ETAT_DEFAUT.portefeuille, ...(etat.portefeuille ?? {}) },
+    parametres: { ...ETAT_DEFAUT.parametres, ...(etat.parametres ?? {}) },
+  };
 }
 
 export function sauverEtat(etat: Etat): void {

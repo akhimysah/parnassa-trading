@@ -46,7 +46,7 @@ export function Graphique({ etat, emplacementActif, choisirEmplacement, ouvrirRe
                 autosize: true,
                 symbol: symbole,
                 interval: etat.intervalle,
-                timezone: 'Europe/Paris',
+                timezone: etat.parametres.fuseau,
                 theme: etat.theme,
                 style: etat.style,
                 locale: 'fr',

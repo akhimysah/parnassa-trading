@@ -53,12 +53,13 @@ export function ouvrir(
   prix: number,
   prot: Protections = {},
   origine: Operation['origine'] = 'marche',
+  taux = TAUX_FRAIS,
 ): Portefeuille | string {
   if (!(quantite > 0) || !(prix > 0)) return 'Quantité ou prix invalide.';
   const erreur = verifierProtections(sens, prix, prot);
   if (erreur) return erreur;
   const cout = quantite * prix;
-  const frais = cout * TAUX_FRAIS;
+  const frais = cout * taux;
   if (cout + frais > p.solde) return `Solde insuffisant : il faut ${(cout + frais).toFixed(2)} USDT.`;
   const position: Position = {
     id: identifiant(),
@@ -80,12 +81,13 @@ export function cloturer(
   positionId: string,
   prix: number,
   origine: Operation['origine'] = 'marche',
+  taux = TAUX_FRAIS,
 ): Portefeuille | string {
   const position = p.positions.find((x) => x.id === positionId);
   if (!position) return 'Position introuvable.';
   if (!(prix > 0)) return 'Prix indisponible.';
   const resultat = pnlLatent(position, prix);
-  const frais = position.quantite * prix * TAUX_FRAIS;
+  const frais = position.quantite * prix * taux;
   const operation: Operation = {
     id: identifiant(),
     symbole: position.symbole,
@@ -118,9 +120,10 @@ export function placerOrdre(
   p: Portefeuille,
   ordre: Omit<OrdreEnAttente, 'id' | 'creeLe'>,
   prixActuel: number,
+  taux = TAUX_FRAIS,
 ): Portefeuille | string {
   if (!(ordre.prix > 0) || !(ordre.montant > 0)) return 'Prix ou montant invalide.';
-  if (ordre.montant * (1 + TAUX_FRAIS) > p.solde) return 'Solde insuffisant pour cet ordre.';
+  if (ordre.montant * (1 + taux) > p.solde) return 'Solde insuffisant pour cet ordre.';
   const erreur = verifierProtections(ordre.sens, ordre.prix, ordre);
   if (erreur) return erreur;
   // Un ordre déjà déclenchable serait exécuté immédiatement : on refuse pour éviter la confusion.
@@ -147,7 +150,7 @@ function ordreDeclenchable(o: OrdreEnAttente, prix: number): boolean {
  * Applique le flux de prix : exécute les ordres en attente déclenchés, puis les stop-loss / take-profit.
  * Retourne le portefeuille mis à jour et les messages à afficher.
  */
-export function appliquerFlux(p: Portefeuille, ticks: Record<string, Tick>): { portefeuille: Portefeuille; messages: string[] } {
+export function appliquerFlux(p: Portefeuille, ticks: Record<string, Tick>, taux = TAUX_FRAIS): { portefeuille: Portefeuille; messages: string[] } {
   let courant = p;
   const messages: string[] = [];
 
@@ -157,7 +160,7 @@ export function appliquerFlux(p: Portefeuille, ticks: Record<string, Tick>): { p
     // Une limite s'exécute à son prix ; un stop au prix du marché qui l'a franchi.
     const prixExecution = o.type === 'limite' ? o.prix : tick.prix;
     const quantite = o.montant / prixExecution;
-    const r = ouvrir(courant, o.symbole, o.sens, quantite, prixExecution, o, o.type);
+    const r = ouvrir(courant, o.symbole, o.sens, quantite, prixExecution, o, o.type, taux);
     courant = annulerOrdre(typeof r === 'string' ? courant : r, o.id);
     messages.push(
       typeof r === 'string'
@@ -173,7 +176,7 @@ export function appliquerFlux(p: Portefeuille, ticks: Record<string, Tick>): { p
     const touchéSL = pos.stopLoss !== undefined && (pos.sens === 'achat' ? prix <= pos.stopLoss : prix >= pos.stopLoss);
     const touchéTP = pos.takeProfit !== undefined && (pos.sens === 'achat' ? prix >= pos.takeProfit : prix <= pos.takeProfit);
     if (!touchéSL && !touchéTP) continue;
-    const r = cloturer(courant, pos.id, prix, touchéSL ? 'stop-loss' : 'take-profit');
+    const r = cloturer(courant, pos.id, prix, touchéSL ? 'stop-loss' : 'take-profit', taux);
     if (typeof r === 'string') continue;
     courant = r;
     const resultat = pnlLatent(pos, prix);
@@ -192,6 +195,68 @@ export function enregistrerCapital(p: Portefeuille, capital: number, force = fal
   if (!force && dernier && maintenant - dernier.t < 60000) return p;
   const historique = [...p.historiqueCapital, { t: maintenant, v: Math.round(capital * 100) / 100 }].slice(-2000);
   return { ...p, historiqueCapital: historique };
+}
+
+export interface Statistiques {
+  nbTrades: number;
+  gagnants: number;
+  perdants: number;
+  tauxReussite: number;
+  gainMoyen: number;
+  perteMoyenne: number;
+  profitFactor: number | null;
+  meilleur: Operation | null;
+  pire: Operation | null;
+  netFraisInclus: number;
+  fraisTotaux: number;
+  parPaire: { symbole: string; nb: number; net: number }[];
+  dureeMoyenneMs: number | null;
+}
+
+/** Statistiques des trades clôturés (résultat brut par trade, frais comptés séparément). */
+export function statistiques(p: Portefeuille): Statistiques {
+  const clotures = p.operations.filter((o) => o.type === 'cloture' && o.resultat !== undefined);
+  const gains = clotures.filter((o) => (o.resultat ?? 0) > 0);
+  const pertes = clotures.filter((o) => (o.resultat ?? 0) <= 0);
+  const sommeGains = gains.reduce((s, o) => s + (o.resultat ?? 0), 0);
+  const sommePertes = Math.abs(pertes.reduce((s, o) => s + (o.resultat ?? 0), 0));
+  const fraisTotaux = p.operations.reduce((s, o) => s + o.frais, 0);
+  const parPaireMap = new Map<string, { nb: number; net: number }>();
+  for (const o of clotures) {
+    const e = parPaireMap.get(o.symbole) ?? { nb: 0, net: 0 };
+    e.nb += 1;
+    e.net += o.resultat ?? 0;
+    parPaireMap.set(o.symbole, e);
+  }
+  // Durée : on apparie chaque clôture à l'ouverture la plus récente du même symbole qui la précède.
+  const ouvertures = p.operations.filter((o) => o.type === 'ouverture').slice().sort((a, b) => a.date - b.date);
+  const durees: number[] = [];
+  for (const c of clotures) {
+    const o = [...ouvertures].reverse().find((x) => x.symbole === c.symbole && x.date <= c.date);
+    if (o) durees.push(c.date - o.date);
+  }
+  return {
+    nbTrades: clotures.length,
+    gagnants: gains.length,
+    perdants: pertes.length,
+    tauxReussite: clotures.length ? (gains.length / clotures.length) * 100 : 0,
+    gainMoyen: gains.length ? sommeGains / gains.length : 0,
+    perteMoyenne: pertes.length ? sommePertes / pertes.length : 0,
+    profitFactor: sommePertes > 0 ? sommeGains / sommePertes : clotures.length ? null : null,
+    meilleur: clotures.reduce<Operation | null>((m, o) => (m === null || (o.resultat ?? 0) > (m.resultat ?? 0) ? o : m), null),
+    pire: clotures.reduce<Operation | null>((m, o) => (m === null || (o.resultat ?? 0) < (m.resultat ?? 0) ? o : m), null),
+    netFraisInclus: realiseTotal(p),
+    fraisTotaux,
+    parPaire: [...parPaireMap.entries()].map(([symbole, e]) => ({ symbole, ...e })).sort((a, b) => b.net - a.net),
+    dureeMoyenneMs: durees.length ? durees.reduce((s, d) => s + d, 0) / durees.length : null,
+  };
+}
+
+/** Montant à engager pour risquer `risque` USDT entre le prix d'entrée et le stop-loss. */
+export function montantParRisque(risque: number, prix: number, stopLoss: number): number | null {
+  const ecart = Math.abs(prix - stopLoss);
+  if (!(ecart > 0) || !(prix > 0) || !(risque > 0)) return null;
+  return (risque / ecart) * prix;
 }
 
 export function reinitialiser(capital = 100000): Portefeuille {

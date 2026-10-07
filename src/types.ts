@@ -36,6 +36,16 @@ export interface Etat {
   dispositionsSauvees: DispositionSauvee[];
   alertes: Alerte[];
   portefeuille: Portefeuille;
+  parametres: Parametres;
+}
+
+export interface Parametres {
+  /** Fuseau horaire des graphiques (identifiant IANA). */
+  fuseau: string;
+  /** Taux de frais simulé par ordre (0,001 = 0,1 %). */
+  frais: number;
+  /** Son lors du déclenchement d'une alerte ou d'une protection. */
+  son: boolean;
 }
 
 export type Sens = 'achat' | 'vente';

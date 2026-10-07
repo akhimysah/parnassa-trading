@@ -4,7 +4,6 @@ import type { Tick } from '../binance';
 import { estBinance, formaterPrix, paireBinance } from '../binance';
 import { CATALOGUE, nomSymbole, normaliser, ticker } from '../symboles';
 import {
-  TAUX_FRAIS,
   annulerOrdre,
   cloturer,
   formaterQuantite,
@@ -13,12 +12,15 @@ import {
   ouvrir,
   placerOrdre,
   pnlLatent,
+  montantParRisque,
   realiseTotal,
   reinitialiser,
+  statistiques,
   valeurPortefeuille,
 } from '../trading';
+import { horodatageFichier, telecharger, versCsv } from '../export';
 import { CourbeCapital } from '../composants/CourbeCapital';
-import { IconeCroix } from '../composants/Icones';
+import { IconeCroix, IconeTelecharger } from '../composants/Icones';
 
 interface Props {
   etat: Etat;
@@ -28,7 +30,7 @@ interface Props {
 }
 
 type TypeOrdre = 'marche' | 'limite' | 'stop';
-type Onglet = 'positions' | 'ordres' | 'historique';
+type Onglet = 'positions' | 'ordres' | 'historique' | 'statistiques';
 
 const CRYPTOS = CATALOGUE.filter((s) => s.id.startsWith('BINANCE:'));
 const ORIGINES: Record<string, string> = { marche: 'marché', limite: 'limite', stop: 'stop', 'stop-loss': 'stop-loss', 'take-profit': 'take-profit' };
@@ -46,6 +48,8 @@ function nombre(texte: string): number | undefined {
 
 export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
   const p = etat.portefeuille;
+  const TAUX_FRAIS = etat.parametres.frais;
+  const [risque, setRisque] = useState('1');
   const [symbole, setSymbole] = useState(estBinance(etat.symbole) ? etat.symbole : 'BINANCE:BTCUSDT');
   const [typeOrdre, setTypeOrdre] = useState<TypeOrdre>('marche');
   const [prixOrdre, setPrixOrdre] = useState('');
@@ -65,6 +69,35 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
 
   const { capital, latent, immobilise } = useMemo(() => valeurPortefeuille(p, ticks), [p, ticks]);
   const realise = useMemo(() => realiseTotal(p), [p]);
+  const stats = useMemo(() => statistiques(p), [p]);
+
+  const slNum = protections ? nombre(stopLoss) : undefined;
+  const risqueNum = nombre(risque);
+  const prixEntreePrevu = typeOrdre === 'marche' ? prix : nombre(prixOrdre);
+  const perteSiStop = slNum && prixEntreePrevu && quantite ? Math.abs(prixEntreePrevu - slNum) * quantite : null;
+  const montantConseille = slNum && prixEntreePrevu && risqueNum ? montantParRisque((risqueNum / 100) * capital, prixEntreePrevu, slNum) : null;
+
+  const exporterHistorique = () => {
+    const lignes = p.operations
+      .slice()
+      .reverse()
+      .map((o) => [
+        new Date(o.date).toLocaleString('fr-FR'),
+        ticker(o.symbole),
+        o.type === 'ouverture' ? 'Ouverture' : 'Clôture',
+        o.sens,
+        ORIGINES[o.origine ?? 'marche'],
+        o.quantite,
+        o.prix,
+        o.frais,
+        o.resultat ?? '',
+      ]);
+    telecharger(
+      `parnassa-trading-historique-${horodatageFichier()}.csv`,
+      versCsv(['Date', 'Paire', 'Opération', 'Sens', 'Origine', 'Quantité', 'Prix', 'Frais (USDT)', 'Résultat (USDT)'], lignes),
+      'text/csv;charset=utf-8',
+    );
+  };
   const performanceBrute = ((capital - p.capitalInitial) / p.capitalInitial) * 100;
   const performance = Math.abs(performanceBrute) < 0.005 ? 0 : performanceBrute;
 
@@ -85,14 +118,14 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
     }
     let resultat;
     if (typeOrdre === 'marche') {
-      resultat = ouvrir(p, id, sens, quantite, prix, prot(), 'marche');
+      resultat = ouvrir(p, id, sens, quantite, prix, prot(), 'marche', TAUX_FRAIS);
     } else {
       const prixCible = nombre(prixOrdre);
       if (!prixCible) {
         setErreur('Indiquez le prix de déclenchement.');
         return;
       }
-      resultat = placerOrdre(p, { symbole: id, sens, type: typeOrdre, prix: prixCible, montant: montantNum, ...prot() }, prix);
+      resultat = placerOrdre(p, { symbole: id, sens, type: typeOrdre, prix: prixCible, montant: montantNum, ...prot() }, prix, TAUX_FRAIS);
     }
     if (typeof resultat === 'string') {
       setErreur(resultat);
@@ -118,7 +151,7 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
       setErreur('Prix en direct indisponible, impossible de clôturer pour le moment.');
       return;
     }
-    appliquer(cloturer(p, positionId, prixActuel));
+    appliquer(cloturer(p, positionId, prixActuel, 'marche', TAUX_FRAIS));
   };
 
   const toutFermer = () => {
@@ -126,7 +159,7 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
     for (const pos of p.positions) {
       const prixActuel = ticks[paireBinance(pos.symbole)]?.prix;
       if (!prixActuel) continue;
-      const r = cloturer(courant, pos.id, prixActuel);
+      const r = cloturer(courant, pos.id, prixActuel, 'marche', TAUX_FRAIS);
       if (typeof r !== 'string') courant = r;
     }
     maj({ portefeuille: courant });
@@ -144,7 +177,7 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
 
   const remettreAZero = () => {
     if (window.confirm('Réinitialiser le portefeuille papier à 100 000 USDT ? Positions, ordres et historique seront effacés.')) {
-      maj({ portefeuille: reinitialiser() });
+      maj({ portefeuille: reinitialiser(p.capitalInitial) });
     }
   };
 
@@ -237,16 +270,41 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
             Stop-loss / take-profit
           </label>
           {protections && (
-            <div className="champs-protection">
-              <label>
-                Stop-loss
-                <input inputMode="decimal" value={stopLoss} onChange={(e) => setStopLoss(e.target.value)} placeholder="prix" />
-              </label>
-              <label>
-                Take-profit
-                <input inputMode="decimal" value={takeProfit} onChange={(e) => setTakeProfit(e.target.value)} placeholder="prix" />
-              </label>
-            </div>
+            <>
+              <div className="champs-protection">
+                <label>
+                  Stop-loss
+                  <input inputMode="decimal" value={stopLoss} onChange={(e) => setStopLoss(e.target.value)} placeholder="prix" />
+                </label>
+                <label>
+                  Take-profit
+                  <input inputMode="decimal" value={takeProfit} onChange={(e) => setTakeProfit(e.target.value)} placeholder="prix" />
+                </label>
+              </div>
+              <div className="dimensionnement">
+                <label>
+                  Risque par trade
+                  <span className="champ-unite">
+                    <input inputMode="decimal" value={risque} onChange={(e) => setRisque(e.target.value)} />
+                    % du capital
+                  </span>
+                </label>
+                <button
+                  type="button"
+                  className="bouton-secondaire"
+                  disabled={!montantConseille}
+                  onClick={() => montantConseille && setMontant(String(Math.floor(Math.min(montantConseille, p.solde / (1 + TAUX_FRAIS)))))}
+                  title="Calcule le montant pour que la perte au stop-loss corresponde au risque choisi"
+                >
+                  Dimensionner
+                </button>
+                <span className="aide">
+                  {perteSiStop !== null
+                    ? `Perte si stop touché : ${formaterUsdt(perteSiStop)} (${((perteSiStop / capital) * 100).toLocaleString('fr-FR', { maximumFractionDigits: 2 })} % du capital)`
+                    : 'Renseignez un stop-loss pour calculer la taille de position.'}
+                </span>
+              </div>
+            </>
           )}
           <dl className="recap-ordre">
             <div>
@@ -256,7 +314,7 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
               </dd>
             </div>
             <div>
-              <dt>Frais (0,1 %)</dt>
+              <dt>Frais ({(TAUX_FRAIS * 100).toLocaleString('fr-FR', { maximumFractionDigits: 3 })} %)</dt>
               <dd>{formaterUsdt(frais)}</dd>
             </div>
           </dl>
@@ -283,7 +341,15 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
             <button className={onglet === 'historique' ? 'actif' : ''} onClick={() => setOnglet('historique')}>
               Historique ({p.operations.length})
             </button>
+            <button className={onglet === 'statistiques' ? 'actif' : ''} onClick={() => setOnglet('statistiques')}>
+              Statistiques
+            </button>
             <div className="outils-onglets">
+              {onglet === 'historique' && p.operations.length > 0 && (
+                <button className="bouton-secondaire avec-icone" onClick={exporterHistorique} title="Exporter l'historique en CSV">
+                  <IconeTelecharger width={14} height={14} /> CSV
+                </button>
+              )}
               {onglet === 'positions' && p.positions.length > 0 && (
                 <button className="bouton-secondaire" onClick={toutFermer}>
                   Tout clôturer
@@ -405,6 +471,101 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
                 </div>
               )}
             </>
+          )}
+
+          {onglet === 'statistiques' && (
+            <div className="statistiques">
+              {stats.nbTrades === 0 && <p className="vide">Les statistiques apparaîtront après votre première clôture.</p>}
+              {stats.nbTrades > 0 && (
+                <>
+                  <div className="grille-stats">
+                    <div>
+                      <span>Trades clôturés</span>
+                      <strong>{stats.nbTrades}</strong>
+                      <em className="muet">
+                        {stats.gagnants} gagnant{stats.gagnants > 1 ? 's' : ''} · {stats.perdants} perdant{stats.perdants > 1 ? 's' : ''}
+                      </em>
+                    </div>
+                    <div>
+                      <span>Taux de réussite</span>
+                      <strong className={stats.tauxReussite >= 50 ? 'hausse' : 'baisse'}>
+                        {stats.tauxReussite.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} %
+                      </strong>
+                      <div className="jauge">
+                        <i style={{ width: `${stats.tauxReussite}%` }} />
+                      </div>
+                    </div>
+                    <div>
+                      <span>Profit factor</span>
+                      <strong className={stats.profitFactor === null ? '' : stats.profitFactor >= 1 ? 'hausse' : 'baisse'}>
+                        {stats.profitFactor === null ? '∞' : stats.profitFactor.toLocaleString('fr-FR', { maximumFractionDigits: 2 })}
+                      </strong>
+                      <em className="muet">gains bruts / pertes brutes</em>
+                    </div>
+                    <div>
+                      <span>Gain moyen / perte moyenne</span>
+                      <strong>
+                        <span className="hausse">{formaterUsdt(stats.gainMoyen, true)}</span> / <span className="baisse">{formaterUsdt(-stats.perteMoyenne)}</span>
+                      </strong>
+                      <em className="muet">
+                        ratio {stats.perteMoyenne > 0 ? (stats.gainMoyen / stats.perteMoyenne).toLocaleString('fr-FR', { maximumFractionDigits: 2 }) : '∞'}
+                      </em>
+                    </div>
+                    <div>
+                      <span>Meilleur trade</span>
+                      <strong className="hausse">{stats.meilleur ? formaterUsdt(stats.meilleur.resultat ?? 0, true) : '—'}</strong>
+                      <em className="muet">{stats.meilleur ? `${ticker(stats.meilleur.symbole)} · ${dateCourte(stats.meilleur.date)}` : ''}</em>
+                    </div>
+                    <div>
+                      <span>Pire trade</span>
+                      <strong className="baisse">{stats.pire ? formaterUsdt(stats.pire.resultat ?? 0, true) : '—'}</strong>
+                      <em className="muet">{stats.pire ? `${ticker(stats.pire.symbole)} · ${dateCourte(stats.pire.date)}` : ''}</em>
+                    </div>
+                    <div>
+                      <span>Net frais inclus</span>
+                      <strong className={stats.netFraisInclus >= 0 ? 'hausse' : 'baisse'}>{formaterUsdt(stats.netFraisInclus, true)}</strong>
+                      <em className="muet">dont {formaterUsdt(stats.fraisTotaux)} de frais</em>
+                    </div>
+                    <div>
+                      <span>Durée moyenne</span>
+                      <strong>
+                        {stats.dureeMoyenneMs === null
+                          ? '—'
+                          : stats.dureeMoyenneMs < 3600000
+                            ? `${Math.max(1, Math.round(stats.dureeMoyenneMs / 60000))} min`
+                            : stats.dureeMoyenneMs < 86400000
+                              ? `${(stats.dureeMoyenneMs / 3600000).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} h`
+                              : `${(stats.dureeMoyenneMs / 86400000).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} j`}
+                      </strong>
+                      <em className="muet">entre ouverture et clôture</em>
+                    </div>
+                  </div>
+                  <h3>Par paire</h3>
+                  <div className="defilement-x">
+                    <table className="tableau-prix">
+                      <thead>
+                        <tr>
+                          <th>Paire</th>
+                          <th className="num">Trades</th>
+                          <th className="num">Résultat brut</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {stats.parPaire.map((l) => (
+                          <tr key={l.symbole} onClick={() => ouvrirSymbole(l.symbole)}>
+                            <td>
+                              <strong>{ticker(l.symbole)}</strong> <span className="muet">{nomSymbole(l.symbole)}</span>
+                            </td>
+                            <td className="num">{l.nb}</td>
+                            <td className={`num ${l.net >= 0 ? 'hausse' : 'baisse'}`}>{formaterUsdt(l.net, true)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </div>
           )}
 
           {onglet === 'historique' && (

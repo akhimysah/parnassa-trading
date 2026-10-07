@@ -4,7 +4,8 @@ import type { Tick } from '../binance';
 import { estBinance, formaterPrix, paireBinance } from '../binance';
 import { CATALOGUE, bourse, nomSymbole, normaliser, ticker } from '../symboles';
 import { conditionRemplie, demanderNotifications } from '../alertes';
-import { IconeCroix } from '../composants/Icones';
+import { IconeCroix, IconeTelecharger } from '../composants/Icones';
+import { horodatageFichier, telecharger, versCsv } from '../export';
 
 interface Props {
   etat: Etat;
@@ -134,7 +135,35 @@ export function Alertes({ etat, ticks, maj, ouvrirSymbole }: Props) {
         </form>
 
         <div className="carte">
-          <h3>Alertes actives ({actives.length})</h3>
+          <div className="entete-carte">
+            <h3>Alertes actives ({actives.length})</h3>
+            {etat.alertes.length > 0 && (
+              <button
+                className="bouton-secondaire avec-icone"
+                title="Exporter toutes les alertes en CSV"
+                onClick={() =>
+                  telecharger(
+                    `parnassa-trading-alertes-${horodatageFichier()}.csv`,
+                    versCsv(
+                      ['Paire', 'Condition', 'Seuil', 'Note', 'Créée le', 'Déclenchée le', 'Prix de déclenchement'],
+                      etat.alertes.map((a) => [
+                        ticker(a.symbole),
+                        a.condition,
+                        a.seuil,
+                        a.note ?? '',
+                        new Date(a.creeLe).toLocaleString('fr-FR'),
+                        a.declencheeLe ? new Date(a.declencheeLe).toLocaleString('fr-FR') : '',
+                        a.prixDeclenchement ?? '',
+                      ]),
+                    ),
+                    'text/csv;charset=utf-8',
+                  )
+                }
+              >
+                <IconeTelecharger width={14} height={14} /> CSV
+              </button>
+            )}
+          </div>
           {actives.length === 0 && <p className="vide">Aucune alerte active.</p>}
           <ul className="liste-alertes">
             {actives.map((a) => {

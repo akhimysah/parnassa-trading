@@ -21,6 +21,8 @@ function sonner() {
   }
 }
 
+export { sonner };
+
 export function demanderNotifications(): void {
   if ('Notification' in window && Notification.permission === 'default') void Notification.requestPermission();
 }
@@ -48,6 +50,7 @@ export function useMoteurAlertes(
   pairesSupplementaires: string[],
   majAlertes: (f: (a: Alerte[]) => Alerte[]) => void,
   signaler: (message: string) => void,
+  son = true,
 ) {
   const actives = alertes.filter((a) => !a.declencheeLe);
   const paires = [...actives.map((a) => paireBinance(a.symbole)), ...pairesSupplementaires];
@@ -80,7 +83,7 @@ export function useMoteurAlertes(
       const corps = `${nomSymbole(a.symbole)} ${sens} ${formaterPrix(a.seuil)} (${formaterPrix(a.prixDeclenchement ?? 0)})${a.note ? ` — ${a.note}` : ''}`;
       refSignaler.current(`🔔 ${ticker(a.symbole)} : ${corps}`);
       notifier(`Alerte ${ticker(a.symbole)}`, corps);
-      sonner();
+      if (son) sonner();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ticks]);

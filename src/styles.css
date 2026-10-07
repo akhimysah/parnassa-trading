@@ -1338,3 +1338,169 @@ option {
     padding: 0 8px;
   }
 }
+
+/* ---- Paramètres ---- */
+.parametres-corps {
+  padding: 4px 14px 10px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.parametres-corps section {
+  border-bottom: 1px solid var(--bordure);
+  padding-bottom: 12px;
+}
+.parametres-corps section:last-of-type {
+  border-bottom: 0;
+}
+.parametres-corps h4 {
+  margin: 10px 0 6px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--texte-muet);
+}
+.ligne-parametre {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+}
+.ligne-parametre .selecteur {
+  margin-left: 0;
+  max-width: 220px;
+}
+.ligne-parametre input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+}
+.champ-unite {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--texte-muet);
+  font-size: 12px;
+}
+.champ-unite input {
+  width: 110px;
+  height: 32px;
+  padding: 0 8px;
+  border-radius: var(--rayon);
+  border: 1px solid var(--bordure-2);
+  background: var(--fond);
+  color: var(--texte);
+  font: inherit;
+  text-align: right;
+}
+.boutons-parametres {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.bouton-secondaire.danger {
+  color: var(--baisse);
+  border-color: rgba(239, 83, 80, 0.4);
+}
+.petit-inline {
+  font-size: 11px;
+}
+.parametres-corps .muet {
+  margin: 0 0 8px;
+  font-size: 12px;
+}
+.parametres-corps .erreur {
+  color: var(--baisse);
+  margin: 0;
+}
+
+/* ---- Statistiques, dimensionnement, en-têtes de carte ---- */
+.entete-carte {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-right: 10px;
+}
+.entete-carte h3 {
+  border-bottom: 0;
+  flex: 1;
+}
+.bouton-secondaire.avec-icone {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+.dimensionnement {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px 8px;
+  align-items: end;
+  padding: 8px 14px 0;
+}
+.dimensionnement label {
+  padding: 0;
+}
+.dimensionnement .champ-unite input {
+  width: 70px;
+}
+.dimensionnement .bouton-secondaire {
+  height: 32px;
+}
+.dimensionnement .aide {
+  grid-column: 1 / -1;
+  font-size: 11px;
+  color: var(--texte-muet);
+}
+.statistiques h3 {
+  border-top: 1px solid var(--bordure);
+}
+.grille-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1px;
+  background: var(--bordure);
+}
+.grille-stats > div {
+  background: var(--panneau);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.grille-stats span {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--texte-muet);
+}
+.grille-stats strong {
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+.grille-stats strong span {
+  font-size: 15px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.grille-stats em {
+  font-style: normal;
+  font-size: 12px;
+}
+.jauge {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--panneau-2);
+  overflow: hidden;
+}
+.jauge i {
+  display: block;
+  height: 100%;
+  background: var(--hausse);
+  border-radius: 999px;
+}

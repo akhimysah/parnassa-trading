@@ -21,12 +21,14 @@ corepack pnpm dev        # http://localhost:5200
 | Actualités | Fil d'actualités par symbole ou par marché |
 | Calendrier | Calendrier économique filtrable par pays et importance |
 | Alertes | Alertes de prix en temps réel sur les paires Binance (flux WebSocket public, son + notification), tableau crypto en direct |
-| Trading | Trading papier : portefeuille virtuel de 100 000 USDT, ordres marché / limite / stop long et short aux prix Binance en direct, stop-loss et take-profit automatiques, P&L latent et réalisé, courbe de capital, historique |
+| Trading | Trading papier : portefeuille virtuel de 100 000 USDT, ordres marché / limite / stop long et short aux prix Binance en direct, stop-loss et take-profit automatiques, dimensionnement par risque, statistiques (taux de réussite, profit factor, par paire), P&L latent et réalisé, courbe de capital, historique exportable en CSV |
 
 Bandeau de cotations défilant en haut, thème sombre / clair, comparaison de symboles superposés au graphique,
 dispositions nommées sauvegardées, liaison des graphiques en disposition multiple,
 gestion de la liste de suivi (ordre, ajout, suppression), lien de partage reprenant la vue courante
 (`#page/SYMBOLE/intervalle`), installation comme application (PWA) et barre de navigation en bas sur téléphone.
+
+Paramètres (engrenage) : fuseau horaire des graphiques, frais simulés, capital de départ, son des alertes, sauvegarde et restauration complètes en JSON.
 
 Raccourcis clavier : une lettre ouvre la recherche de symbole, `/` aussi, `1` à `7` changent l'intervalle, `Échap` ferme.
 Les préférences (symbole, intervalle, style, indicateurs, comparaisons, liste de suivi, disposition, thème) sont conservées dans le navigateur.

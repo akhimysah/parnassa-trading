@@ -5,6 +5,7 @@ import { BarreHaut, INTERVALLES } from './composants/BarreHaut';
 import { RailGauche } from './composants/RailGauche';
 import { RechercheSymbole } from './composants/RechercheSymbole';
 import { GestionListeSuivi } from './composants/GestionListeSuivi';
+import { Parametres } from './composants/Parametres';
 import { WidgetTradingView } from './composants/WidgetTradingView';
 import { Graphique } from './pages/Graphique';
 import { Marches } from './pages/Marches';
@@ -14,7 +15,7 @@ import { Actualites } from './pages/Actualites';
 import { Calendrier } from './pages/Calendrier';
 import { Alertes } from './pages/Alertes';
 import { Trading } from './pages/Trading';
-import { useMoteurAlertes } from './alertes';
+import { sonner, useMoteurAlertes } from './alertes';
 import { estBinance, paireBinance } from './binance';
 import { appliquerFlux, enregistrerCapital, valeurPortefeuille } from './trading';
 import { nomSymbole } from './symboles';
@@ -49,6 +50,7 @@ export function App() {
   });
   const [recherche, setRecherche] = useState<Recherche>({ ouvert: false, mode: 'symbole' });
   const [gestionSuivi, setGestionSuivi] = useState(false);
+  const [parametresOuverts, setParametresOuverts] = useState(false);
   const [emplacementActif, setEmplacementActif] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -65,16 +67,19 @@ export function App() {
     ...etat.portefeuille.ordres.map((o) => paireBinance(o.symbole)),
     ...(etat.page === 'trading' || etat.page === 'alertes' ? ['BTCUSDT', 'ETHUSDT'] : []),
   ];
-  const ticks = useMoteurAlertes(etat.alertes, pairesSuivies, majAlertes, setToast);
+  const ticks = useMoteurAlertes(etat.alertes, pairesSuivies, majAlertes, setToast, etat.parametres.son);
 
   // Moteur de trading papier : ordres en attente, stop-loss / take-profit, courbe de capital.
   useEffect(() => {
     if (Object.keys(ticks).length === 0) return;
     setEtat((e) => {
-      const { portefeuille, messages } = appliquerFlux(e.portefeuille, ticks);
+      const { portefeuille, messages } = appliquerFlux(e.portefeuille, ticks, e.parametres.frais);
       const { capital } = valeurPortefeuille(portefeuille, ticks);
       const avecCapital = enregistrerCapital(portefeuille, capital, messages.length > 0);
-      if (messages.length > 0) setTimeout(() => setToast(messages.join(' · ')), 0);
+      if (messages.length > 0) {
+        setTimeout(() => setToast(messages.join(' · ')), 0);
+        if (e.parametres.son) sonner();
+      }
       return avecCapital === e.portefeuille ? e : { ...e, portefeuille: avecCapital };
     });
   }, [ticks]);
@@ -191,7 +196,7 @@ export function App() {
   // Raccourcis façon TradingView : une lettre ouvre la recherche, 1-7 changent l'intervalle, « / » cherche.
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
-      if (recherche.ouvert || gestionSuivi || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (recherche.ouvert || gestionSuivi || parametresOuverts || e.metaKey || e.ctrlKey || e.altKey) return;
       const cible = e.target as HTMLElement | null;
       if (cible && ['INPUT', 'TEXTAREA', 'SELECT'].includes(cible.tagName)) return;
       if (/^[1-7]$/.test(e.key) && etat.page === 'graphique') {
@@ -206,7 +211,7 @@ export function App() {
     };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
-  }, [recherche.ouvert, gestionSuivi, etat.page, maj]);
+  }, [recherche.ouvert, gestionSuivi, parametresOuverts, etat.page, maj]);
 
   const ouvrirRecherche = useCallback(() => setRecherche({ ouvert: true, mode: 'symbole' }), []);
   const ouvrirComparaison = useCallback(() => setRecherche({ ouvert: true, mode: 'comparer' }), []);
@@ -221,6 +226,7 @@ export function App() {
         ouvrirComparaison={ouvrirComparaison}
         ouvrirListeSuivi={() => setGestionSuivi(true)}
         partager={() => void partager()}
+        ouvrirParametres={() => setParametresOuverts(true)}
         sauverDisposition={sauverDisposition}
         chargerDisposition={chargerDisposition}
         nbAlertes={etat.alertes.filter((a) => !a.declencheeLe).length}
@@ -295,6 +301,14 @@ export function App() {
           choisirSymbole(id);
           maj({ page: 'graphique' });
         }}
+      />
+      <Parametres
+        ouvert={parametresOuverts}
+        fermer={() => setParametresOuverts(false)}
+        etat={etat}
+        maj={maj}
+        remplacerEtat={(e) => setEtat(e)}
+        signaler={setToast}
       />
       {toast && (
         <div className="toast" role="status">

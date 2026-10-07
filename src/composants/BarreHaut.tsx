@@ -7,6 +7,7 @@ import {
   IconeCloche,
   IconeCroix,
   IconeDisposition,
+  IconeEngrenage,
   IconeEtoile,
   IconeLien,
   IconeLune,
@@ -26,6 +27,7 @@ interface Props {
   ouvrirComparaison: () => void;
   ouvrirListeSuivi: () => void;
   partager: () => void;
+  ouvrirParametres: () => void;
   sauverDisposition: (nom: string) => void;
   chargerDisposition: (d: DispositionSauvee) => void;
   nbAlertes: number;
@@ -94,6 +96,7 @@ export function BarreHaut({
   ouvrirComparaison,
   ouvrirListeSuivi,
   partager,
+  ouvrirParametres,
   sauverDisposition,
   chargerDisposition,
   nbAlertes,
@@ -345,6 +348,9 @@ export function BarreHaut({
       </button>
       <button className="icone plein-ecran" title="Plein écran" onClick={pleinEcran}>
         <IconePleinEcran />
+      </button>
+      <button className="icone" title="Paramètres" onClick={ouvrirParametres}>
+        <IconeEngrenage />
       </button>
     </header>
   );
