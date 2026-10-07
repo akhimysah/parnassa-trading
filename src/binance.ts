@@ -105,6 +105,45 @@ export function useFluxBinance(paires: string[]): Record<string, Tick> {
   return ticks;
 }
 
+const cacheKlines = new Map<string, { recuLe: number; clotures: number[] }>();
+
+/** Clôtures journalières des `jours` derniers jours (cache 10 min), pour mini-courbes et variations. */
+export async function cloturesJournalieres(paire: string, jours = 30): Promise<number[]> {
+  const cle = `${paire}:${jours}`;
+  const enCache = cacheKlines.get(cle);
+  if (enCache && Date.now() - enCache.recuLe < 600000) return enCache.clotures;
+  const reponse = await fetch(`${REST}/klines?symbol=${encodeURIComponent(paire)}&interval=1d&limit=${jours}`);
+  if (!reponse.ok) throw new Error(`Binance ${reponse.status}`);
+  const brut = (await reponse.json()) as unknown[][];
+  const clotures = brut.map((k) => Number(k[4]));
+  cacheKlines.set(cle, { recuLe: Date.now(), clotures });
+  return clotures;
+}
+
+export function useCloturesJournalieres(paires: string[], jours = 30): Record<string, number[]> {
+  const [series, setSeries] = useState<Record<string, number[]>>({});
+  const cle = Array.from(new Set(paires)).sort().join(',');
+  useEffect(() => {
+    let annule = false;
+    const liste = cle ? cle.split(',') : [];
+    void Promise.all(
+      liste.map(async (p) => {
+        try {
+          return [p, await cloturesJournalieres(p, jours)] as const;
+        } catch {
+          return [p, []] as const;
+        }
+      }),
+    ).then((resultats) => {
+      if (!annule) setSeries(Object.fromEntries(resultats));
+    });
+    return () => {
+      annule = true;
+    };
+  }, [cle, jours]);
+  return series;
+}
+
 export function formaterPrix(prix: number): string {
   const decimales = prix >= 1000 ? 2 : prix >= 1 ? 4 : 6;
   return prix.toLocaleString('fr-FR', { minimumFractionDigits: decimales, maximumFractionDigits: decimales });

@@ -1094,12 +1094,8 @@ option {
   .grille-alertes {
     grid-template-columns: 1fr;
   }
-  .tableau-prix th:nth-child(5),
-  .tableau-prix td:nth-child(5),
-  .tableau-prix th:nth-child(6),
-  .tableau-prix td:nth-child(6),
-  .tableau-prix th:nth-child(7),
-  .tableau-prix td:nth-child(7) {
+  .alertes .tableau-prix th:nth-child(n + 5),
+  .alertes .tableau-prix td:nth-child(n + 5) {
     display: none;
   }
 }
@@ -1503,4 +1499,88 @@ option {
   height: 100%;
   background: var(--hausse);
   border-radius: 999px;
+}
+
+/* ---- Clôture partielle, journal, mini-courbes ---- */
+.tableau-prix tr.selectionnee td {
+  background: var(--accent-fond);
+}
+.ligne-cloture td {
+  background: var(--fond);
+  cursor: default;
+}
+.panneau-cloture {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+}
+.panneau-cloture input {
+  height: 30px;
+  width: 190px;
+  padding: 0 8px;
+  border-radius: var(--rayon);
+  border: 1px solid var(--bordure-2);
+  background: var(--panneau);
+  color: var(--texte);
+  font: inherit;
+}
+.panneau-cloture .bouton-secondaire,
+.panneau-cloture .bouton-principal {
+  height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+.note-cellule {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+.journal {
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.journal li {
+  border: 1px solid var(--bordure);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--fond);
+}
+.journal-entete {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.journal-entete .lien {
+  padding: 0;
+}
+.journal-detail {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.journal-note {
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: var(--rayon);
+  background: var(--panneau);
+  color: var(--texte);
+  border: 1px dashed var(--bordure-2);
+  white-space: pre-wrap;
+}
+.journal-note:hover {
+  border-color: var(--accent);
+}
+.mini-courbe {
+  display: block;
 }

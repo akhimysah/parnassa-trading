@@ -4,6 +4,8 @@ import type { Tick } from '../binance';
 import { estBinance, formaterPrix, paireBinance } from '../binance';
 import { CATALOGUE, nomSymbole, normaliser, ticker } from '../symboles';
 import {
+  annoterOperation,
+  annoterPosition,
   annulerOrdre,
   cloturer,
   formaterQuantite,
@@ -30,7 +32,7 @@ interface Props {
 }
 
 type TypeOrdre = 'marche' | 'limite' | 'stop';
-type Onglet = 'positions' | 'ordres' | 'historique' | 'statistiques';
+type Onglet = 'positions' | 'ordres' | 'historique' | 'journal' | 'statistiques';
 
 const CRYPTOS = CATALOGUE.filter((s) => s.id.startsWith('BINANCE:'));
 const ORIGINES: Record<string, string> = { marche: 'marché', limite: 'limite', stop: 'stop', 'stop-loss': 'stop-loss', 'take-profit': 'take-profit' };
@@ -50,6 +52,9 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
   const p = etat.portefeuille;
   const TAUX_FRAIS = etat.parametres.frais;
   const [risque, setRisque] = useState('1');
+  const [note, setNote] = useState('');
+  const [clotureEnCours, setClotureEnCours] = useState<string | null>(null);
+  const [quantiteCloture, setQuantiteCloture] = useState('');
   const [symbole, setSymbole] = useState(estBinance(etat.symbole) ? etat.symbole : 'BINANCE:BTCUSDT');
   const [typeOrdre, setTypeOrdre] = useState<TypeOrdre>('marche');
   const [prixOrdre, setPrixOrdre] = useState('');
@@ -104,6 +109,7 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
   const prot = () => ({
     stopLoss: protections ? nombre(stopLoss) : undefined,
     takeProfit: protections ? nombre(takeProfit) : undefined,
+    note: note.trim() || undefined,
   });
 
   const passerOrdre = (sens: Sens) => {
@@ -133,6 +139,7 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
     }
     setErreur(null);
     maj({ portefeuille: resultat });
+    setNote('');
     if (typeOrdre !== 'marche') setOnglet('ordres');
   };
 
@@ -144,14 +151,58 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
     }
   };
 
-  const fermer = (positionId: string) => {
+  const fermer = (positionId: string, quantite?: number) => {
     const position = p.positions.find((x) => x.id === positionId);
     const prixActuel = position ? ticks[paireBinance(position.symbole)]?.prix : undefined;
     if (!prixActuel) {
       setErreur('Prix en direct indisponible, impossible de clôturer pour le moment.');
       return;
     }
-    appliquer(cloturer(p, positionId, prixActuel, 'marche', TAUX_FRAIS));
+    appliquer(cloturer(p, positionId, prixActuel, 'marche', TAUX_FRAIS, quantite));
+    setClotureEnCours(null);
+    setQuantiteCloture('');
+  };
+
+  const editerNotePosition = (positionId: string) => {
+    const position = p.positions.find((x) => x.id === positionId);
+    if (!position) return;
+    const n = window.prompt('Note de journal pour cette position :', position.note ?? '');
+    if (n === null) return;
+    maj({ portefeuille: annoterPosition(p, positionId, n) });
+  };
+
+  const editerNoteOperation = (operationId: string) => {
+    const o = p.operations.find((x) => x.id === operationId);
+    if (!o) return;
+    const n = window.prompt('Note de journal pour ce trade :', o.note ?? '');
+    if (n === null) return;
+    maj({ portefeuille: annoterOperation(p, operationId, n) });
+  };
+
+  const journal = p.operations.filter((o) => o.type === 'cloture');
+  const exporterJournal = () => {
+    telecharger(
+      `parnassa-trading-journal-${horodatageFichier()}.csv`,
+      versCsv(
+        ['Date', 'Paire', 'Sens', 'Quantité', 'Entrée', 'Sortie', 'Résultat (USDT)', 'Frais (USDT)', 'Origine', 'Note'],
+        journal
+          .slice()
+          .reverse()
+          .map((o) => [
+            new Date(o.date).toLocaleString('fr-FR'),
+            ticker(o.symbole),
+            o.sens === 'vente' ? 'Long' : 'Short',
+            o.quantite,
+            o.prixEntree ?? '',
+            o.prix,
+            o.resultat ?? '',
+            o.frais,
+            ORIGINES[o.origine ?? 'marche'],
+            o.note ?? '',
+          ]),
+      ),
+      'text/csv;charset=utf-8',
+    );
   };
 
   const toutFermer = () => {
@@ -306,6 +357,10 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
               </div>
             </>
           )}
+          <label>
+            Note de journal (facultatif)
+            <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ex. cassure de résistance, objectif 2R" />
+          </label>
           <dl className="recap-ordre">
             <div>
               <dt>Quantité estimée</dt>
@@ -341,10 +396,18 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
             <button className={onglet === 'historique' ? 'actif' : ''} onClick={() => setOnglet('historique')}>
               Historique ({p.operations.length})
             </button>
+            <button className={onglet === 'journal' ? 'actif' : ''} onClick={() => setOnglet('journal')}>
+              Journal ({journal.length})
+            </button>
             <button className={onglet === 'statistiques' ? 'actif' : ''} onClick={() => setOnglet('statistiques')}>
               Statistiques
             </button>
             <div className="outils-onglets">
+              {onglet === 'journal' && journal.length > 0 && (
+                <button className="bouton-secondaire avec-icone" onClick={exporterJournal} title="Exporter le journal en CSV">
+                  <IconeTelecharger width={14} height={14} /> CSV
+                </button>
+              )}
               {onglet === 'historique' && p.operations.length > 0 && (
                 <button className="bouton-secondaire avec-icone" onClick={exporterHistorique} title="Exporter l'historique en CSV">
                   <IconeTelecharger width={14} height={14} /> CSV
@@ -376,6 +439,7 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
                         <th className="num">Actuel</th>
                         <th className="num">P&amp;L</th>
                         <th className="num">SL / TP</th>
+                        <th>Note</th>
                         <th></th>
                       </tr>
                     </thead>
@@ -384,8 +448,11 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
                         const actuel = ticks[paireBinance(pos.symbole)]?.prix;
                         const pnl = actuel ? pnlLatent(pos, actuel) : null;
                         const pct = pnl !== null ? (pnl / pos.cout) * 100 : null;
+                        const enCloture = clotureEnCours === pos.id;
+                        const qCloture = nombre(quantiteCloture);
                         return (
-                          <tr key={pos.id}>
+                          <>
+                          <tr key={pos.id} className={enCloture ? 'selectionnee' : ''}>
                             <td onClick={() => ouvrirSymbole(pos.symbole)}>
                               <strong>{ticker(pos.symbole)}</strong> <span className="muet">{nomSymbole(pos.symbole)}</span>
                             </td>
@@ -403,12 +470,56 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
                                 {pos.stopLoss ? formaterPrix(pos.stopLoss) : '—'} / {pos.takeProfit ? formaterPrix(pos.takeProfit) : '—'}
                               </button>
                             </td>
+                            <td>
+                              <button className="lien discret note-cellule" onClick={() => editerNotePosition(pos.id)} title={pos.note ?? 'Ajouter une note'}>
+                                {pos.note ? pos.note : '＋ note'}
+                              </button>
+                            </td>
                             <td className="num">
-                              <button className="lien" onClick={() => fermer(pos.id)}>
-                                Clôturer
+                              <button
+                                className="lien"
+                                onClick={() => {
+                                  setClotureEnCours(enCloture ? null : pos.id);
+                                  setQuantiteCloture('');
+                                }}
+                              >
+                                {enCloture ? 'Annuler' : 'Clôturer'}
                               </button>
                             </td>
                           </tr>
+                          {enCloture && (
+                            <tr key={`${pos.id}-cloture`} className="ligne-cloture">
+                              <td colSpan={9}>
+                                <div className="panneau-cloture">
+                                  <span className="muet">Clôturer</span>
+                                  {[25, 50, 75].map((pct) => (
+                                    <button key={pct} className="bouton-secondaire" onClick={() => fermer(pos.id, (pos.quantite * pct) / 100)}>
+                                      {pct} %
+                                    </button>
+                                  ))}
+                                  <button className="bouton-principal" onClick={() => fermer(pos.id)}>
+                                    Tout (100 %)
+                                  </button>
+                                  <span className="muet">ou</span>
+                                  <input
+                                    inputMode="decimal"
+                                    value={quantiteCloture}
+                                    onChange={(e) => setQuantiteCloture(e.target.value)}
+                                    placeholder={`quantité ≤ ${formaterQuantite(pos.quantite)}`}
+                                  />
+                                  <button className="bouton-secondaire" disabled={!qCloture || qCloture > pos.quantite} onClick={() => qCloture && fermer(pos.id, qCloture)}>
+                                    Clôturer la quantité
+                                  </button>
+                                  {actuel && qCloture && qCloture <= pos.quantite && (
+                                    <span className="muet">
+                                      ≈ {formaterUsdt(qCloture * actuel)} · P&amp;L {formaterUsdt((actuel - pos.prixEntree) * qCloture * (pos.sens === 'achat' ? 1 : -1), true)}
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                          </>
                         );
                       })}
                     </tbody>
@@ -469,6 +580,42 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
                     </tbody>
                   </table>
                 </div>
+              )}
+            </>
+          )}
+
+          {onglet === 'journal' && (
+            <>
+              {journal.length === 0 && <p className="vide">Le journal se remplit à chaque clôture : résultat, prix d'entrée et de sortie, et vos notes.</p>}
+              {journal.length > 0 && (
+                <ul className="journal">
+                  {journal.map((o) => {
+                    const pct = o.prixEntree ? ((o.resultat ?? 0) / (o.prixEntree * o.quantite)) * 100 : null;
+                    return (
+                      <li key={o.id}>
+                        <div className="journal-entete">
+                          <button className="lien" onClick={() => ouvrirSymbole(o.symbole)}>
+                            <strong>{ticker(o.symbole)}</strong>
+                          </button>
+                          <span className={o.sens === 'vente' ? 'hausse' : 'baisse'}>{o.sens === 'vente' ? 'Long' : 'Short'}</span>
+                          <span className="muet">{dateCourte(o.date)}</span>
+                          {o.origine && o.origine !== 'marche' && <span className="note">{ORIGINES[o.origine]}</span>}
+                          <div className="espace" />
+                          <strong className={(o.resultat ?? 0) >= 0 ? 'hausse' : 'baisse'}>
+                            {formaterUsdt(o.resultat ?? 0, true)}
+                            {pct !== null && ` (${pct >= 0 ? '+' : ''}${pct.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} %)`}
+                          </strong>
+                        </div>
+                        <div className="journal-detail muet">
+                          {formaterQuantite(o.quantite)} · entrée {o.prixEntree ? formaterPrix(o.prixEntree) : '—'} → sortie {formaterPrix(o.prix)} · frais {formaterUsdt(o.frais)}
+                        </div>
+                        <button className="journal-note" onClick={() => editerNoteOperation(o.id)}>
+                          {o.note ? o.note : 'Ajouter une note de journal…'}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
               )}
             </>
           )}
@@ -583,6 +730,7 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
                         <th className="num">Prix</th>
                         <th className="num">Frais</th>
                         <th className="num">Résultat</th>
+                        <th>Note</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -602,6 +750,7 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
                           <td className={`num ${o.resultat === undefined ? 'muet' : o.resultat >= 0 ? 'hausse' : 'baisse'}`}>
                             {o.resultat === undefined ? '—' : formaterUsdt(o.resultat, true)}
                           </td>
+                          <td className="muet note-cellule" title={o.note}>{o.note ?? ''}</td>
                         </tr>
                       ))}
                     </tbody>

@@ -61,6 +61,8 @@ export interface Position {
   ouvertLe: number;
   stopLoss?: number;
   takeProfit?: number;
+  /** Note de journal : plan, raison d'entrée… */
+  note?: string;
 }
 
 export interface OrdreEnAttente {
@@ -73,6 +75,7 @@ export interface OrdreEnAttente {
   montant: number;
   stopLoss?: number;
   takeProfit?: number;
+  note?: string;
   creeLe: number;
 }
 
@@ -93,6 +96,9 @@ export interface Operation {
   frais: number;
   /** Résultat réalisé (clôtures uniquement). */
   resultat?: number;
+  /** Prix d'entrée de la position fermée (clôtures). */
+  prixEntree?: number;
+  note?: string;
   date: number;
 }
 

@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import type { Alerte, Etat } from '../types';
 import type { Tick } from '../binance';
-import { estBinance, formaterPrix, paireBinance } from '../binance';
+import { estBinance, formaterPrix, paireBinance, useCloturesJournalieres } from '../binance';
+import { MiniCourbe } from '../composants/MiniCourbe';
 import { CATALOGUE, bourse, nomSymbole, normaliser, ticker } from '../symboles';
 import { conditionRemplie, demanderNotifications } from '../alertes';
 import { IconeCroix, IconeTelecharger } from '../composants/Icones';
@@ -33,6 +34,7 @@ export function Alertes({ etat, ticks, maj, ouvrirSymbole }: Props) {
   const historique = etat.alertes.filter((a) => a.declencheeLe).sort((a, b) => (b.declencheeLe ?? 0) - (a.declencheeLe ?? 0));
 
   const suivisCrypto = useMemo(() => etat.listeSuivi.filter(estBinance), [etat.listeSuivi]);
+  const historiques = useCloturesJournalieres(suivisCrypto.map(paireBinance), 30);
 
   const creer = (e: React.FormEvent) => {
     e.preventDefault();
@@ -228,6 +230,8 @@ export function Alertes({ etat, ticks, maj, ouvrirSymbole }: Props) {
               <th>Nom</th>
               <th className="num">Dernier</th>
               <th className="num">24 h</th>
+              <th className="num">7 j</th>
+              <th>30 jours</th>
               <th className="num">Plus haut</th>
               <th className="num">Plus bas</th>
               <th className="num">Volume (USDT)</th>
@@ -237,6 +241,9 @@ export function Alertes({ etat, ticks, maj, ouvrirSymbole }: Props) {
             {suivisCrypto.map((id) => {
               const t = ticks[paireBinance(id)];
               const variation = t && t.ouverture24h ? ((t.prix - t.ouverture24h) / t.ouverture24h) * 100 : null;
+              const serie = historiques[paireBinance(id)] ?? [];
+              const ref7 = serie.length >= 8 ? serie[serie.length - 8] : null;
+              const var7 = ref7 && t ? ((t.prix - ref7) / ref7) * 100 : null;
               return (
                 <tr key={id} onClick={() => ouvrirSymbole(id)}>
                   <td>
@@ -246,6 +253,12 @@ export function Alertes({ etat, ticks, maj, ouvrirSymbole }: Props) {
                   <td className="num">{t ? formaterPrix(t.prix) : '…'}</td>
                   <td className={`num ${variation === null ? '' : variation >= 0 ? 'hausse' : 'baisse'}`}>
                     {variation === null ? '…' : `${variation >= 0 ? '+' : ''}${variation.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} %`}
+                  </td>
+                  <td className={`num ${var7 === null ? '' : var7 >= 0 ? 'hausse' : 'baisse'}`}>
+                    {var7 === null ? '…' : `${var7 >= 0 ? '+' : ''}${var7.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} %`}
+                  </td>
+                  <td>
+                    <MiniCourbe valeurs={serie} />
                   </td>
                   <td className="num muet">{t?.haut24h ? formaterPrix(t.haut24h) : '…'}</td>
                   <td className="num muet">{t?.bas24h ? formaterPrix(t.bas24h) : '…'}</td>

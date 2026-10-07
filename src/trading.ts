@@ -31,6 +31,7 @@ export function realiseTotal(p: Portefeuille): number {
 export interface Protections {
   stopLoss?: number;
   takeProfit?: number;
+  note?: string;
 }
 
 export function verifierProtections(sens: Sens, prix: number, prot: Protections): string | null {
@@ -71,8 +72,9 @@ export function ouvrir(
     ouvertLe: Date.now(),
     stopLoss: prot.stopLoss,
     takeProfit: prot.takeProfit,
+    note: prot.note?.trim() || undefined,
   };
-  const operation: Operation = { id: identifiant(), symbole, sens, type: 'ouverture', origine, quantite, prix, frais, date: Date.now() };
+  const operation: Operation = { id: identifiant(), symbole, sens, type: 'ouverture', origine, quantite, prix, frais, note: position.note, date: Date.now() };
   return { ...p, solde: p.solde - cout - frais, positions: [position, ...p.positions], operations: [operation, ...p.operations] };
 }
 
@@ -82,30 +84,51 @@ export function cloturer(
   prix: number,
   origine: Operation['origine'] = 'marche',
   taux = TAUX_FRAIS,
+  quantite?: number,
 ): Portefeuille | string {
   const position = p.positions.find((x) => x.id === positionId);
   if (!position) return 'Position introuvable.';
   if (!(prix > 0)) return 'Prix indisponible.';
-  const resultat = pnlLatent(position, prix);
-  const frais = position.quantite * prix * taux;
+  const q = quantite === undefined ? position.quantite : Math.min(quantite, position.quantite);
+  if (!(q > 0)) return 'Quantité invalide.';
+  const part = q / position.quantite;
+  const coutPart = position.cout * part;
+  const resultat = (prix - position.prixEntree) * q * (position.sens === 'achat' ? 1 : -1);
+  const frais = q * prix * taux;
   const operation: Operation = {
     id: identifiant(),
     symbole: position.symbole,
     sens: position.sens === 'achat' ? 'vente' : 'achat',
     type: 'cloture',
     origine,
-    quantite: position.quantite,
+    quantite: q,
     prix,
     frais,
     resultat,
+    prixEntree: position.prixEntree,
+    note: position.note,
     date: Date.now(),
   };
+  const reste = position.quantite - q;
+  // En dessous d'un millionième, on considère la position entièrement fermée (arrondis).
+  const totale = reste <= position.quantite * 1e-6;
+  const positions = totale
+    ? p.positions.filter((x) => x.id !== positionId)
+    : p.positions.map((x) => (x.id === positionId ? { ...x, quantite: reste, cout: position.cout - coutPart } : x));
   return {
     ...p,
-    solde: p.solde + position.cout + resultat - frais,
-    positions: p.positions.filter((x) => x.id !== positionId),
+    solde: p.solde + (totale ? position.cout : coutPart) + resultat - frais,
+    positions,
     operations: [operation, ...p.operations],
   };
+}
+
+export function annoterPosition(p: Portefeuille, positionId: string, note: string): Portefeuille {
+  return { ...p, positions: p.positions.map((x) => (x.id === positionId ? { ...x, note: note.trim() || undefined } : x)) };
+}
+
+export function annoterOperation(p: Portefeuille, operationId: string, note: string): Portefeuille {
+  return { ...p, operations: p.operations.map((o) => (o.id === operationId ? { ...o, note: note.trim() || undefined } : o)) };
 }
 
 export function modifierProtections(p: Portefeuille, positionId: string, prot: Protections): Portefeuille | string {
