@@ -150,7 +150,7 @@ export interface Operation {
   sens: Sens;
   type: 'ouverture' | 'cloture';
   /** Origine : marché, limite, stop, stop-loss, take-profit. */
-  origine?: 'marche' | 'limite' | 'stop' | 'stop-loss' | 'take-profit' | 'stop-out';
+  origine?: 'marche' | 'limite' | 'stop' | 'stop-loss' | 'take-profit' | 'stop-out' | 'crame';
   quantite: number;
   lots?: number;
   prix: number;
@@ -170,6 +170,8 @@ export interface Portefeuille {
   operations: Operation[];
   ordres: OrdreEnAttente[];
   historiqueCapital: PointCapital[];
+  /** Compte « cramé » : 99 % du capital de départ perdu. Positions fermées, plus aucun ordre jusqu'à la remise à zéro. */
+  crameLe?: number;
 }
 
 export interface DispositionSauvee {

@@ -41,6 +41,7 @@ import {
   tauxFrais,
   realiseTotal,
   reinitialiser,
+  PERTE_CRAME,
   statistiques,
   valeurPortefeuille,
 } from '../trading';
@@ -59,7 +60,7 @@ interface Props {
 type TypeOrdre = 'marche' | 'limite' | 'stop';
 type Onglet = 'positions' | 'ordres' | 'historique' | 'journal' | 'statistiques';
 
-const ORIGINES: Record<string, string> = { marche: 'marché', limite: 'limite', stop: 'stop', 'stop-loss': 'stop-loss', 'take-profit': 'take-profit', 'stop-out': 'stop-out' };
+const ORIGINES: Record<string, string> = { marche: 'marché', limite: 'limite', stop: 'stop', 'stop-loss': 'stop-loss', 'take-profit': 'take-profit', 'stop-out': 'stop-out', crame: 'compte cramé' };
 
 function dateCourte(ms: number): string {
   return new Date(ms).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
@@ -108,6 +109,7 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
   const ajusterLots = (delta: number) => setLots(normaliserLots((lotsNum || 0) + delta).toFixed(2));
 
   const { capital, latent, immobilise, niveauMarge } = useMemo(() => valeurPortefeuille(p, ticks), [p, ticks]);
+  const perteCompte = p.capitalInitial > 0 ? Math.max(0, 1 - capital / p.capitalInitial) : 0;
   const realise = useMemo(() => realiseTotal(p), [p]);
   const stats = useMemo(() => statistiques(p), [p]);
 
@@ -286,7 +288,7 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
   };
 
   const remettreAZero = () => {
-    if (window.confirm('Réinitialiser le portefeuille papier à 100 000 USDT ? Positions, ordres et historique seront effacés.')) {
+    if (window.confirm(`Réinitialiser le portefeuille papier à ${p.capitalInitial.toLocaleString('fr-FR')} USDT ? Positions, ordres et historique seront effacés.`)) {
       maj({ portefeuille: reinitialiser(p.capitalInitial) });
     }
   };
@@ -294,6 +296,28 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
   return (
     <div className="page defilable trading">
       <PanneauChallenge etat={etat} capital={capital} marges={immobilise} maj={maj} />
+      {p.crameLe ? (
+        <div className="bandeau-crame" role="alert">
+          <strong>🔥 Compte cramé</strong>
+          <span>
+            Le {new Date(p.crameLe).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}, le compte a perdu {Math.round(PERTE_CRAME * 100)} % de son capital de
+            départ ({formaterUsdt(p.capitalInitial)}). Toutes les positions ont été fermées et les ordres annulés. Plus aucun ordre n'est accepté.
+          </span>
+          <button className="bouton-principal" onClick={remettreAZero}>
+            Repartir à zéro
+          </button>
+        </div>
+      ) : (
+        perteCompte >= 0.8 && (
+          <div className="bandeau-crame alerte" role="status">
+            <strong>⚠️ Compte presque cramé</strong>
+            <span>
+              {Math.round(perteCompte * 100)} % du capital de départ est perdu. À {Math.round(PERTE_CRAME * 100)} %, le compte crame : tout est fermé et bloqué
+              (reste {formaterUsdt(Math.max(0, capital - p.capitalInitial * (1 - PERTE_CRAME)))}).
+            </span>
+          </div>
+        )
+      )}
       <div className="kpis">
         <div className="kpi">
           <span>Capital total</span>
@@ -489,14 +513,14 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
           </dl>
           {erreur && <p className="erreur">{erreur}</p>}
           <div className="boutons-ordre">
-            <button className="bouton-achat" onClick={() => passerOrdre('achat')} disabled={!prix || !lotsValides}>
+            <button className="bouton-achat" onClick={() => passerOrdre('achat')} disabled={!prix || !lotsValides || Boolean(p.crameLe)}>
               {typeOrdre === 'marche' ? 'Acheter / Long' : 'Ordre d’achat'}
             </button>
-            <button className="bouton-vente" onClick={() => passerOrdre('vente')} disabled={!prix || !lotsValides}>
+            <button className="bouton-vente" onClick={() => passerOrdre('vente')} disabled={!prix || !lotsValides || Boolean(p.crameLe)}>
               {typeOrdre === 'marche' ? 'Vendre / Short' : 'Ordre de vente'}
             </button>
           </div>
-          <p className="muet petit">Compte papier avec effet de levier : aucun ordre réel n'est transmis. Stop-out automatique si le niveau de marge passe sous 50 %. Ordres en attente et protections surveillés tant que l'application est ouverte.</p>
+          <p className="muet petit">Compte papier avec effet de levier : aucun ordre réel n'est transmis. Stop-out automatique si le niveau de marge passe sous 50 %. Le compte crame à 99 % de perte : tout est fermé et bloqué jusqu'à la remise à zéro. Ordres en attente et protections surveillés tant que l'application est ouverte.</p>
         </div>
 
         <div className="carte">

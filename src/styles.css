@@ -3392,3 +3392,32 @@ th.trie {
   background: var(--accent-fond);
   color: var(--accent);
 }
+
+/* Règle du compte cramé (99 % de perte) */
+.bandeau-crame {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(239, 83, 80, 0.55);
+  background: rgba(239, 83, 80, 0.12);
+  color: var(--texte, inherit);
+}
+.bandeau-crame strong {
+  color: var(--baisse);
+}
+.bandeau-crame span {
+  flex: 1 1 260px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.bandeau-crame.alerte {
+  border-color: rgba(255, 152, 0, 0.55);
+  background: rgba(255, 152, 0, 0.1);
+}
+.bandeau-crame.alerte strong {
+  color: #ff9800;
+}

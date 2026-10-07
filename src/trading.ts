@@ -9,6 +9,14 @@ export const TAUX_FRAIS = 0.001;
 export const TAUX_FRAIS_CFD = 0.00005;
 /** Sous ce niveau de marge (fonds propres ÷ marge utilisée), toutes les positions sont fermées. */
 export const NIVEAU_STOP_OUT = 0.5;
+/** Règle du compte cramé : à 99 % de perte du capital de départ, tout est fermé et le compte est bloqué. */
+export const PERTE_CRAME = 0.99;
+export const MESSAGE_CRAME = 'Compte cramé : 99 % du capital de départ est perdu. Remettez le compte à zéro pour trader à nouveau.';
+
+/** Le compte a-t-il franchi la règle des 99 % ? (fonds propres ≤ 1 % du capital de départ) */
+export function franchitCrame(p: Portefeuille, capital: number): boolean {
+  return capital <= p.capitalInitial * (1 - PERTE_CRAME);
+}
 
 type Ticks = Record<string, Tick>;
 
@@ -102,6 +110,7 @@ export function ouvrir(
   ticks: Ticks,
   options: { levier: number; prot?: Protections; origine?: Operation['origine']; tauxCrypto?: number },
 ): Portefeuille | string {
+  if (p.crameLe) return MESSAGE_CRAME;
   if (!(lots >= 0.01) || lots > 500) return 'Volume invalide : entre 0,01 et 500 lots.';
   if (!(prix > 0)) return 'Prix invalide.';
   const lotsNet = normaliserLots(lots);
@@ -217,6 +226,7 @@ export function placerOrdre(
   ticks: Ticks,
   tauxCrypto = TAUX_FRAIS,
 ): Portefeuille | string {
+  if (p.crameLe) return MESSAGE_CRAME;
   if (!(ordre.prix > 0)) return 'Prix invalide.';
   if (!(ordre.lots >= 0.01) || ordre.lots > 500) return 'Volume invalide : entre 0,01 et 500 lots.';
   const e = engagement(ordre.symbole, ordre.lots, ordre.prix, ordre.levier, ticks, tauxCrypto);
@@ -290,10 +300,20 @@ export function appliquerFlux(p: Portefeuille, ticks: Ticks, tauxCrypto = TAUX_F
     );
   }
 
-  // Stop-out : seulement si toutes les positions ont un prix (pas de décision sur une valorisation partielle).
   const toutesCotees = courant.positions.every((pos) => ticks[paireBinance(pos.symbole)]);
+  // Règle du compte cramé (avant le stop-out) : à 99 % de perte, on ferme tout, on annule les ordres et on bloque le compte.
+  if (!courant.crameLe && toutesCotees && franchitCrame(courant, valeurPortefeuille(courant, ticks).capital)) {
+    for (const pos of [...courant.positions]) {
+      const r = cloturer(courant, pos.id, ticks[paireBinance(pos.symbole)].prix, ticks, { origine: 'crame', tauxCrypto });
+      if (typeof r !== 'string') courant = r;
+    }
+    courant = { ...courant, ordres: [], crameLe: Date.now() };
+    messages.push(`🔥 ${MESSAGE_CRAME}`);
+  }
+
+  // Stop-out : seulement si toutes les positions ont un prix (pas de décision sur une valorisation partielle).
   const compte = valeurPortefeuille(courant, ticks);
-  if (toutesCotees && compte.niveauMarge !== null && compte.niveauMarge < NIVEAU_STOP_OUT) {
+  if (!courant.crameLe && toutesCotees && compte.niveauMarge !== null && compte.niveauMarge < NIVEAU_STOP_OUT) {
     const niveau = Math.round(compte.niveauMarge * 100);
     for (const pos of [...courant.positions]) {
       const r = cloturer(courant, pos.id, ticks[paireBinance(pos.symbole)].prix, ticks, { origine: 'stop-out', tauxCrypto });

@@ -25,7 +25,7 @@ import { useSynchroPush } from './push';
 import { useSynchro } from './synchro';
 import { symbolesConversion, useCotationsScanner } from './instruments';
 import { estBinance, paireBinance } from './binance';
-import { appliquerFlux, cloturer, enregistrerCapital, valeurPortefeuille } from './trading';
+import { appliquerFlux, cloturer, enregistrerCapital, MESSAGE_CRAME, valeurPortefeuille } from './trading';
 import { evaluerChallenge } from './challenge';
 import { nomSymbole } from './symboles';
 import { symboleDepuisUrl } from './site';
@@ -139,6 +139,7 @@ export function App() {
       const resultat = appliquerFlux(e.portefeuille, ticks, e.parametres.frais);
       let portefeuille = resultat.portefeuille;
       const messages = [...resultat.messages];
+      if (portefeuille.crameLe && !e.portefeuille.crameLe) notifier('Compte cramé 🔥', MESSAGE_CRAME, undefined, `crame-${portefeuille.crameLe}`);
       const compte = valeurPortefeuille(portefeuille, ticks);
       let capital = compte.capital;
 
