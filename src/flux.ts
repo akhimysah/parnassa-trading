@@ -1,7 +1,7 @@
 /**
  * Hub de cotations en temps réel, partagé par toute l'application (une seule connexion par source) :
  *  - flux Yahoo Finance (WebSocket, ~1 mise à jour par seconde) : forex, dollar index, indices, actions ;
- *  - or animé seconde par seconde par le PAX Gold de Binance, recalé en continu sur la cotation XAUUSD ;
+ *  - or animé seconde par seconde par le carnet d'ordres du PAX Gold (Binance), recalé en continu sur XAUUSD ;
  *  - scanner TradingView interrogé chaque seconde : référence de tous les instruments, et seule source
  *    pour l'argent, le platine, le cuivre et l'énergie.
  */
@@ -266,12 +266,15 @@ function synchroniserPilotes() {
   }
   if (!cle) return;
   const ouvrir = () => {
-    const ws = new WebSocket(`${URL_BINANCE}/${voulus.map((p) => `${p.toLowerCase()}@aggTrade`).join('/')}`);
+    // Meilleur acheteur / vendeur : bouge bien plus souvent que les transactions (≈ 1,4 fois par seconde sur PAXG).
+    const ws = new WebSocket(`${URL_BINANCE}/${voulus.map((p) => `${p.toLowerCase()}@bookTicker`).join('/')}`);
     wsPilotes = ws;
     ws.onmessage = (e) => {
-      const d = JSON.parse(String(e.data)) as { s?: string; p?: string };
-      if (!d.s || !d.p) return;
-      pilotes[d.s] = Number(d.p);
+      const d = JSON.parse(String(e.data)) as { s?: string; b?: string; a?: string };
+      if (!d.s || !d.b || !d.a) return;
+      const milieu = (Number(d.b) + Number(d.a)) / 2;
+      if (pilotes[d.s] === milieu) return;
+      pilotes[d.s] = milieu;
       // Premier ancrage dès que la cotation de référence est connue.
       for (const a of abonnes.values()) {
         if (a.source.pilote === d.s && !ancrages[a.source.cle] && scanner[a.source.cle]) {
