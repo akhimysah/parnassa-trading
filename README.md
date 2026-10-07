@@ -18,7 +18,7 @@ corepack pnpm dev        # http://localhost:5200
 | Marchés | Vue d'ensemble, hotlists US, heatmaps actions / crypto / forex, taux croisés |
 | Screener | Screener actions (US, France, Allemagne, UK), crypto et forex |
 | Symbole | Infos, mini-graphique, analyse technique, actualités, données financières, profil |
-| Actualités | Fil d'actualités par symbole ou par marché |
+| Actualités | Fil de dépêches en direct façon salle de marché : 11 sources agrégées (MarketWatch, CNBC, Investing.com, FXStreet, ForexLive, Fed, BCE, CoinDesk, Cointelegraph, ABC Bourse, BFM), filtres par catégorie et langue, dépêches importantes signalées avec bandeau et son, recherche, dépêches du symbole courant, calendrier économique |
 | Calendrier | Calendrier économique filtrable par pays et importance |
 | Alertes | Alertes de prix en temps réel sur les paires Binance (flux WebSocket public, son + notification), tableau crypto en direct avec variation 7 j et mini-courbe 30 j |
 | Trading | Trading papier : portefeuille virtuel de 100 000 USDT, ordres marché / limite / stop long et short aux prix Binance en direct, stop-loss et take-profit automatiques, clôture partielle, journal de trading avec notes, dimensionnement par risque, statistiques (taux de réussite, profit factor, par paire), P&L latent et réalisé, courbe de capital, historique exportable en CSV |
@@ -32,6 +32,16 @@ Paramètres (engrenage) : fuseau horaire des graphiques, frais simulés, capital
 
 Raccourcis clavier : une lettre ouvre la recherche de symbole, `/` aussi, `1` à `7` changent l'intervalle, `Échap` ferme.
 Les préférences (symbole, intervalle, style, indicateurs, comparaisons, liste de suivi, disposition, thème) sont conservées dans le navigateur.
+
+## Relais d'actualités (Cloudflare Worker)
+
+Le fil d'actualités est servi par `worker/actualites.ts`, déployé sur Cloudflare Workers à
+`https://parnassa-actualites.neobank.workers.dev` : il agrège les flux RSS publics, les met en cache 60 s et
+les renvoie en JSON avec CORS. Déploiement :
+
+```bash
+cd worker && npx wrangler deploy -c wrangler.json
+```
 
 ## Limites des widgets gratuits
 

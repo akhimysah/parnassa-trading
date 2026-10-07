@@ -1,0 +1,141 @@
+import { useEffect, useRef, useState } from 'react';
+
+export const URL_ACTUALITES = 'https://parnassa-actualites.neobank.workers.dev';
+
+export type CategorieDepeche = 'marches' | 'forex' | 'crypto' | 'banques-centrales' | 'france' | 'matieres';
+
+export interface Depeche {
+  id: string;
+  titre: string;
+  lien: string;
+  source: string;
+  categorie: CategorieDepeche;
+  langue: 'fr' | 'en';
+  date: number;
+  important: boolean;
+}
+
+export const CATEGORIES_DEPECHES: { id: CategorieDepeche; libelle: string }[] = [
+  { id: 'marches', libelle: 'Marchés' },
+  { id: 'france', libelle: 'France' },
+  { id: 'forex', libelle: 'Forex' },
+  { id: 'banques-centrales', libelle: 'Banques centrales' },
+  { id: 'crypto', libelle: 'Crypto' },
+  { id: 'matieres', libelle: 'Matières premières' },
+];
+
+interface Reponse {
+  generéLe: number;
+  depeches: Depeche[];
+}
+
+async function charger(chemin: string, signal?: AbortSignal): Promise<Depeche[]> {
+  const reponse = await fetch(`${URL_ACTUALITES}${chemin}`, { signal });
+  if (!reponse.ok) throw new Error(`Relais d'actualités : ${reponse.status}`);
+  const donnees = (await reponse.json()) as Reponse;
+  return donnees.depeches;
+}
+
+/** Fil principal, rafraîchi toutes les `intervalleMs` ms ; signale les nouvelles dépêches par rapport au passage précédent. */
+export function useFilActualites(intervalleMs = 60000) {
+  const [depeches, setDepeches] = useState<Depeche[]>([]);
+  const [erreur, setErreur] = useState<string | null>(null);
+  const [chargement, setChargement] = useState(true);
+  const [majLe, setMajLe] = useState<number | null>(null);
+  const [nouvelles, setNouvelles] = useState<Depeche[]>([]);
+  const connus = useRef<Set<string> | null>(null);
+
+  useEffect(() => {
+    let actif = true;
+    const controleur = new AbortController();
+    const tour = async () => {
+      try {
+        const liste = await charger('/flux', controleur.signal);
+        if (!actif) return;
+        if (connus.current) {
+          const fraiches = liste.filter((d) => !connus.current!.has(d.id));
+          if (fraiches.length > 0) setNouvelles(fraiches);
+        }
+        connus.current = new Set(liste.map((d) => d.id));
+        setDepeches(liste);
+        setErreur(null);
+        setMajLe(Date.now());
+      } catch (e) {
+        if (actif && !(e instanceof DOMException && e.name === 'AbortError')) setErreur(e instanceof Error ? e.message : 'Erreur réseau');
+      } finally {
+        if (actif) setChargement(false);
+      }
+    };
+    void tour();
+    const minuteur = window.setInterval(() => void tour(), intervalleMs);
+    const surVisibilite = () => {
+      if (document.visibilityState === 'visible') void tour();
+    };
+    document.addEventListener('visibilitychange', surVisibilite);
+    return () => {
+      actif = false;
+      controleur.abort();
+      window.clearInterval(minuteur);
+      document.removeEventListener('visibilitychange', surVisibilite);
+    };
+  }, [intervalleMs]);
+
+  return { depeches, erreur, chargement, majLe, nouvelles, effacerNouvelles: () => setNouvelles([]) };
+}
+
+/** Dépêches sur un sujet (nom du symbole) et un ticker Yahoo éventuel. */
+export function useRechercheActualites(sujet: string, ticker?: string) {
+  const [depeches, setDepeches] = useState<Depeche[]>([]);
+  const [chargement, setChargement] = useState(false);
+  useEffect(() => {
+    if (!sujet && !ticker) return;
+    let actif = true;
+    const controleur = new AbortController();
+    setChargement(true);
+    const params = new URLSearchParams();
+    if (sujet) params.set('q', sujet);
+    if (ticker) params.set('ticker', ticker);
+    charger(`/recherche?${params.toString()}`, controleur.signal)
+      .then((liste) => {
+        if (actif) setDepeches(liste);
+      })
+      .catch(() => {
+        if (actif) setDepeches([]);
+      })
+      .finally(() => {
+        if (actif) setChargement(false);
+      });
+    return () => {
+      actif = false;
+      controleur.abort();
+    };
+  }, [sujet, ticker]);
+  return { depeches, chargement };
+}
+
+export function heureCourte(ms: number): string {
+  const d = new Date(ms);
+  const aujourdHui = new Date().toDateString() === d.toDateString();
+  return aujourdHui
+    ? d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+    : d.toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
+export function ilYA(ms: number): string {
+  const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
+  if (s < 60) return "à l'instant";
+  if (s < 3600) return `il y a ${Math.floor(s / 60)} min`;
+  if (s < 86400) return `il y a ${Math.floor(s / 3600)} h`;
+  return `il y a ${Math.floor(s / 86400)} j`;
+}
+
+/** Sujet de recherche lisible à partir d'un symbole TradingView ("INDEX:DEU40" → "DAX"). */
+export function sujetDepuisSymbole(id: string, nom: string): { sujet: string; ticker?: string } {
+  const [bourse, ticker] = id.includes(':') ? id.split(':') : ['', id];
+  const estCrypto = bourse === 'BINANCE' || bourse === 'CRYPTOCAP';
+  const estIndiceOuFx = ['INDEX', 'FOREXCOM', 'FX', 'TVC', 'CAPITALCOM', 'OANDA', 'SP', 'DJ'].includes(bourse);
+  if (estCrypto) return { sujet: `${nom} crypto` };
+  if (estIndiceOuFx) return { sujet: `${nom} bourse` };
+  const tickerYahoo = bourse === 'EURONEXT' ? `${ticker}.PA` : bourse === 'XETR' ? `${ticker}.DE` : ticker;
+  return { sujet: `${nom} action bourse`, ticker: tickerYahoo };
+}

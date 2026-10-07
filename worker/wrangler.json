@@ -1,0 +1,7 @@
+{
+  "$schema": "../../modele-whop/node_modules/wrangler/config-schema.json",
+  "name": "parnassa-actualites",
+  "main": "actualites.ts",
+  "compatibility_date": "2026-07-25",
+  "observability": { "enabled": true }
+}
