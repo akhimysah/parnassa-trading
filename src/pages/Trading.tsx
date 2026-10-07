@@ -73,6 +73,7 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
   const scannerLocal = useCotationsScanner([symbole]);
   const prix = (ticks[paire] ?? fluxLocal[paire] ?? scannerLocal[paire])?.prix;
   const infoInstrument = instrument(symbole);
+  const ticksSelecteur = useMemo(() => ({ ...scannerLocal, ...fluxLocal, ...ticks }), [scannerLocal, fluxLocal, ticks]);
   const montantNum = nombre(montant) ?? 0;
   const prixReference = typeOrdre === 'marche' ? prix : nombre(prixOrdre);
   const quantite = prixReference && montantNum > 0 ? montantNum / prixReference : 0;
@@ -306,7 +307,7 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
           </div>
           <label>
             Paire
-            <SelecteurInstrument valeur={symbole} onChange={setSymbole} ticks={ticks} />
+            <SelecteurInstrument valeur={symbole} onChange={setSymbole} ticks={ticksSelecteur} />
             {infoInstrument && infoInstrument.differe > 0 && (
               <span className="aide">Cotation gratuite différée d'environ {infoInstrument.differe} min : les ordres s'exécutent à ce prix.</span>
             )}
