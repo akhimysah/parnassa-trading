@@ -483,6 +483,92 @@ async function calendrier(): Promise<EvenementCalendrier[]> {
   }
 }
 
+// ---------- Indice de surprise économique ----------
+
+/** Indicateurs pour lesquels un chiffre plus haut que prévu est une mauvaise nouvelle pour l'économie. */
+const INVERSES = /unemployment|jobless|claims|chômage|layoff|bankrupt|insolvenc|deficit/i;
+
+interface SurprisePays {
+  pays: string;
+  devise: string;
+  indice: number;
+  publies: number;
+  meilleurs: number;
+  moins_bons: number;
+  conformes: number;
+  marquants: { titre: string; titreFr: string; date: number; actuel: number; prevision: number; unite: string; echelle: string; signe: number; importance: number }[];
+}
+
+/**
+ * Pour chaque pays, sur 30 jours : chaque publication compte +1 si elle bat la prévision, -1 si elle la rate
+ * (sens inversé pour chômage, inscriptions… ), avec un poids double pour les annonces à fort impact.
+ * L'indice va de -100 (que des déceptions) à +100 (que des bonnes surprises).
+ */
+async function surprises(): Promise<SurprisePays[]> {
+  const jour = 86400000;
+  const debut = new Date(Date.now() - 30 * jour).toISOString();
+  const fin = new Date().toISOString();
+  let brut: Record<string, unknown>[] = [];
+  try {
+    const r = await fetch(`https://economic-calendar.tradingview.com/events?from=${debut}&to=${fin}&countries=${PAYS_CALENDRIER}`, {
+      headers: { Origin: 'https://www.tradingview.com', 'User-Agent': 'Mozilla/5.0 (compatible; ParnassaTrading/1.0)' },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (r.ok) brut = ((await r.json()) as { result?: Record<string, unknown>[] }).result ?? [];
+  } catch {
+    brut = [];
+  }
+  const parPays = new Map<string, SurprisePays & { somme: number; poids: number }>();
+  for (const e of brut) {
+    const actuel = typeof e.actual === 'number' ? e.actual : null;
+    const prevision = typeof e.forecast === 'number' ? e.forecast : null;
+    const importance = Number(e.importance ?? -1);
+    if (actuel === null || prevision === null || importance < 0) continue;
+    const titre = String(e.title ?? '');
+    const pays = String(e.country ?? '');
+    const brutSigne = Math.sign(actuel - prevision);
+    const signe = INVERSES.test(titre) ? -brutSigne : brutSigne;
+    const poids = importance >= 1 ? 2 : 1;
+    const entree =
+      parPays.get(pays) ??
+      { pays, devise: String(e.currency ?? ''), indice: 0, publies: 0, meilleurs: 0, moins_bons: 0, conformes: 0, marquants: [], somme: 0, poids: 0 };
+    entree.publies += 1;
+    entree.somme += signe * poids;
+    entree.poids += poids;
+    if (signe > 0) entree.meilleurs += 1;
+    else if (signe < 0) entree.moins_bons += 1;
+    else entree.conformes += 1;
+    if (signe !== 0 && importance >= 1) {
+      entree.marquants.push({
+        titre,
+        titreFr: titre,
+        date: Date.parse(String(e.date)),
+        actuel,
+        prevision,
+        unite: String(e.unit ?? ''),
+        echelle: String(e.scale ?? ''),
+        signe,
+        importance,
+      });
+    }
+    parPays.set(pays, entree);
+  }
+  const liste = [...parPays.values()]
+    .filter((p) => p.publies >= 3)
+    .map(({ somme, poids, ...p }) => ({
+      ...p,
+      indice: poids ? Math.round((somme / poids) * 100) : 0,
+      marquants: p.marquants.sort((a, b) => b.date - a.date).slice(0, 5),
+    }))
+    .sort((a, b) => b.indice - a.indice);
+  // Titres des publications marquantes traduits en français.
+  const titres = [...new Set(liste.flatMap((p) => p.marquants.map((m) => m.titre)))];
+  const fr = await traduire(titres, 'en', 'fr');
+  const carte = new Map(titres.map((t, i) => [t, fr[i]]));
+  for (const p of liste) for (const m of p.marquants) m.titreFr = carte.get(m.titre) ?? m.titre;
+  return liste;
+}
+
 async function calendrierBilingue(): Promise<EvenementCalendrier[]> {
   const evenements = await calendrier();
   const titres = [...new Set(evenements.map((e) => e.titre))];
@@ -543,6 +629,8 @@ export default {
     } else if (url.pathname === '/annonces') {
       const depeches = await bilingue(await agreger([FLUX_FINANCIALJUICE], 200));
       reponse = json({ generéLe: Date.now(), depeches }, 20);
+    } else if (url.pathname === '/surprises') {
+      reponse = json({ generéLe: Date.now(), jours: 30, pays: await surprises() }, 1800);
     } else if (url.pathname === '/calendrier') {
       reponse = json({ generéLe: Date.now(), evenements: await calendrierBilingue() }, 60);
     } else if (url.pathname === '/recherche') {
@@ -561,7 +649,7 @@ export default {
       const depeches = await bilingue(await agreger(fluxs, 80));
       reponse = json({ generéLe: Date.now(), depeches }, 120);
     } else if (url.pathname === '/' || url.pathname === '/sante') {
-      reponse = json({ service: 'parnassa-actualites', flux: FLUX.length, routes: ['/flux', '/annonces', '/calendrier', '/recherche?q=…&ticker=…'] }, 0);
+      reponse = json({ service: 'parnassa-actualites', flux: FLUX.length, routes: ['/flux', '/annonces', '/calendrier', '/surprises', '/recherche?q=…&ticker=…'] }, 0);
     } else {
       return json({ erreur: 'Route inconnue.' }, 0);
     }

@@ -2235,6 +2235,7 @@ th.trie {
   font: inherit;
 }
 .calendrier-defilement {
+  position: relative;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -2378,4 +2379,107 @@ th.trie {
   .etiquette-mobile {
     display: inline;
   }
+}
+
+/* ---- Indice de surprise ---- */
+.surprises {
+  padding: 10px 14px 4px;
+  border-bottom: 1px solid var(--bordure);
+}
+.surprises-entete {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.surprises-entete h4 {
+  margin: 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--texte-muet);
+  cursor: help;
+}
+.cartes-surprises {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 8px 0 6px;
+  scrollbar-width: thin;
+}
+.carte-surprise {
+  flex: 0 0 104px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--bordure);
+  background: var(--panneau);
+  text-align: left;
+}
+.carte-surprise:hover,
+.carte-surprise.actif {
+  border-color: var(--accent);
+}
+.carte-surprise strong {
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+.cs-pays {
+  font-size: 12px;
+  font-weight: 600;
+}
+.cs-detail {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.jauge-divergente {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--panneau-2);
+}
+.jauge-divergente::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: -2px;
+  width: 1px;
+  height: 8px;
+  background: var(--texte-muet);
+}
+.jauge-divergente i {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  border-radius: 999px;
+}
+.jauge-divergente i.positif {
+  left: 50%;
+  background: var(--hausse);
+}
+.jauge-divergente i.negatif {
+  right: 50%;
+  background: var(--baisse);
+}
+.detail-surprise {
+  padding: 4px 2px 8px;
+  font-size: 12px;
+}
+.detail-surprise ul {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.detail-surprise li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-variant-numeric: tabular-nums;
 }

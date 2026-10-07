@@ -3,6 +3,7 @@ import type { Etat } from '../types';
 import { exporterEtat, importerEtat } from '../stockage';
 import { reinitialiser } from '../trading';
 import { horodatageFichier, telecharger } from '../export';
+import { notifier } from '../alertes';
 import { IconeCroix } from './Icones';
 
 interface Props {
@@ -78,7 +79,7 @@ export function Parametres({ ouvert, fermer, etat, maj, remplacerEtat, signaler 
       setErreur('Notifications refusées par le navigateur : autorisez-les dans les réglages du site.');
       return;
     }
-    new Notification('Parnassa Trading', { body: 'Les notifications fonctionnent.', icon: 'icone-192.png' });
+    notifier('Parnassa Trading', 'Les notifications fonctionnent.');
     setErreur(null);
   };
 

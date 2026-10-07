@@ -207,6 +207,40 @@ export function useCalendrier(actif = true) {
   return { evenements, chargement };
 }
 
+export interface SurprisePays {
+  pays: string;
+  devise: string;
+  indice: number;
+  publies: number;
+  meilleurs: number;
+  moins_bons: number;
+  conformes: number;
+  marquants: { titre: string; titreFr: string; date: number; actuel: number; prevision: number; unite: string; echelle: string; signe: number; importance: number }[];
+}
+
+/** Indice de surprise économique sur 30 jours (rafraîchi toutes les 30 min). */
+export function useSurprises(actif = true) {
+  const [pays, setPays] = useState<SurprisePays[]>([]);
+  useEffect(() => {
+    if (!actif) return;
+    let vivant = true;
+    const tour = () =>
+      fetch(`${URL_ACTUALITES}/surprises`)
+        .then((r) => (r.ok ? (r.json() as Promise<{ pays: SurprisePays[] }>) : null))
+        .then((d) => {
+          if (vivant && d) setPays(d.pays);
+        })
+        .catch(() => undefined);
+    void tour();
+    const t = window.setInterval(tour, 1800000);
+    return () => {
+      vivant = false;
+      window.clearInterval(t);
+    };
+  }, [actif]);
+  return pays;
+}
+
 export function drapeau(pays: string): string {
   if (!/^[A-Z]{2}$/.test(pays)) return '🌐';
   return String.fromCodePoint(...[...pays].map((c) => 0x1f1e6 + c.charCodeAt(0) - 65));

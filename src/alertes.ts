@@ -27,14 +27,26 @@ export function demanderNotifications(): void {
   if ('Notification' in window && Notification.permission === 'default') void Notification.requestPermission();
 }
 
-export function notifier(titre: string, corps: string) {
-  if ('Notification' in window && Notification.permission === 'granted') {
+/**
+ * Notification système. Passe par le service worker quand il existe (obligatoire sur Android, et la
+ * notification ramène alors vers l'application au clic), sinon par l'API Notification classique.
+ */
+export function notifier(titre: string, corps: string, lien?: string) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  const options: NotificationOptions = { body: corps, icon: 'icone-192.png', badge: 'icone-192.png', data: { url: lien ?? window.location.href } };
+  const classique = () => {
     try {
-      new Notification(titre, { body: corps, icon: 'icone-192.png' });
+      new Notification(titre, options);
     } catch {
-      // Certains navigateurs mobiles n'autorisent les notifications que via un service worker.
+      // Notification impossible hors service worker sur ce navigateur.
     }
-  }
+  };
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker
+      .getRegistration()
+      .then((reg) => (reg ? reg.showNotification(titre, options) : classique()))
+      .catch(classique);
+  } else classique();
 }
 
 export function conditionRemplie(alerte: Alerte, prix: number): boolean {

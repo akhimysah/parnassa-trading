@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Etat } from '../types';
-import { compteARebours, drapeau, LIBELLES_DONNEE, useCalendrier, valeurCalendrier, type EvenementCalendrier } from '../actualites';
+import { compteARebours, drapeau, LIBELLES_DONNEE, useCalendrier, useSurprises, valeurCalendrier, type EvenementCalendrier } from '../actualites';
+import { Surprises } from '../composants/Surprises';
 
 interface Props {
   etat: Etat;
@@ -56,10 +57,12 @@ function cleJour(ms: number): string {
 /** Calendrier économique de la semaine, bilingue, avec valeurs publiées et compte à rebours. */
 export function Calendrier({ etat, maj }: Props) {
   const { evenements, chargement } = useCalendrier(true);
+  const surprises = useSurprises(true);
   const [filtres, setFiltres] = useState(lireFiltres);
   const [recherche, setRecherche] = useState('');
   const [, tic] = useState(0);
   const refAujourdhui = useRef<HTMLElement>(null);
+  const refDefilement = useRef<HTMLDivElement>(null);
   const defileFait = useRef(false);
   const langue = etat.parametres.langueActualites;
   const l = LIBELLES_DONNEE[langue];
@@ -108,8 +111,10 @@ export function Calendrier({ etat, maj }: Props) {
 
   const cleAujourdhui = cleJour(Date.now());
   useEffect(() => {
-    if (!defileFait.current && refAujourdhui.current) {
-      refAujourdhui.current.scrollIntoView({ block: 'start' });
+    const conteneur = refDefilement.current;
+    const section = refAujourdhui.current;
+    if (!defileFait.current && conteneur && section) {
+      conteneur.scrollTop = section.offsetTop; // le conteneur est positionné : offsetTop lui est relatif
       defileFait.current = true;
     }
   }, [parJour]);
@@ -155,7 +160,9 @@ export function Calendrier({ etat, maj }: Props) {
         )}
       </div>
 
-      <div className="calendrier-defilement">
+      <Surprises pays={surprises} langue={langue} />
+
+      <div className="calendrier-defilement" ref={refDefilement}>
         {chargement && evenements.length === 0 && <p className="vide">Chargement du calendrier…</p>}
         {!chargement && filtres_.length === 0 && <p className="vide">Aucun événement avec ces filtres.</p>}
         {parJour.map((g) => (

@@ -19,14 +19,14 @@ corepack pnpm dev        # http://localhost:5200
 | Screener | Screener actions (US, France, Allemagne, UK), crypto et forex |
 | Symbole | Infos, mini-graphique, analyse technique, actualités, données financières, profil |
 | Actualités | Fil de dépêches en direct façon salle de marché. Chaque dépêche existe en français et en anglais (traduction automatique côté relais) : boutons FR, EN ou FR + EN. Onglet « Annonces » : flux FinancialJuice en direct, chiffres économiques affichés réel / prévision / précédent. Panneau « Annonces économiques » : prochaines publications avec compte à rebours et publications récentes avec valeur réelle. 12 sources agrégées (FinancialJuice, MarketWatch, CNBC, Investing.com, FXStreet, ForexLive, Fed, BCE, CoinDesk, Cointelegraph, ABC Bourse, BFM), filtres par catégorie et langue, dépêches importantes signalées avec bandeau et son, recherche, squawk vocal (lecture à voix haute des nouvelles annonces en français ou en anglais, sur toutes les pages), mots-clés surveillés (alerte sur toutes les pages, onglet « Ma sélection », surlignage), dépêches du symbole courant, calendrier économique |
-| Calendrier | Calendrier économique de la semaine (d'hier à J+6), bilingue : valeurs publiées réel / prévision / précédent avec écart coloré, prochain événement surligné avec compte à rebours, filtres par pays, impact et recherche ; cartes compactes sur téléphone |
+| Calendrier | Indice de surprise économique par pays sur 30 jours (publications au-dessus / en dessous des prévisions, détail des chiffres marquants). Calendrier économique de la semaine (d'hier à J+6), bilingue : valeurs publiées réel / prévision / précédent avec écart coloré, prochain événement surligné avec compte à rebours, filtres par pays, impact et recherche ; cartes compactes sur téléphone |
 | Alertes | Alertes de prix en temps réel sur les paires Binance (flux WebSocket public, son + notification), tableau crypto en direct triable avec variations 24 h / 7 j / 30 j et mini-courbe |
 | Trading | Trading papier : portefeuille virtuel de 100 000 USDT, ordres marché / limite / stop long et short aux prix Binance en direct, stop-loss et take-profit automatiques, clôture partielle, journal de trading avec notes, dimensionnement par risque, statistiques (taux de réussite, profit factor, par paire), P&L latent et réalisé, courbe de capital, répartition du portefeuille, historique exportable en CSV |
 
 Bandeau de cotations défilant en haut, thème sombre / clair, comparaison de symboles superposés au graphique,
 dispositions nommées sauvegardées, liaison des graphiques en disposition multiple,
 gestion de la liste de suivi (ordre, ajout, suppression), lien de partage reprenant la vue courante
-(`#page/SYMBOLE/intervalle`), installation comme application (PWA) et barre de navigation en bas sur téléphone.
+(`#page/SYMBOLE/intervalle`), installation comme application (PWA avec service worker : consultation hors ligne, notifications y compris sur Android) et barre de navigation en bas sur téléphone.
 
 Paramètres (engrenage) : fuseau horaire des graphiques, frais simulés, capital de départ, son des alertes, sauvegarde et restauration complètes en JSON.
 

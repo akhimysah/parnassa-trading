@@ -371,6 +371,66 @@ async function calendrier() {
   }
 }
 __name(calendrier, "calendrier");
+var INVERSES = /unemployment|jobless|claims|chômage|layoff|bankrupt|insolvenc|deficit/i;
+async function surprises() {
+  const jour = 864e5;
+  const debut = new Date(Date.now() - 30 * jour).toISOString();
+  const fin = (/* @__PURE__ */ new Date()).toISOString();
+  let brut = [];
+  try {
+    const r = await fetch(`https://economic-calendar.tradingview.com/events?from=${debut}&to=${fin}&countries=${PAYS_CALENDRIER}`, {
+      headers: { Origin: "https://www.tradingview.com", "User-Agent": "Mozilla/5.0 (compatible; ParnassaTrading/1.0)" },
+      signal: AbortSignal.timeout(1e4)
+    });
+    if (r.ok) brut = (await r.json()).result ?? [];
+  } catch {
+    brut = [];
+  }
+  const parPays = /* @__PURE__ */ new Map();
+  for (const e of brut) {
+    const actuel = typeof e.actual === "number" ? e.actual : null;
+    const prevision = typeof e.forecast === "number" ? e.forecast : null;
+    const importance = Number(e.importance ?? -1);
+    if (actuel === null || prevision === null || importance < 0) continue;
+    const titre = String(e.title ?? "");
+    const pays = String(e.country ?? "");
+    const brutSigne = Math.sign(actuel - prevision);
+    const signe = INVERSES.test(titre) ? -brutSigne : brutSigne;
+    const poids = importance >= 1 ? 2 : 1;
+    const entree = parPays.get(pays) ?? { pays, devise: String(e.currency ?? ""), indice: 0, publies: 0, meilleurs: 0, moins_bons: 0, conformes: 0, marquants: [], somme: 0, poids: 0 };
+    entree.publies += 1;
+    entree.somme += signe * poids;
+    entree.poids += poids;
+    if (signe > 0) entree.meilleurs += 1;
+    else if (signe < 0) entree.moins_bons += 1;
+    else entree.conformes += 1;
+    if (signe !== 0 && importance >= 1) {
+      entree.marquants.push({
+        titre,
+        titreFr: titre,
+        date: Date.parse(String(e.date)),
+        actuel,
+        prevision,
+        unite: String(e.unit ?? ""),
+        echelle: String(e.scale ?? ""),
+        signe,
+        importance
+      });
+    }
+    parPays.set(pays, entree);
+  }
+  const liste = [...parPays.values()].filter((p) => p.publies >= 3).map(({ somme, poids, ...p }) => ({
+    ...p,
+    indice: poids ? Math.round(somme / poids * 100) : 0,
+    marquants: p.marquants.sort((a, b) => b.date - a.date).slice(0, 5)
+  })).sort((a, b) => b.indice - a.indice);
+  const titres = [...new Set(liste.flatMap((p) => p.marquants.map((m) => m.titre)))];
+  const fr = await traduire(titres, "en", "fr");
+  const carte = new Map(titres.map((t, i) => [t, fr[i]]));
+  for (const p of liste) for (const m of p.marquants) m.titreFr = carte.get(m.titre) ?? m.titre;
+  return liste;
+}
+__name(surprises, "surprises");
 async function calendrierBilingue() {
   const evenements = await calendrier();
   const titres = [...new Set(evenements.map((e) => e.titre))];
@@ -425,6 +485,8 @@ var actualites_default = {
     } else if (url.pathname === "/annonces") {
       const depeches = await bilingue(await agreger([FLUX_FINANCIALJUICE], 200));
       reponse = json({ gener\u00E9Le: Date.now(), depeches }, 20);
+    } else if (url.pathname === "/surprises") {
+      reponse = json({ gener\u00E9Le: Date.now(), jours: 30, pays: await surprises() }, 1800);
     } else if (url.pathname === "/calendrier") {
       reponse = json({ gener\u00E9Le: Date.now(), evenements: await calendrierBilingue() }, 60);
     } else if (url.pathname === "/recherche") {
@@ -442,7 +504,7 @@ var actualites_default = {
       const depeches = await bilingue(await agreger(fluxs, 80));
       reponse = json({ gener\u00E9Le: Date.now(), depeches }, 120);
     } else if (url.pathname === "/" || url.pathname === "/sante") {
-      reponse = json({ service: "parnassa-actualites", flux: FLUX.length, routes: ["/flux", "/annonces", "/calendrier", "/recherche?q=\u2026&ticker=\u2026"] }, 0);
+      reponse = json({ service: "parnassa-actualites", flux: FLUX.length, routes: ["/flux", "/annonces", "/calendrier", "/surprises", "/recherche?q=\u2026&ticker=\u2026"] }, 0);
     } else {
       return json({ erreur: "Route inconnue." }, 0);
     }
