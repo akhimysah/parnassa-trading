@@ -72,7 +72,7 @@ export function App() {
 
   // Fil d'actualités : chargé sur la page Actualités, ou partout si des mots-clés sont surveillés.
   const motsCles = etat.parametres.motsCles;
-  const fil = useFilActualites(60000, etat.page === 'actualites' || motsCles.length > 0);
+  const fil = useFilActualites(etat.page === 'actualites' ? 20000 : 60000, etat.page === 'actualites' || motsCles.length > 0);
   useEffect(() => {
     if (motsCles.length === 0 || fil.nouvelles.length === 0) return;
     const touchees = fil.nouvelles.filter((d) => motsClesTrouves(d.titre, motsCles).length > 0);

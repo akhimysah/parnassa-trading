@@ -2,7 +2,30 @@ import { useEffect, useRef, useState } from 'react';
 
 export const URL_ACTUALITES = 'https://parnassa-actualites.neobank.workers.dev';
 
-export type CategorieDepeche = 'marches' | 'forex' | 'crypto' | 'banques-centrales' | 'france' | 'matieres';
+export type CategorieDepeche = 'annonces' | 'marches' | 'forex' | 'crypto' | 'banques-centrales' | 'france' | 'matieres';
+
+export interface Donnee {
+  indicateur: string;
+  actuel: string;
+  prevision: string | null;
+  precedent: string | null;
+  ecart: 1 | -1 | 0 | null;
+}
+
+export interface EvenementCalendrier {
+  id: string;
+  titre: string;
+  pays: string;
+  devise: string;
+  periode: string;
+  date: number;
+  importance: number;
+  actuel: number | null;
+  prevision: number | null;
+  precedent: number | null;
+  unite: string;
+  echelle: string;
+}
 
 export interface Depeche {
   id: string;
@@ -13,9 +36,11 @@ export interface Depeche {
   langue: 'fr' | 'en';
   date: number;
   important: boolean;
+  donnee?: Donnee;
 }
 
 export const CATEGORIES_DEPECHES: { id: CategorieDepeche; libelle: string }[] = [
+  { id: 'annonces', libelle: 'Annonces' },
   { id: 'marches', libelle: 'Marchés' },
   { id: 'france', libelle: 'France' },
   { id: 'forex', libelle: 'Forex' },
@@ -115,6 +140,60 @@ export function useRechercheActualites(sujet: string, ticker?: string) {
 }
 
 export type FilActualites = ReturnType<typeof useFilActualites>;
+
+/** Calendrier économique (hier → J+6) avec valeurs publiées, rafraîchi chaque minute. */
+export function useCalendrier(actif = true) {
+  const [evenements, setEvenements] = useState<EvenementCalendrier[]>([]);
+  const [chargement, setChargement] = useState(true);
+  useEffect(() => {
+    if (!actif) return;
+    let vivant = true;
+    const tour = async () => {
+      try {
+        const r = await fetch(`${URL_ACTUALITES}/calendrier`);
+        if (!r.ok) return;
+        const d = (await r.json()) as { evenements: EvenementCalendrier[] };
+        if (vivant) setEvenements(d.evenements);
+      } catch {
+        // on garde la dernière version affichée
+      } finally {
+        if (vivant) setChargement(false);
+      }
+    };
+    void tour();
+    const t = window.setInterval(() => void tour(), 60000);
+    return () => {
+      vivant = false;
+      window.clearInterval(t);
+    };
+  }, [actif]);
+  return { evenements, chargement };
+}
+
+export function drapeau(pays: string): string {
+  if (!/^[A-Z]{2}$/.test(pays)) return '🌐';
+  return String.fromCodePoint(...[...pays].map((c) => 0x1f1e6 + c.charCodeAt(0) - 65));
+}
+
+export function valeurCalendrier(v: number | null, unite: string, echelle: string): string {
+  if (v === null) return '–';
+  const nombre = v.toLocaleString('fr-FR', { maximumFractionDigits: 2 });
+  const ech = echelle === 'B' ? ' Md' : echelle === 'M' ? ' M' : echelle === 'K' ? ' k' : echelle === 'T' ? ' Bn' : echelle ? ` ${echelle}` : '';
+  const un = unite === '%' ? ' %' : unite ? ` ${unite}` : '';
+  return `${nombre}${ech}${un}`;
+}
+
+export function compteARebours(ms: number): string {
+  const s = Math.round((ms - Date.now()) / 1000);
+  if (s <= 0) return 'maintenant';
+  const j = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  if (j > 0) return `dans ${j} j ${h} h`;
+  if (h > 0) return `dans ${h} h ${String(m).padStart(2, '0')}`;
+  if (m > 0) return `dans ${m} min`;
+  return `dans ${s} s`;
+}
 
 /** Mots-clés présents dans un titre (insensible à la casse et aux accents, mot entier). */
 export function motsClesTrouves(titre: string, motsCles: string[]): string[] {

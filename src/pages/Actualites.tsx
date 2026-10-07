@@ -6,7 +6,10 @@ import {
   heureCourte,
   ilYA,
   motsClesTrouves,
+  compteARebours,
+  drapeau,
   sujetDepuisSymbole,
+  useCalendrier,
   useRechercheActualites,
   type CategorieDepeche,
   type Depeche,
@@ -15,7 +18,7 @@ import {
 import { demanderNotifications } from '../alertes';
 import { sonner } from '../alertes';
 import { IconeCroix, IconeRecherche } from '../composants/Icones';
-import { WidgetTradingView } from '../composants/WidgetTradingView';
+import { CalendrierAnnonces } from '../composants/CalendrierAnnonces';
 
 interface Props {
   etat: Etat;
@@ -66,7 +69,9 @@ export function Actualites({ etat, fil, maj }: Props) {
     setNouveauMot('');
   };
   const retirerMot = (mot: string) => maj({ parametres: { ...etat.parametres, motsCles: motsCles.filter((m) => m !== mot) } });
-  const [filtre, setFiltre] = useState<Filtre>('tous');
+  const [filtre, setFiltre] = useState<Filtre>('annonces');
+  const calendrier = useCalendrier(true);
+  const prochaine = calendrier.evenements.find((e) => e.importance >= 1 && e.actuel === null && e.date > Date.now());
   const [langue, setLangue] = useState<'toutes' | 'fr' | 'en'>('toutes');
   const [importantsSeuls, setImportantsSeuls] = useState(false);
   const [recherche, setRecherche] = useState('');
@@ -92,7 +97,12 @@ export function Actualites({ etat, fil, maj }: Props) {
     const q = recherche.trim().toLowerCase();
     return depeches.filter(
       (d) =>
-        (filtre === 'tous' || (filtre === 'selection' ? motsClesTrouves(d.titre, motsCles).length > 0 : d.categorie === filtre)) &&
+        (filtre === 'tous' ||
+          (filtre === 'selection'
+            ? motsClesTrouves(d.titre, motsCles).length > 0
+            : filtre === 'annonces'
+              ? d.source === 'FinancialJuice'
+              : d.categorie === filtre)) &&
         (langue === 'toutes' || (langue === 'fr' ? SOURCES_FR.has(d.langue) : !SOURCES_FR.has(d.langue))) &&
         (!importantsSeuls || d.important) &&
         (!q || d.titre.toLowerCase().includes(q) || d.source.toLowerCase().includes(q)),
@@ -104,7 +114,10 @@ export function Actualites({ etat, fil, maj }: Props) {
 
   const compteurs = useMemo(() => {
     const c: Record<string, number> = {};
-    for (const d of depeches) c[d.categorie] = (c[d.categorie] ?? 0) + 1;
+    for (const d of depeches) {
+      if (d.categorie !== 'annonces') c[d.categorie] = (c[d.categorie] ?? 0) + 1;
+      if (d.source === 'FinancialJuice') c.annonces = (c.annonces ?? 0) + 1;
+    }
     return c;
   }, [depeches]);
 
@@ -203,6 +216,11 @@ export function Actualites({ etat, fil, maj }: Props) {
                 <span className="point-direct" aria-hidden /> En direct · mis à jour {ilYA(majLe)} · {filtrees.length} dépêche{filtrees.length > 1 ? 's' : ''}
               </span>
             )}
+            {prochaine && (
+              <span className="prochaine-annonce" title={new Date(prochaine.date).toLocaleString('fr-FR')}>
+                Prochaine : {drapeau(prochaine.pays)} {prochaine.titre} <strong>{compteARebours(prochaine.date)}</strong>
+              </span>
+            )}
             {nouvelles.length > 0 && (
               <button
                 className="bouton-nouvelles"
@@ -229,7 +247,22 @@ export function Actualites({ etat, fil, maj }: Props) {
                     </time>
                     <a href={d.lien} target="_blank" rel="noopener noreferrer">
                       {d.important && <span className="etoile-importante" aria-label="Important">★</span>}
-                      <TitreSurligne titre={d.titre} mots={trouves} />
+                      {d.donnee ? (
+                        <span className="donnee-eco">
+                          <span className="indicateur">
+                            <TitreSurligne titre={d.donnee.indicateur} mots={trouves} />
+                          </span>
+                          <span className={`puce-valeur reel ${d.donnee.ecart === 1 ? 'hausse' : d.donnee.ecart === -1 ? 'baisse' : ''}`}>
+                            Réel <strong>{d.donnee.actuel}</strong>
+                            {d.donnee.ecart === 1 && ' ▲'}
+                            {d.donnee.ecart === -1 && ' ▼'}
+                          </span>
+                          <span className="puce-valeur">Prév. {d.donnee.prevision ?? '–'}</span>
+                          <span className="puce-valeur">Préc. {d.donnee.precedent ?? '–'}</span>
+                        </span>
+                      ) : (
+                        <TitreSurligne titre={d.titre} mots={trouves} />
+                      )}
                     </a>
                     <span className="source-depeche">{d.source}</span>
                     <span className={`categorie-depeche cat-${d.categorie}`}>{CATEGORIES_DEPECHES.find((c) => c.id === d.categorie)?.libelle}</span>
@@ -243,6 +276,7 @@ export function Actualites({ etat, fil, maj }: Props) {
         </div>
 
         <aside className="colonne-droite">
+          <CalendrierAnnonces evenements={calendrier.evenements} chargement={calendrier.chargement} />
           <div className="carte">
             <h3>
               {ticker(etat.symbole)} · {nomSymbole(etat.symbole)}
@@ -261,22 +295,7 @@ export function Actualites({ etat, fil, maj }: Props) {
               ))}
             </ul>
           </div>
-          <div className="carte calendrier-compact">
-            <h3>Calendrier économique</h3>
-            <WidgetTradingView
-              widget="events"
-              caches={[{ coin: 'bas-droite' }]}
-              config={{
-                colorTheme: etat.theme,
-                isTransparent: true,
-                width: '100%',
-                height: '100%',
-                locale: 'fr',
-                importanceFilter: '0,1',
-                countryFilter: 'fr,eu,de,gb,us',
-              }}
-            />
-          </div>
+          
         </aside>
       </div>
     </div>
