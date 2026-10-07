@@ -2918,14 +2918,13 @@ th.trie {
 /* ---- Volume en lots ---- */
 .ligne-volume {
   display: grid;
-  grid-template-columns: 1fr 110px;
+  grid-template-columns: minmax(0, 1fr) 96px;
   gap: 8px;
+  padding: 8px 14px 0;
 }
-.ligne-volume label {
-  padding-right: 0;
-}
-.ligne-volume label:last-child {
-  padding-left: 0;
+.formulaire-ordre .ligne-volume label {
+  padding: 0;
+  min-width: 0;
 }
 .ligne-volume .selecteur {
   height: 36px;
