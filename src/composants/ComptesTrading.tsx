@@ -51,7 +51,8 @@ export function BarreCompte({ gestion, ouvrir }: { gestion: GestionCompte; ouvri
 /** Solde, résultat et statut d'un compte dans la liste. */
 function EtatCompte({ compte }: { compte: CompteDistant }) {
   const r = compte.resume;
-  if (!r || r.balance === null) return <span className="lc-badge neutre">Jamais utilisé</span>;
+  if (!r) return null; // serveur sans résumé
+  if (r.balance === null) return <span className="lc-badge neutre">Jamais utilisé</span>;
   const resultat = r.balance - compte.capital;
   const pctRes = (resultat / compte.capital) * 100;
   return (
