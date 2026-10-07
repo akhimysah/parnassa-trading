@@ -22,6 +22,7 @@ import {
 } from '../trading';
 import { horodatageFichier, telecharger, versCsv } from '../export';
 import { CourbeCapital } from '../composants/CourbeCapital';
+import { Repartition, type Part } from '../composants/Repartition';
 import { IconeCroix, IconeTelecharger } from '../composants/Icones';
 
 interface Props {
@@ -75,6 +76,21 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
   const { capital, latent, immobilise } = useMemo(() => valeurPortefeuille(p, ticks), [p, ticks]);
   const realise = useMemo(() => realiseTotal(p), [p]);
   const stats = useMemo(() => statistiques(p), [p]);
+
+  // Répartition : liquidités + valeur actuelle de chaque paire (positions regroupées par symbole).
+  const parts = useMemo<Part[]>(() => {
+    const COULEURS = ['#2962ff', '#f6a821', '#ab47bc', '#26a69a', '#ef5350', '#42a5f5', '#8d6e63', '#ec407a', '#7e57c2'];
+    const parSymbole = new Map<string, number>();
+    for (const pos of p.positions) {
+      const actuel = ticks[paireBinance(pos.symbole)]?.prix;
+      const valeur = pos.cout + (actuel ? pnlLatent(pos, actuel) : 0);
+      parSymbole.set(pos.symbole, (parSymbole.get(pos.symbole) ?? 0) + valeur);
+    }
+    const lignes = [...parSymbole.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([sym, v], i) => ({ libelle: ticker(sym), valeur: v, couleur: COULEURS[i % COULEURS.length] }));
+    return [{ libelle: 'Liquidités', valeur: p.solde, couleur: 'var(--texte-muet)' }, ...lignes];
+  }, [p, ticks]);
 
   const slNum = protections ? nombre(stopLoss) : undefined;
   const risqueNum = nombre(risque);
@@ -262,9 +278,15 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
         </div>
       </div>
 
-      <div className="carte">
-        <h3>Évolution du capital</h3>
-        <CourbeCapital points={p.historiqueCapital} capitalInitial={p.capitalInitial} courant={capital} />
+      <div className="grille-capital">
+        <div className="carte">
+          <h3>Évolution du capital</h3>
+          <CourbeCapital points={p.historiqueCapital} capitalInitial={p.capitalInitial} courant={capital} />
+        </div>
+        <div className="carte">
+          <h3>Répartition</h3>
+          <Repartition parts={parts} />
+        </div>
       </div>
 
       <div className="grille-trading">

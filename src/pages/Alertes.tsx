@@ -35,6 +35,55 @@ export function Alertes({ etat, ticks, maj, ouvrirSymbole }: Props) {
 
   const suivisCrypto = useMemo(() => etat.listeSuivi.filter(estBinance), [etat.listeSuivi]);
   const historiques = useCloturesJournalieres(suivisCrypto.map(paireBinance), 30);
+  const [tri, setTri] = useState<{ col: 'paire' | 'prix' | 'j1' | 'j7' | 'j30' | 'volume'; desc: boolean }>({ col: 'j1', desc: true });
+
+  const lignesCrypto = useMemo(() => {
+    const lignes = suivisCrypto.map((id) => {
+      const t = ticks[paireBinance(id)];
+      const serie = historiques[paireBinance(id)] ?? [];
+      const var1 = t && t.ouverture24h ? ((t.prix - t.ouverture24h) / t.ouverture24h) * 100 : null;
+      const ref7 = serie.length >= 8 ? serie[serie.length - 8] : null;
+      const var7 = ref7 && t ? ((t.prix - ref7) / ref7) * 100 : null;
+      const ref30 = serie.length > 0 ? serie[0] : null;
+      const var30 = ref30 && t ? ((t.prix - ref30) / ref30) * 100 : null;
+      return { id, t, serie, var1, var7, var30 };
+    });
+    const valeur = (l: (typeof lignes)[number]): number | string | null => {
+      switch (tri.col) {
+        case 'paire':
+          return ticker(l.id);
+        case 'prix':
+          return l.t?.prix ?? null;
+        case 'j1':
+          return l.var1;
+        case 'j7':
+          return l.var7;
+        case 'j30':
+          return l.var30;
+        case 'volume':
+          return l.t?.volume24h ?? null;
+      }
+    };
+    return lignes.sort((a, b) => {
+      const va = valeur(a);
+      const vb = valeur(b);
+      if (va === null) return 1;
+      if (vb === null) return -1;
+      const c = typeof va === 'string' ? va.localeCompare(vb as string) : (va as number) - (vb as number);
+      return tri.desc ? -c : c;
+    });
+  }, [suivisCrypto, ticks, historiques, tri]);
+
+  const entete = (col: typeof tri.col, libelle: string, num = true) => (
+    <th
+      className={`${num ? 'num' : ''} triable ${tri.col === col ? 'trie' : ''}`}
+      onClick={() => setTri((t) => ({ col, desc: t.col === col ? !t.desc : col !== 'paire' }))}
+      aria-sort={tri.col === col ? (tri.desc ? 'descending' : 'ascending') : 'none'}
+    >
+      {libelle}
+      {tri.col === col && <span className="fleche-tri">{tri.desc ? ' ↓' : ' ↑'}</span>}
+    </th>
+  );
 
   const creer = (e: React.FormEvent) => {
     e.preventDefault();
@@ -226,24 +275,20 @@ export function Alertes({ etat, ticks, maj, ouvrirSymbole }: Props) {
 <table className="tableau-prix">
           <thead>
             <tr>
-              <th>Paire</th>
+              {entete('paire', 'Paire', false)}
               <th>Nom</th>
-              <th className="num">Dernier</th>
-              <th className="num">24 h</th>
-              <th className="num">7 j</th>
-              <th>30 jours</th>
+              {entete('prix', 'Dernier')}
+              {entete('j1', '24 h')}
+              {entete('j7', '7 j')}
+              {entete('j30', '30 j')}
+              <th>Tendance</th>
               <th className="num">Plus haut</th>
               <th className="num">Plus bas</th>
-              <th className="num">Volume (USDT)</th>
+              {entete('volume', 'Volume (USDT)')}
             </tr>
           </thead>
           <tbody>
-            {suivisCrypto.map((id) => {
-              const t = ticks[paireBinance(id)];
-              const variation = t && t.ouverture24h ? ((t.prix - t.ouverture24h) / t.ouverture24h) * 100 : null;
-              const serie = historiques[paireBinance(id)] ?? [];
-              const ref7 = serie.length >= 8 ? serie[serie.length - 8] : null;
-              const var7 = ref7 && t ? ((t.prix - ref7) / ref7) * 100 : null;
+            {lignesCrypto.map(({ id, t, serie, var1: variation, var7, var30 }) => {
               return (
                 <tr key={id} onClick={() => ouvrirSymbole(id)}>
                   <td>
@@ -256,6 +301,9 @@ export function Alertes({ etat, ticks, maj, ouvrirSymbole }: Props) {
                   </td>
                   <td className={`num ${var7 === null ? '' : var7 >= 0 ? 'hausse' : 'baisse'}`}>
                     {var7 === null ? '…' : `${var7 >= 0 ? '+' : ''}${var7.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} %`}
+                  </td>
+                  <td className={`num ${var30 === null ? '' : var30 >= 0 ? 'hausse' : 'baisse'}`}>
+                    {var30 === null ? '…' : `${var30 >= 0 ? '+' : ''}${var30.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} %`}
                   </td>
                   <td>
                     <MiniCourbe valeurs={serie} />

@@ -18,10 +18,10 @@ corepack pnpm dev        # http://localhost:5200
 | Marchés | Vue d'ensemble, hotlists US, heatmaps actions / crypto / forex, taux croisés |
 | Screener | Screener actions (US, France, Allemagne, UK), crypto et forex |
 | Symbole | Infos, mini-graphique, analyse technique, actualités, données financières, profil |
-| Actualités | Fil de dépêches en direct façon salle de marché : 11 sources agrégées (MarketWatch, CNBC, Investing.com, FXStreet, ForexLive, Fed, BCE, CoinDesk, Cointelegraph, ABC Bourse, BFM), filtres par catégorie et langue, dépêches importantes signalées avec bandeau et son, recherche, dépêches du symbole courant, calendrier économique |
+| Actualités | Fil de dépêches en direct façon salle de marché : 11 sources agrégées (MarketWatch, CNBC, Investing.com, FXStreet, ForexLive, Fed, BCE, CoinDesk, Cointelegraph, ABC Bourse, BFM), filtres par catégorie et langue, dépêches importantes signalées avec bandeau et son, recherche, mots-clés surveillés (alerte sur toutes les pages, onglet « Ma sélection », surlignage), dépêches du symbole courant, calendrier économique |
 | Calendrier | Calendrier économique filtrable par pays et importance |
-| Alertes | Alertes de prix en temps réel sur les paires Binance (flux WebSocket public, son + notification), tableau crypto en direct avec variation 7 j et mini-courbe 30 j |
-| Trading | Trading papier : portefeuille virtuel de 100 000 USDT, ordres marché / limite / stop long et short aux prix Binance en direct, stop-loss et take-profit automatiques, clôture partielle, journal de trading avec notes, dimensionnement par risque, statistiques (taux de réussite, profit factor, par paire), P&L latent et réalisé, courbe de capital, historique exportable en CSV |
+| Alertes | Alertes de prix en temps réel sur les paires Binance (flux WebSocket public, son + notification), tableau crypto en direct triable avec variations 24 h / 7 j / 30 j et mini-courbe |
+| Trading | Trading papier : portefeuille virtuel de 100 000 USDT, ordres marché / limite / stop long et short aux prix Binance en direct, stop-loss et take-profit automatiques, clôture partielle, journal de trading avec notes, dimensionnement par risque, statistiques (taux de réussite, profit factor, par paire), P&L latent et réalisé, courbe de capital, répartition du portefeuille, historique exportable en CSV |
 
 Bandeau de cotations défilant en haut, thème sombre / clair, comparaison de symboles superposés au graphique,
 dispositions nommées sauvegardées, liaison des graphiques en disposition multiple,

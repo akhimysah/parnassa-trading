@@ -27,7 +27,7 @@ export function demanderNotifications(): void {
   if ('Notification' in window && Notification.permission === 'default') void Notification.requestPermission();
 }
 
-function notifier(titre: string, corps: string) {
+export function notifier(titre: string, corps: string) {
   if ('Notification' in window && Notification.permission === 'granted') {
     try {
       new Notification(titre, { body: corps, icon: 'icone-192.png' });

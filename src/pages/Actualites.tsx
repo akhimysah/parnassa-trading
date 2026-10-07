@@ -5,26 +5,67 @@ import {
   CATEGORIES_DEPECHES,
   heureCourte,
   ilYA,
+  motsClesTrouves,
   sujetDepuisSymbole,
-  useFilActualites,
   useRechercheActualites,
   type CategorieDepeche,
   type Depeche,
+  type FilActualites,
 } from '../actualites';
+import { demanderNotifications } from '../alertes';
 import { sonner } from '../alertes';
 import { IconeCroix, IconeRecherche } from '../composants/Icones';
 import { WidgetTradingView } from '../composants/WidgetTradingView';
 
 interface Props {
   etat: Etat;
+  fil: FilActualites;
+  maj: (p: Partial<Etat>) => void;
 }
 
-type Filtre = 'tous' | CategorieDepeche;
+type Filtre = 'tous' | 'selection' | CategorieDepeche;
+
+/** Met en évidence les mots-clés surveillés dans un titre. */
+function TitreSurligne({ titre, mots }: { titre: string; mots: string[] }) {
+  if (mots.length === 0) return <>{titre}</>;
+  const sansAccents = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const base = sansAccents(titre);
+  const plages: [number, number][] = [];
+  for (const m of mots) {
+    const cible = sansAccents(m.trim());
+    let i = base.indexOf(cible);
+    while (cible && i !== -1) {
+      plages.push([i, i + cible.length]);
+      i = base.indexOf(cible, i + cible.length);
+    }
+  }
+  plages.sort((a, b) => a[0] - b[0]);
+  const morceaux: React.ReactNode[] = [];
+  let curseur = 0;
+  plages.forEach(([debut, fin], k) => {
+    if (debut < curseur) return;
+    morceaux.push(titre.slice(curseur, debut));
+    morceaux.push(<mark key={k}>{titre.slice(debut, fin)}</mark>);
+    curseur = fin;
+  });
+  morceaux.push(titre.slice(curseur));
+  return <>{morceaux}</>;
+}
 
 const SOURCES_FR = new Set(['fr']);
 
-export function Actualites({ etat }: Props) {
-  const { depeches, erreur, chargement, majLe, nouvelles, effacerNouvelles } = useFilActualites(60000);
+export function Actualites({ etat, fil, maj }: Props) {
+  const { depeches, erreur, chargement, majLe, nouvelles, effacerNouvelles } = fil;
+  const motsCles = etat.parametres.motsCles;
+  const [nouveauMot, setNouveauMot] = useState('');
+  const ajouterMot = () => {
+    const mot = nouveauMot.trim();
+    if (!mot || motsCles.some((m) => m.toLowerCase() === mot.toLowerCase())) return;
+    demanderNotifications();
+    maj({ parametres: { ...etat.parametres, motsCles: [...motsCles, mot] } });
+    setNouveauMot('');
+  };
+  const retirerMot = (mot: string) => maj({ parametres: { ...etat.parametres, motsCles: motsCles.filter((m) => m !== mot) } });
   const [filtre, setFiltre] = useState<Filtre>('tous');
   const [langue, setLangue] = useState<'toutes' | 'fr' | 'en'>('toutes');
   const [importantsSeuls, setImportantsSeuls] = useState(false);
@@ -51,12 +92,12 @@ export function Actualites({ etat }: Props) {
     const q = recherche.trim().toLowerCase();
     return depeches.filter(
       (d) =>
-        (filtre === 'tous' || d.categorie === filtre) &&
+        (filtre === 'tous' || (filtre === 'selection' ? motsClesTrouves(d.titre, motsCles).length > 0 : d.categorie === filtre)) &&
         (langue === 'toutes' || (langue === 'fr' ? SOURCES_FR.has(d.langue) : !SOURCES_FR.has(d.langue))) &&
         (!importantsSeuls || d.important) &&
         (!q || d.titre.toLowerCase().includes(q) || d.source.toLowerCase().includes(q)),
     );
-  }, [depeches, filtre, langue, importantsSeuls, recherche]);
+  }, [depeches, filtre, langue, importantsSeuls, recherche, motsCles]);
 
   const derniereImportante = depeches.find((d) => d.important && Date.now() - d.date < 2 * 3600000);
   const nouvellesIds = useMemo(() => new Set(nouvelles.map((d) => d.id)), [nouvelles]);
@@ -92,6 +133,11 @@ export function Actualites({ etat }: Props) {
         <button className={filtre === 'tous' ? 'actif' : ''} onClick={() => setFiltre('tous')}>
           Tout <span className="compteur-onglet">{depeches.length}</span>
         </button>
+        {motsCles.length > 0 && (
+          <button className={filtre === 'selection' ? 'actif' : ''} onClick={() => setFiltre('selection')} title="Dépêches contenant vos mots-clés">
+            Ma sélection <span className="compteur-onglet">{depeches.filter((d) => motsClesTrouves(d.titre, motsCles).length > 0).length}</span>
+          </button>
+        )}
         {CATEGORIES_DEPECHES.map((c) => (
           <button key={c.id} className={filtre === c.id ? 'actif' : ''} onClick={() => setFiltre(c.id)}>
             {c.libelle} {compteurs[c.id] ? <span className="compteur-onglet">{compteurs[c.id]}</span> : null}
@@ -123,6 +169,30 @@ export function Actualites({ etat }: Props) {
         </div>
       </div>
 
+      <div className="barre-mots-cles">
+        <span className="muet">Mots-clés surveillés</span>
+        {motsCles.map((m) => (
+          <span key={m} className="puce-mot">
+            {m}
+            <button aria-label={`Retirer ${m}`} onClick={() => retirerMot(m)}>
+              <IconeCroix width={10} height={10} />
+            </button>
+          </span>
+        ))}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            ajouterMot();
+          }}
+        >
+          <input value={nouveauMot} onChange={(e) => setNouveauMot(e.target.value)} placeholder="Ex. Powell, BCE, Nvidia, tarifs…" />
+          <button type="submit" className="bouton-secondaire" disabled={!nouveauMot.trim()}>
+            Surveiller
+          </button>
+        </form>
+        {motsCles.length > 0 && <span className="muet aide-mots">Alerte (message, son, notification) à chaque nouvelle dépêche, sur toutes les pages.</span>}
+      </div>
+
       <div className="colonnes-actualites">
         <div className="fil" ref={refListe}>
           <div className="fil-etat">
@@ -150,19 +220,22 @@ export function Actualites({ etat }: Props) {
             <section key={groupe.jour}>
               <h4 className="jour">{groupe.jour}</h4>
               <ul className="depeches">
-                {groupe.depeches.map((d) => (
-                  <li key={d.id} className={`${d.important ? 'importante' : ''} ${nouvellesIds.has(d.id) ? 'nouvelle' : ''}`}>
+                {groupe.depeches.map((d) => {
+                  const trouves = motsClesTrouves(d.titre, motsCles);
+                  return (
+                  <li key={d.id} className={`${d.important ? 'importante' : ''} ${nouvellesIds.has(d.id) ? 'nouvelle' : ''} ${trouves.length ? 'selectionnee' : ''}`}>
                     <time dateTime={new Date(d.date).toISOString()} title={new Date(d.date).toLocaleString('fr-FR')}>
                       {heureCourte(d.date)}
                     </time>
                     <a href={d.lien} target="_blank" rel="noopener noreferrer">
                       {d.important && <span className="etoile-importante" aria-label="Important">★</span>}
-                      {d.titre}
+                      <TitreSurligne titre={d.titre} mots={trouves} />
                     </a>
                     <span className="source-depeche">{d.source}</span>
                     <span className={`categorie-depeche cat-${d.categorie}`}>{CATEGORIES_DEPECHES.find((c) => c.id === d.categorie)?.libelle}</span>
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             </section>
           ))}

@@ -46,6 +46,8 @@ export interface Parametres {
   frais: number;
   /** Son lors du déclenchement d'une alerte ou d'une protection. */
   son: boolean;
+  /** Mots-clés surveillés dans le fil d'actualités (alerte à chaque nouvelle dépêche correspondante). */
+  motsCles: string[];
 }
 
 export type Sens = 'achat' | 'vente';

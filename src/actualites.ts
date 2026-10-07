@@ -37,7 +37,7 @@ async function charger(chemin: string, signal?: AbortSignal): Promise<Depeche[]>
 }
 
 /** Fil principal, rafraîchi toutes les `intervalleMs` ms ; signale les nouvelles dépêches par rapport au passage précédent. */
-export function useFilActualites(intervalleMs = 60000) {
+export function useFilActualites(intervalleMs = 60000, actif = true) {
   const [depeches, setDepeches] = useState<Depeche[]>([]);
   const [erreur, setErreur] = useState<string | null>(null);
   const [chargement, setChargement] = useState(true);
@@ -46,12 +46,13 @@ export function useFilActualites(intervalleMs = 60000) {
   const connus = useRef<Set<string> | null>(null);
 
   useEffect(() => {
-    let actif = true;
+    if (!actif) return;
+    let vivant = true;
     const controleur = new AbortController();
     const tour = async () => {
       try {
         const liste = await charger('/flux', controleur.signal);
-        if (!actif) return;
+        if (!vivant) return;
         if (connus.current) {
           const fraiches = liste.filter((d) => !connus.current!.has(d.id));
           if (fraiches.length > 0) setNouvelles(fraiches);
@@ -61,9 +62,9 @@ export function useFilActualites(intervalleMs = 60000) {
         setErreur(null);
         setMajLe(Date.now());
       } catch (e) {
-        if (actif && !(e instanceof DOMException && e.name === 'AbortError')) setErreur(e instanceof Error ? e.message : 'Erreur réseau');
+        if (vivant && !(e instanceof DOMException && e.name === 'AbortError')) setErreur(e instanceof Error ? e.message : 'Erreur réseau');
       } finally {
-        if (actif) setChargement(false);
+        if (vivant) setChargement(false);
       }
     };
     void tour();
@@ -73,12 +74,12 @@ export function useFilActualites(intervalleMs = 60000) {
     };
     document.addEventListener('visibilitychange', surVisibilite);
     return () => {
-      actif = false;
+      vivant = false;
       controleur.abort();
       window.clearInterval(minuteur);
       document.removeEventListener('visibilitychange', surVisibilite);
     };
-  }, [intervalleMs]);
+  }, [intervalleMs, actif]);
 
   return { depeches, erreur, chargement, majLe, nouvelles, effacerNouvelles: () => setNouvelles([]) };
 }
@@ -111,6 +112,20 @@ export function useRechercheActualites(sujet: string, ticker?: string) {
     };
   }, [sujet, ticker]);
   return { depeches, chargement };
+}
+
+export type FilActualites = ReturnType<typeof useFilActualites>;
+
+/** Mots-clés présents dans un titre (insensible à la casse et aux accents, mot entier). */
+export function motsClesTrouves(titre: string, motsCles: string[]): string[] {
+  const sansAccents = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const t = sansAccents(titre);
+  return motsCles.filter((m) => {
+    const mot = sansAccents(m.trim());
+    if (!mot) return false;
+    const echappe = mot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`(^|[^a-z0-9])${echappe}([^a-z0-9]|$)`).test(t);
+  });
 }
 
 export function heureCourte(ms: number): string {
