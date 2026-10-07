@@ -44,6 +44,16 @@ les renvoie en JSON avec CORS. Déploiement :
 cd worker && npx wrangler deploy -c wrangler.json
 ```
 
+## Notifications push (application fermée)
+
+Paramètres → « Notifications push » abonne l'appareil (Web Push standard, sans service tiers). Toutes les 2 minutes,
+la tâche planifiée du relais envoie à chaque appareil : les annonces FinancialJuice (importantes, toutes, ou seulement
+celles qui contiennent un mot-clé surveillé), les rappels d'événements économiques et leur publication, et les alertes
+de prix crypto franchies. Chiffrement aes128gcm et signature VAPID faits dans `worker/push.ts` ; la clé privée est un
+secret Cloudflare (`wrangler secret put VAPID_PRIVEE`), la clé publique est dans `wrangler.json`. Les abonnements sont
+stockés dans KV (préfixe `abo:`, expiration 60 jours). Sur iPhone / iPad, le push exige l'application installée sur
+l'écran d'accueil (iOS 16.4+).
+
 ## Limites des widgets gratuits
 
 - Certains indices ne sont servis que via des CFD (ex. `FOREXCOM:SPXUSD` pour le S&P 500) ; `src/symboles.ts` contient la table de correspondance.

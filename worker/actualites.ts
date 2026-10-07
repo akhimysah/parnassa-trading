@@ -421,7 +421,7 @@ async function texteFinancialJuice(ctx?: ExecutionContext): Promise<string | nul
 
 async function rafraichirFinancialJuice(env: Env): Promise<string> {
   const actuelle = await lireCopieFJ(env);
-  if (actuelle && Date.now() - actuelle.t < 100000) return 'déjà à jour';
+  if (actuelle && Date.now() - actuelle.t < 90000) return 'déjà à jour';
   try {
     const r = await fetch(FLUX_FINANCIALJUICE.url, {
       headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ParnassaTrading/1.0; +https://akhimysah.github.io/parnassa-trading/)', Accept: 'application/rss+xml, application/xml;q=0.9, */*;q=0.8' },
@@ -757,9 +757,14 @@ export default {
     envGlobal = env;
     ctx.waitUntil(
       (async () => {
+        const avant = await lireCopieFJ(env);
         const etat = await rafraichirFinancialJuice(env);
         console.log(`FinancialJuice : ${etat}`);
-        const bilan = await tourneePush(env, evenement.scheduledTime);
+        const apres = await lireCopieFJ(env);
+        // Annonces parues depuis la dernière récupération réussie : rien n'est perdu si FinancialJuice
+        // a refusé un passage (429), et rien n'est envoyé deux fois.
+        const fenetreFJ = apres && avant && apres.t > avant.t && avant.t > 0 ? { debut: avant.t, fin: apres.t, texte: apres.texte } : null;
+        const bilan = await tourneePush(env, evenement.scheduledTime, fenetreFJ);
         console.log(`Push : ${bilan}`);
         await Promise.all([sauverSecours(), sauverDictionnaires()]);
       })(),
@@ -941,7 +946,7 @@ function valeurTexte(v: number | null, unite: string, echelle: string): string {
  * Tournée de la tâche planifiée : pour chaque appareil abonné, annonces FinancialJuice parues dans la fenêtre
  * des 2 dernières minutes, rappels d'événements, publications suivies et alertes de prix franchies.
  */
-async function tourneePush(env: Env, heurePlanifiee: number): Promise<string> {
+async function tourneePush(env: Env, heurePlanifiee: number, fenetreFJ: { debut: number; fin: number; texte: string } | null): Promise<string> {
   const liste = await env.ANNONCES.list({ prefix: 'abo:' });
   if (liste.keys.length === 0) return 'aucun abonné';
   const enregistrements = (
@@ -951,9 +956,8 @@ async function tourneePush(env: Env, heurePlanifiee: number): Promise<string> {
   const fin = heurePlanifiee;
   const debut = fin - 120000;
 
-  // Annonces FinancialJuice parues dans la fenêtre, traduites.
-  const texteFJ = (await lireCopieFJ(env))?.texte ?? null;
-  const nouvelles = texteFJ ? parser(texteFJ, FLUX_FINANCIALJUICE).filter((d) => d.date >= debut && d.date < fin) : [];
+  // Annonces FinancialJuice parues depuis la récupération précédente, traduites.
+  const nouvelles = fenetreFJ ? parser(fenetreFJ.texte, FLUX_FINANCIALJUICE).filter((d) => d.date >= fenetreFJ.debut && d.date < fenetreFJ.fin) : [];
   const nouvellesBilingues = nouvelles.length ? await bilingue(nouvelles) : [];
 
   // Calendrier (rappels et publications) seulement si un abonné en a besoin.

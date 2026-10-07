@@ -398,7 +398,7 @@ async function texteFinancialJuice(ctx) {
 __name(texteFinancialJuice, "texteFinancialJuice");
 async function rafraichirFinancialJuice(env) {
   const actuelle = await lireCopieFJ(env);
-  if (actuelle && Date.now() - actuelle.t < 1e5) return "d\xE9j\xE0 \xE0 jour";
+  if (actuelle && Date.now() - actuelle.t < 9e4) return "d\xE9j\xE0 \xE0 jour";
   try {
     const r = await fetch(FLUX_FINANCIALJUICE.url, {
       headers: { "User-Agent": "Mozilla/5.0 (compatible; ParnassaTrading/1.0; +https://akhimysah.github.io/parnassa-trading/)", Accept: "application/rss+xml, application/xml;q=0.9, */*;q=0.8" },
@@ -662,9 +662,12 @@ var actualites_default = {
     envGlobal = env;
     ctx.waitUntil(
       (async () => {
+        const avant = await lireCopieFJ(env);
         const etat = await rafraichirFinancialJuice(env);
         console.log(`FinancialJuice : ${etat}`);
-        const bilan = await tourneePush(env, evenement.scheduledTime);
+        const apres = await lireCopieFJ(env);
+        const fenetreFJ = apres && avant && apres.t > avant.t && avant.t > 0 ? { debut: avant.t, fin: apres.t, texte: apres.texte } : null;
+        const bilan = await tourneePush(env, evenement.scheduledTime, fenetreFJ);
         console.log(`Push : ${bilan}`);
         await Promise.all([sauverSecours(), sauverDictionnaires()]);
       })()
@@ -813,14 +816,13 @@ function valeurTexte(v, unite, echelle) {
   return `${v}${echelle ? ` ${echelle}` : ""}${unite === "%" ? " %" : unite ? ` ${unite}` : ""}`;
 }
 __name(valeurTexte, "valeurTexte");
-async function tourneePush(env, heurePlanifiee) {
+async function tourneePush(env, heurePlanifiee, fenetreFJ) {
   const liste = await env.ANNONCES.list({ prefix: "abo:" });
   if (liste.keys.length === 0) return "aucun abonn\xE9";
   const enregistrements = (await Promise.all(liste.keys.slice(0, 15).map(async (k) => ({ cle: k.name, e: await env.ANNONCES.get(k.name, "json") })))).filter((x) => x.e !== null);
   const fin = heurePlanifiee;
   const debut = fin - 12e4;
-  const texteFJ = (await lireCopieFJ(env))?.texte ?? null;
-  const nouvelles = texteFJ ? parser(texteFJ, FLUX_FINANCIALJUICE).filter((d) => d.date >= debut && d.date < fin) : [];
+  const nouvelles = fenetreFJ ? parser(fenetreFJ.texte, FLUX_FINANCIALJUICE).filter((d) => d.date >= fenetreFJ.debut && d.date < fenetreFJ.fin) : [];
   const nouvellesBilingues = nouvelles.length ? await bilingue(nouvelles) : [];
   const besoinCalendrier = enregistrements.some((x) => x.e.preferences.rappels.ids.length > 0 || x.e.preferences.rappels.fortImpactAuto);
   const evenements = besoinCalendrier ? await calendrierBilingue() : [];
