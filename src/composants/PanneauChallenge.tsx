@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { Challenge, Etat } from '../types';
+import type { CompteDistant } from '../compteLocal';
 import { CAPITAUX, FORMULES, mesurer, nouveauChallenge } from '../challenge';
 import { formaterUsdt, reinitialiser } from '../trading';
 
@@ -8,6 +9,8 @@ interface Props {
   capital: number;
   marges: number;
   maj: (p: Partial<Etat>) => void;
+  /** Compte de trading connecté : démo (pas de challenge ici) ou challenge (règles fixées à l'ouverture). */
+  compte?: CompteDistant | null;
 }
 
 function Jauge({ libelle, valeur, max, texte, sens }: { libelle: string; valeur: number; max: number; texte: string; sens: 'objectif' | 'limite' }) {
@@ -30,7 +33,7 @@ function Jauge({ libelle, valeur, max, texte, sens }: { libelle: string; valeur:
 const STATUTS: Record<Challenge['statut'], string> = { 'en-cours': 'En cours', reussi: 'Réussi 🏆', echoue: 'Échoué' };
 
 /** Mode challenge façon prop firm : démarrage, jauges des règles, fin et historique. */
-export function PanneauChallenge({ etat, capital, marges, maj }: Props) {
+export function PanneauChallenge({ etat, capital, marges, maj, compte }: Props) {
   const ch = etat.challenge;
   const [formule, setFormule] = useState(FORMULES[0].id);
   const [montant, setMontant] = useState(100000);
@@ -70,6 +73,7 @@ export function PanneauChallenge({ etat, capital, marges, maj }: Props) {
     });
   };
 
+  if (compte && (compte.type === 'demo' || !ch)) return null;
   if (!ch) {
     return (
       <div className="carte panneau-challenge">
@@ -155,13 +159,19 @@ export function PanneauChallenge({ etat, capital, marges, maj }: Props) {
           texte={`${m.jours} / ${r.joursMin}`}
         />
       </div>
+      {compte && (
+        <p className="muet petit pc-compte">
+          Compte challenge n° {compte.login} ({compte.serveur}) : règles fixées à l'ouverture.{' '}
+          {ch.statut !== 'en-cours' ? 'Pour retenter, ouvrez un nouveau compte challenge dans « Comptes et accès ».' : ''}
+        </p>
+      )}
       <div className="pc-pied">
         <span className="muet">
           Démarré le {new Date(ch.debutLe).toLocaleDateString('fr-FR')} · {duree} jour{duree > 1 ? 's' : ''} · fonds propres {formaterUsdt(capital)} · plus bas{' '}
           {formaterUsdt(ch.plusBas)}
         </span>
         <div className="espace" />
-        {ch.statut === 'en-cours' ? (
+        {!compte && (ch.statut === 'en-cours' ? (
           <button className="bouton-secondaire danger" onClick={abandonner}>
             Abandonner
           </button>
@@ -169,12 +179,14 @@ export function PanneauChallenge({ etat, capital, marges, maj }: Props) {
           <button className="bouton-principal" onClick={demarrer}>
             Nouveau challenge
           </button>
+        ))}
+        {!compte && (
+          <button className="bouton-secondaire" onClick={quitter}>
+            Quitter le mode challenge
+          </button>
         )}
-        <button className="bouton-secondaire" onClick={quitter}>
-          Quitter le mode challenge
-        </button>
       </div>
-      {ch.statut !== 'en-cours' && (
+      {ch.statut !== 'en-cours' && !compte && (
         <div className="pc-relance">
           <span className="muet">Formule</span>
           <select className="selecteur" value={formule} onChange={(e) => setFormule(e.target.value)}>

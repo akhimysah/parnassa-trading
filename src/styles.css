@@ -3421,3 +3421,188 @@ th.trie {
 .bandeau-crame.alerte strong {
   color: #ff9800;
 }
+
+/* ---- Comptes de trading à accès ---- */
+.barre-compte {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--bordure);
+  border-radius: 10px;
+  background: var(--panneau);
+  font-size: 13px;
+}
+.barre-compte.connecte {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--bordure));
+  background: color-mix(in srgb, var(--accent) 8%, var(--panneau));
+}
+.barre-compte.lecture {
+  border-color: rgba(255, 152, 0, 0.55);
+}
+.bc-pastille {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--texte-muet);
+  flex: none;
+}
+.bc-pastille.a-jour {
+  background: var(--hausse);
+}
+.bc-pastille.envoi,
+.bc-pastille.connexion {
+  background: #ff9800;
+}
+.bc-pastille.erreur {
+  background: var(--baisse);
+}
+.bc-lecture {
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #ff9800;
+  background: rgba(255, 152, 0, 0.14);
+}
+.comptes-trading {
+  width: min(760px, calc(100vw - 32px));
+}
+.comptes-trading .champ,
+.ct-connexion input {
+  height: 32px;
+  padding: 0 10px;
+  border-radius: var(--rayon);
+  border: 1px solid var(--bordure-2);
+  background: var(--panneau);
+  color: var(--texte);
+  font: inherit;
+  min-width: 0;
+}
+.ct-connexion {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr auto;
+  gap: 8px;
+  align-items: end;
+}
+.ct-connexion label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--texte-muet);
+}
+.ct-connexion .selecteur {
+  margin-left: 0;
+  height: 32px;
+}
+.ct-connexion .bouton-principal {
+  height: 32px;
+}
+@media (max-width: 640px) {
+  .ct-connexion {
+    grid-template-columns: 1fr;
+  }
+}
+.liste-comptes {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.liste-comptes li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--bordure);
+  border-radius: 10px;
+}
+.liste-comptes li.actif {
+  border-color: var(--accent);
+}
+.lc-infos {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 260px;
+  min-width: 0;
+}
+.lc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+}
+.lien.discret.danger {
+  color: var(--baisse);
+}
+.ct-creation {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ct-creation .champ {
+  flex: 1 1 200px;
+}
+.carte-acces {
+  border: 1px solid color-mix(in srgb, var(--hausse) 55%, var(--bordure));
+  background: color-mix(in srgb, var(--hausse) 8%, var(--panneau));
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-top: 10px;
+}
+.ca-entete {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.ca-avertissement {
+  margin: 6px 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #ff9800;
+}
+.carte-acces dl {
+  margin: 0 0 10px;
+  display: grid;
+  gap: 6px;
+}
+.carte-acces dl > div {
+  display: grid;
+  grid-template-columns: minmax(150px, 200px) 1fr;
+  gap: 8px;
+  align-items: center;
+}
+.carte-acces dt {
+  font-size: 12px;
+  color: var(--texte-muet);
+}
+.carte-acces dd {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.carte-acces code {
+  font-size: 14px;
+  font-weight: 600;
+  user-select: all;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 520px) {
+  .carte-acces dl > div {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+}
+.pc-compte {
+  margin: 10px 14px 0;
+}

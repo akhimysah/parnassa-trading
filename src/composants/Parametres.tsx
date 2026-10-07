@@ -16,6 +16,8 @@ interface Props {
   remplacerEtat: (e: Etat) => void;
   signaler: (message: string) => void;
   synchro: Synchro;
+  /** Numéro du compte de trading connecté : son capital est fixé à l'ouverture. */
+  compteConnecte?: string | null;
 }
 
 const FUSEAUX = [
@@ -34,7 +36,7 @@ const FUSEAUX = [
   'Etc/UTC',
 ];
 
-export function Parametres({ ouvert, fermer, etat, maj, remplacerEtat, signaler, synchro }: Props) {
+export function Parametres({ ouvert, fermer, etat, maj, remplacerEtat, signaler, synchro, compteConnecte }: Props) {
   const refFichier = useRef<HTMLInputElement>(null);
   const [capital, setCapital] = useState(String(etat.portefeuille.capitalInitial));
   const [erreur, setErreur] = useState<string | null>(null);
@@ -89,6 +91,10 @@ export function Parametres({ ouvert, fermer, etat, maj, remplacerEtat, signaler,
   };
 
   const changerCapital = () => {
+    if (compteConnecte) {
+      setErreur(`Connecté au compte ${compteConnecte} : son capital est fixé à l'ouverture. Déconnectez-vous du compte pour changer celui de cet appareil.`);
+      return;
+    }
     const v = Number(capital.replace(/\s/g, '').replace(',', '.'));
     if (!Number.isFinite(v) || v < 100) {
       setErreur('Capital invalide (minimum 100 USDT).');

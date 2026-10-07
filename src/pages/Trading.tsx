@@ -21,6 +21,8 @@ import {
 import { SelecteurInstrument } from '../composants/SelecteurInstrument';
 import { PrixAnime } from '../composants/PrixAnime';
 import { CalendrierTrades } from '../composants/CalendrierTrades';
+import { BarreCompte, FenetreComptes } from '../composants/ComptesTrading';
+import type { GestionCompte } from '../comptes';
 import { PanneauChallenge } from '../composants/PanneauChallenge';
 import { nomSymbole, ticker } from '../symboles';
 import {
@@ -55,6 +57,9 @@ interface Props {
   ticks: Record<string, Tick>;
   maj: (p: Partial<Etat>) => void;
   ouvrirSymbole: (id: string) => void;
+  compte: GestionCompte;
+  lie: boolean;
+  signaler: (m: string) => void;
 }
 
 type TypeOrdre = 'marche' | 'limite' | 'stop';
@@ -73,7 +78,18 @@ function nombre(texte: string): number | undefined {
   return Number.isFinite(v) && v > 0 ? v : undefined;
 }
 
-export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
+export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie, signaler }: Props) {
+  const [comptesOuverts, setComptesOuverts] = useState(false);
+  const session = compte.session;
+  const lecture = Boolean(session?.lecture);
+  // Accès investisseur : on regarde le compte, sans pouvoir y toucher.
+  const maj = (p: Partial<Etat>) => {
+    if (lecture && ('portefeuille' in p || 'challenge' in p)) {
+      setErreur('Accès investisseur : lecture seule, aucun ordre ni modification possible.');
+      return;
+    }
+    majBrut(p);
+  };
   const p = etat.portefeuille;
   const TAUX_FRAIS = etat.parametres.frais;
   const [risque, setRisque] = useState('1');
@@ -288,6 +304,10 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
   };
 
   const remettreAZero = () => {
+    if (session?.compte.type === 'challenge') {
+      window.alert('Compte challenge : il ne peut pas repartir à zéro. Ouvrez un nouveau compte challenge dans « Comptes et accès ».');
+      return;
+    }
     if (window.confirm(`Réinitialiser le portefeuille papier à ${p.capitalInitial.toLocaleString('fr-FR')} USDT ? Positions, ordres et historique seront effacés.`)) {
       maj({ portefeuille: reinitialiser(p.capitalInitial) });
     }
@@ -295,7 +315,9 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
 
   return (
     <div className="page defilable trading">
-      <PanneauChallenge etat={etat} capital={capital} marges={immobilise} maj={maj} />
+      <BarreCompte gestion={compte} ouvrir={() => setComptesOuverts(true)} />
+      <FenetreComptes ouvert={comptesOuverts} fermer={() => setComptesOuverts(false)} gestion={compte} lie={lie} signaler={signaler} />
+      <PanneauChallenge etat={etat} capital={capital} marges={immobilise} maj={maj} compte={session?.compte ?? null} />
       {p.crameLe ? (
         <div className="bandeau-crame" role="alert">
           <strong>🔥 Compte cramé</strong>
@@ -513,10 +535,10 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
           </dl>
           {erreur && <p className="erreur">{erreur}</p>}
           <div className="boutons-ordre">
-            <button className="bouton-achat" onClick={() => passerOrdre('achat')} disabled={!prix || !lotsValides || Boolean(p.crameLe)}>
+            <button className="bouton-achat" onClick={() => passerOrdre('achat')} disabled={!prix || !lotsValides || Boolean(p.crameLe) || lecture}>
               {typeOrdre === 'marche' ? 'Acheter / Long' : 'Ordre d’achat'}
             </button>
-            <button className="bouton-vente" onClick={() => passerOrdre('vente')} disabled={!prix || !lotsValides || Boolean(p.crameLe)}>
+            <button className="bouton-vente" onClick={() => passerOrdre('vente')} disabled={!prix || !lotsValides || Boolean(p.crameLe) || lecture}>
               {typeOrdre === 'marche' ? 'Vendre / Short' : 'Ordre de vente'}
             </button>
           </div>

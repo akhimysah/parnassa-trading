@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import type { DispositionSauvee, Etat } from './types';
 import { chargerEtat, sauverEtat } from './stockage';
 import { BarreHaut, INTERVALLES } from './composants/BarreHaut';
@@ -23,6 +23,7 @@ import { annoncer, couperSquawk, doitEtreLue, langueParlee, texteParle } from '.
 import { useMoteurRappels } from './rappels';
 import { useSynchroPush } from './push';
 import { useSynchro } from './synchro';
+import { useCompteTrading } from './comptes';
 import { symbolesConversion, useCotationsScanner } from './instruments';
 import { estBinance, paireBinance } from './binance';
 import { appliquerFlux, cloturer, enregistrerCapital, MESSAGE_CRAME, valeurPortefeuille } from './trading';
@@ -131,10 +132,15 @@ export function App() {
   useSynchroPush(etat);
   // Compte Parnassa : sauvegarde en ligne et synchronisation entre appareils.
   const synchro = useSynchro(etat, setEtat, setToast);
+  // Comptes de trading à accès (numéro, mot de passe, serveur) : le portefeuille affiché est celui du compte connecté.
+  const compteTrading = useCompteTrading(etat, setEtat, setToast);
+  const lectureSeule = useRef(false);
+  lectureSeule.current = Boolean(compteTrading.session?.lecture);
 
   // Moteur de trading papier : ordres en attente, stop-loss / take-profit, courbe de capital.
   useEffect(() => {
-    if (Object.keys(ticks).length === 0) return;
+    // Accès investisseur : le moteur tourne sur l'appareil du titulaire, ici on ne fait que regarder.
+    if (Object.keys(ticks).length === 0 || lectureSeule.current) return;
     setEtat((e) => {
       const resultat = appliquerFlux(e.portefeuille, ticks, e.parametres.frais);
       let portefeuille = resultat.portefeuille;
@@ -367,6 +373,9 @@ export function App() {
             etat={etat}
             ticks={ticks}
             maj={maj}
+            compte={compteTrading}
+            lie={synchro.statut !== 'deconnecte'}
+            signaler={setToast}
             ouvrirSymbole={(id) => {
               choisirSymbole(id);
               maj({ page: 'graphique' });
@@ -412,6 +421,7 @@ export function App() {
         remplacerEtat={(e) => setEtat(e)}
         signaler={setToast}
         synchro={synchro}
+        compteConnecte={compteTrading.session?.compte.login ?? null}
       />
       {toast && (
         <div className="toast" role="status">

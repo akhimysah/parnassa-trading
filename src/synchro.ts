@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Etat } from './types';
 import { fusionnerEtat } from './stockage';
+import { ecrirePortefeuilleLocal, lirePortefeuilleLocal, lireSessionCompte, partieCompte, partieLocale } from './compteLocal';
 
 /** Compte Parnassa (néobanque) : liaison par jeton, puis synchronisation de l'état entre appareils. */
 export const URL_NEOBANQUE = 'https://parnassa.neobank.workers.dev';
@@ -36,6 +37,11 @@ export function capturerJetonDepuisAdresse(): boolean {
   return true;
 }
 
+/** Jeton de l'application reliée au compte Parnassa, s'il y en a un. */
+export function jetonParnassa(): string | null {
+  return lire(CLE_JETON);
+}
+
 export function lienLiaison(): string {
   const retour = `${window.location.origin}${window.location.pathname}`;
   return `${URL_NEOBANQUE}/api/parnassa/trading/autoriser?retour=${encodeURIComponent(retour)}`;
@@ -44,7 +50,9 @@ export function lienLiaison(): string {
 /** Ce qui est synchronisé : tout, sauf la page affichée (propre à chaque appareil). */
 function aEnvoyer(etat: Etat): Partial<Etat> {
   const { page: _page, ...reste } = etat;
-  return reste;
+  // Connecté à un compte de trading : c'est le portefeuille de l'appareil, mis de côté, qui est sauvegardé ici.
+  const local = lireSessionCompte() ? lirePortefeuilleLocal() : null;
+  return local ? { ...reste, ...local } : reste;
 }
 
 /** Empreinte des changements utiles : le dernier prix vu par les alertes bouge sans cesse et n'en fait pas partie. */
@@ -109,7 +117,12 @@ export function useSynchro(etat: Etat, remplacer: (e: Etat) => void, signaler: (
 
   const adopter = useCallback(
     (distant: unknown, majLe: number, message?: string) => {
-      const nouvel = fusionnerEtat({ ...(distant as Partial<Etat>), page: refEtat.current.page });
+      let nouvel = fusionnerEtat({ ...(distant as Partial<Etat>), page: refEtat.current.page });
+      if (lireSessionCompte()) {
+        // Le portefeuille reçu est celui de l'appareil : il reste de côté, le compte de trading reste affiché.
+        ecrirePortefeuilleLocal(partieLocale(nouvel));
+        nouvel = { ...nouvel, ...partieCompte(refEtat.current), portefeuilleHorsChallenge: null };
+      }
       envoyee.current = empreinte(nouvel);
       fixerBase(majLe);
       remplacer(nouvel);
