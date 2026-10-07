@@ -36,7 +36,7 @@ Les préférences (symbole, intervalle, style, indicateurs, comparaisons, liste 
 ## Relais d'actualités (Cloudflare Worker)
 
 Le fil d'actualités et le calendrier des annonces (`/flux`, `/annonces`, `/calendrier`, `/recherche`) sont servis par `worker/actualites.ts`, déployé sur Cloudflare Workers à
-`https://parnassa-actualites.neobank.workers.dev` : il agrège les flux RSS publics, traduit chaque titre en français et en anglais (dictionnaire en cache 7 jours), et met le tout en cache. FinancialJuice bloquant les appels trop fréquents, seule une tâche planifiée l'interroge toutes les 2 minutes et dépose son flux dans KV et
+`https://parnassa-actualites.neobank.workers.dev` : il agrège les flux RSS publics, traduit chaque titre en français et en anglais (dictionnaire en cache 7 jours), et met le tout en cache. FinancialJuice bloquant les appels trop fréquents, seule une tâche planifiée l'interroge toutes les 2 minutes et dépose son flux dans KV (si la tâche ne tourne pas, une visite rafraîchit la copie quand elle a plus de 150 s, au plus une tentative toutes les 2 minutes) et
 les renvoie en JSON avec CORS. Déploiement :
 
 ```bash

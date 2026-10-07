@@ -369,6 +369,7 @@ interface Env {
 }
 
 let envGlobal: Env | undefined;
+let contexteRequete: ExecutionContext | undefined;
 const CLE_KV_FJ = 'financialjuice-rss';
 let memoireFJ: { lueLe: number; texte: string | null } | null = null;
 
@@ -376,14 +377,47 @@ let memoireFJ: { lueLe: number; texte: string | null } | null = null;
  * FinancialJuice bloque les adresses qui l'interrogent trop souvent. Seule la tâche planifiée l'appelle
  * (toutes les 2 min) et dépose le flux dans KV ; les requêtes lisent cette copie (mémoire de l'isolat 20 s).
  */
-async function texteFinancialJuice(): Promise<string | null> {
+interface CopieFJ {
+  t: number;
+  texte: string;
+}
+
+/** La copie KV contient l'heure de récupération ; l'ancien format (XML brut) est accepté. */
+async function lireCopieFJ(env: Env): Promise<CopieFJ | null> {
+  const brut = await env.ANNONCES.get(CLE_KV_FJ);
+  if (!brut) return null;
+  if (brut.startsWith('{')) {
+    try {
+      return JSON.parse(brut) as CopieFJ;
+    } catch {
+      return null;
+    }
+  }
+  return { t: 0, texte: brut };
+}
+
+async function texteFinancialJuice(ctx?: ExecutionContext): Promise<string | null> {
   if (memoireFJ && Date.now() - memoireFJ.lueLe < 20000) return memoireFJ.texte;
-  const texte = envGlobal ? await envGlobal.ANNONCES.get(CLE_KV_FJ) : null;
-  memoireFJ = { lueLe: Date.now(), texte };
-  return texte;
+  if (!envGlobal) return null;
+  const copie = await lireCopieFJ(envGlobal);
+  memoireFJ = { lueLe: Date.now(), texte: copie?.texte ?? null };
+  // Plan B si la tâche planifiée ne tourne pas : copie de plus de 150 s → un visiteur la rafraîchit,
+  // au plus une tentative toutes les 2 minutes par centre de données (verrou dans le cache Cloudflare).
+  if (!copie || Date.now() - copie.t > 150000) {
+    const verrou = new Request(`${origine}/__cache/fj-tentative`);
+    if (!(await caches.default.match(verrou))) {
+      await caches.default.put(verrou, new Response('1', { headers: { 'Cache-Control': 'max-age=120' } }));
+      const env = envGlobal;
+      const tache = rafraichirFinancialJuice(env).then((etat) => console.log(`FinancialJuice (plan B) : ${etat}`));
+      if (ctx) ctx.waitUntil(tache);
+    }
+  }
+  return memoireFJ.texte;
 }
 
 async function rafraichirFinancialJuice(env: Env): Promise<string> {
+  const actuelle = await lireCopieFJ(env);
+  if (actuelle && Date.now() - actuelle.t < 100000) return 'déjà à jour';
   try {
     const r = await fetch(FLUX_FINANCIALJUICE.url, {
       headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ParnassaTrading/1.0; +https://akhimysah.github.io/parnassa-trading/)', Accept: 'application/rss+xml, application/xml;q=0.9, */*;q=0.8' },
@@ -392,9 +426,8 @@ async function rafraichirFinancialJuice(env: Env): Promise<string> {
     if (!r.ok) return `refus ${r.status}`;
     const texte = await r.text();
     if (!/<item>/i.test(texte)) return 'flux vide';
-    const actuel = await env.ANNONCES.get(CLE_KV_FJ);
-    if (actuel === texte) return 'inchangé';
-    await env.ANNONCES.put(CLE_KV_FJ, texte);
+    await env.ANNONCES.put(CLE_KV_FJ, JSON.stringify({ t: Date.now(), texte } satisfies CopieFJ));
+    memoireFJ = { lueLe: Date.now(), texte };
     return 'mis à jour';
   } catch (e) {
     return `erreur ${e instanceof Error ? e.message : ''}`;
@@ -403,7 +436,7 @@ async function rafraichirFinancialJuice(env: Env): Promise<string> {
 
 async function lireFlux(flux: Flux): Promise<Depeche[]> {
   if (flux.source === 'FinancialJuice') {
-    const texte = await texteFinancialJuice();
+    const texte = await texteFinancialJuice(contexteRequete);
     return texte ? parser(texte, flux) : [];
   }
   const texte = await recupererTexte(flux.url, 90);
@@ -493,6 +526,7 @@ export default {
 
   async fetch(requete: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     envGlobal = env;
+    contexteRequete = ctx;
     if (requete.method === 'OPTIONS') return json(null, 86400);
     const url = new URL(requete.url);
     origine = url.origin;
