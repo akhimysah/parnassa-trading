@@ -36,6 +36,11 @@ export interface Etat {
   dispositionsSauvees: DispositionSauvee[];
   alertes: Alerte[];
   portefeuille: Portefeuille;
+  /** Challenge façon prop firm en cours (ou terminé, en attente d'un nouveau départ). */
+  challenge: Challenge | null;
+  /** Portefeuille mis de côté pendant le challenge, restauré à la sortie du mode challenge. */
+  portefeuilleHorsChallenge: Portefeuille | null;
+  challengesPasses: Challenge[];
   /** Événements du calendrier pour lesquels l'utilisateur a demandé un rappel. */
   rappels: Rappel[];
   parametres: Parametres;
@@ -60,6 +65,32 @@ export interface Parametres {
   push: { actif: boolean; annonces: 'aucune' | 'importantes' | 'toutes' };
   /** Effet de levier du compte papier (1 = sans levier, 100 = 1:100). */
   levier: number;
+}
+
+export interface ReglesChallenge {
+  formule: string;
+  capital: number;
+  /** Objectif de profit, en % du capital. */
+  objectifPct: number;
+  /** Perte maximale sur une journée, en % du capital. */
+  perteJourPct: number;
+  /** Perte maximale totale, en % du capital. */
+  perteMaxPct: number;
+  joursMin: number;
+}
+
+export interface Challenge {
+  id: string;
+  regles: ReglesChallenge;
+  debutLe: number;
+  statut: 'en-cours' | 'reussi' | 'echoue';
+  raison?: string;
+  finLe?: number;
+  /** Fonds propres au début de la journée (référence de la perte journalière). */
+  jour: { date: string; capitalDebut: number };
+  plusBas: number;
+  plusHaut: number;
+  capitalFin?: number;
 }
 
 export interface Rappel {

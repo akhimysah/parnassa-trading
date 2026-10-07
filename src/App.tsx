@@ -24,7 +24,8 @@ import { useMoteurRappels } from './rappels';
 import { useSynchroPush } from './push';
 import { symbolesConversion, useCotationsScanner } from './instruments';
 import { estBinance, paireBinance } from './binance';
-import { appliquerFlux, enregistrerCapital, valeurPortefeuille } from './trading';
+import { appliquerFlux, cloturer, enregistrerCapital, valeurPortefeuille } from './trading';
+import { evaluerChallenge } from './challenge';
 import { nomSymbole } from './symboles';
 import { symboleDepuisUrl } from './site';
 import { ecrireHash, lienPartage, lireHash } from './url';
@@ -132,14 +133,39 @@ export function App() {
   useEffect(() => {
     if (Object.keys(ticks).length === 0) return;
     setEtat((e) => {
-      const { portefeuille, messages } = appliquerFlux(e.portefeuille, ticks, e.parametres.frais);
-      const { capital } = valeurPortefeuille(portefeuille, ticks);
+      const resultat = appliquerFlux(e.portefeuille, ticks, e.parametres.frais);
+      let portefeuille = resultat.portefeuille;
+      const messages = [...resultat.messages];
+      const compte = valeurPortefeuille(portefeuille, ticks);
+      let capital = compte.capital;
+
+      // Mode challenge : règles de perte journalière, perte maximale et objectif.
+      let challenge = e.challenge;
+      const toutesCotees = portefeuille.positions.every((pos) => ticks[paireBinance(pos.symbole)]);
+      if (challenge && challenge.statut === 'en-cours' && toutesCotees) {
+        const verdict = evaluerChallenge(challenge, capital, portefeuille.solde, compte.immobilise, portefeuille.positions.length, portefeuille.operations);
+        challenge = verdict.challenge;
+        if (verdict.fermerTout) {
+          for (const pos of [...portefeuille.positions]) {
+            const r = cloturer(portefeuille, pos.id, ticks[paireBinance(pos.symbole)].prix, ticks, { tauxCrypto: e.parametres.frais });
+            if (typeof r !== 'string') portefeuille = r;
+          }
+          portefeuille = { ...portefeuille, ordres: [] };
+          capital = valeurPortefeuille(portefeuille, ticks).capital;
+        }
+        if (verdict.message) {
+          messages.push(verdict.message);
+          notifier('Challenge', verdict.message, undefined, `challenge-${challenge.id}`);
+        }
+      }
+
       const avecCapital = enregistrerCapital(portefeuille, capital, messages.length > 0);
       if (messages.length > 0) {
         setTimeout(() => setToast(messages.join(' · ')), 0);
         if (e.parametres.son) sonner();
       }
-      return avecCapital === e.portefeuille ? e : { ...e, portefeuille: avecCapital };
+      if (avecCapital === e.portefeuille && challenge === e.challenge) return e;
+      return { ...e, portefeuille: avecCapital, challenge };
     });
   }, [ticks]);
 

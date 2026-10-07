@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import type { Etat, Sens } from '../types';
 import type { Tick } from '../binance';
 import { estBinance, paireBinance, useFluxBinance } from '../binance';
@@ -21,6 +21,7 @@ import {
 import { SelecteurInstrument } from '../composants/SelecteurInstrument';
 import { PrixAnime } from '../composants/PrixAnime';
 import { CalendrierTrades } from '../composants/CalendrierTrades';
+import { PanneauChallenge } from '../composants/PanneauChallenge';
 import { nomSymbole, ticker } from '../symboles';
 import {
   annoterOperation,
@@ -172,6 +173,10 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
       setErreur('Prix en direct indisponible pour cette paire, patientez une seconde.');
       return;
     }
+    if (etat.challenge && etat.challenge.statut !== 'en-cours') {
+      setErreur('Challenge terminé : démarrez-en un nouveau ou quittez le mode challenge (en haut de la page).');
+      return;
+    }
     if (!lotsValides) {
       setErreur(`Volume invalide : de ${LOT_MIN.toLocaleString('fr-FR')} à ${LOT_MAX} lots, par pas de 0,01.`);
       return;
@@ -288,6 +293,7 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
 
   return (
     <div className="page defilable trading">
+      <PanneauChallenge etat={etat} capital={capital} marges={immobilise} maj={maj} />
       <div className="kpis">
         <div className="kpi">
           <span>Capital total</span>
@@ -563,8 +569,8 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
                         const saisie = nombre(quantiteCloture.replace(',', '.'));
                         const qCloture = saisie === undefined ? undefined : enLots ? saisie * tailleContrat(pos.symbole) : saisie;
                         return (
-                          <>
-                          <tr key={pos.id} className={enCloture ? 'selectionnee' : ''}>
+                          <Fragment key={pos.id}>
+                          <tr className={enCloture ? 'selectionnee' : ''}>
                             <td onClick={() => ouvrirSymbole(pos.symbole)}>
                               <strong>{ticker(pos.symbole)}</strong> <span className="muet">{nomSymbole(pos.symbole)}</span>
                             </td>
@@ -641,7 +647,7 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
                               </td>
                             </tr>
                           )}
-                          </>
+                          </Fragment>
                         );
                       })}
                     </tbody>

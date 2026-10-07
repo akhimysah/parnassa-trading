@@ -21,6 +21,9 @@ export const ETAT_DEFAUT: Etat = {
   portefeuille: { capitalInitial: 100000, solde: 100000, positions: [], operations: [], ordres: [], historiqueCapital: [] },
   parametres: { fuseau: 'Europe/Paris', frais: 0.001, son: true, motsCles: [], langueActualites: 'fr+en', squawk: { actif: false, filtre: 'annonces', vitesse: 1.1 }, rappels: { delaiMinutes: 5, fortImpactAuto: false }, push: { actif: false, annonces: 'importantes' }, levier: 100 },
   rappels: [],
+  challenge: null,
+  portefeuilleHorsChallenge: null,
+  challengesPasses: [],
 };
 
 export function chargerEtat(): Etat {

@@ -3200,3 +3200,167 @@ th.trie {
     display: none;
   }
 }
+
+/* ---- Mode challenge ---- */
+.panneau-challenge {
+  padding-bottom: 12px;
+}
+.panneau-challenge.statut-en-cours {
+  border-color: rgba(41, 98, 255, 0.45);
+}
+.panneau-challenge.statut-reussi {
+  border-color: rgba(38, 166, 154, 0.6);
+}
+.panneau-challenge.statut-echoue {
+  border-color: rgba(239, 83, 80, 0.6);
+}
+.pc-depart {
+  padding: 4px 14px 0;
+}
+.pc-depart > p {
+  margin: 0 0 10px;
+  font-size: 12.5px;
+}
+.pc-formules {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 8px;
+}
+.pc-formule {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--bordure-2);
+  background: var(--fond);
+  text-align: left;
+  font-size: 12px;
+}
+.pc-formule strong {
+  font-size: 13.5px;
+}
+.pc-formule.actif {
+  border-color: var(--accent);
+  background: var(--accent-fond);
+}
+.pc-capital,
+.pc-relance {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+}
+.pc-relance {
+  padding: 0 14px;
+}
+.pc-relance .selecteur {
+  margin-left: 0;
+}
+.pc-capital .bouton-principal {
+  margin-left: auto;
+}
+.pc-statut {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+  background: var(--accent-fond);
+  color: var(--accent);
+}
+.pc-statut.reussi {
+  background: rgba(38, 166, 154, 0.18);
+  color: var(--hausse);
+}
+.pc-statut.echoue {
+  background: rgba(239, 83, 80, 0.18);
+  color: var(--baisse);
+}
+.pc-raison {
+  margin: 8px 14px 0;
+  font-weight: 600;
+}
+.pc-raison.reussi {
+  color: var(--hausse);
+}
+.pc-raison.echoue {
+  color: var(--baisse);
+}
+.pc-jauges {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px 18px;
+  padding: 12px 14px 0;
+}
+.jc-entete {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  margin-bottom: 5px;
+}
+.jc-entete span {
+  color: var(--texte-muet);
+}
+.jc-entete strong {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.jc-barre {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--panneau-2);
+  overflow: hidden;
+}
+.jc-barre i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+.jc-barre.progres i {
+  background: var(--accent);
+}
+.jc-barre.ok i,
+.jc-barre.calme i {
+  background: var(--hausse);
+}
+.jc-barre.attention i {
+  background: #f6a821;
+}
+.jc-barre.danger i {
+  background: var(--baisse);
+}
+.pc-pied {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px 0;
+  font-size: 12px;
+}
+.pc-pied .bouton-secondaire,
+.pc-pied .bouton-principal {
+  height: 30px;
+  font-size: 12px;
+}
+.pc-historique ul {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pc-historique li {
+  display: grid;
+  grid-template-columns: 90px minmax(0, 1fr) auto auto;
+  gap: 10px;
+  align-items: center;
+  font-size: 12.5px;
+}
+.pc-historique .sous-titre {
+  padding-left: 0;
+}

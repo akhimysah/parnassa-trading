@@ -1,0 +1,224 @@
+import { useState } from 'react';
+import type { Challenge, Etat } from '../types';
+import { CAPITAUX, FORMULES, mesurer, nouveauChallenge } from '../challenge';
+import { formaterUsdt, reinitialiser } from '../trading';
+
+interface Props {
+  etat: Etat;
+  capital: number;
+  marges: number;
+  maj: (p: Partial<Etat>) => void;
+}
+
+function Jauge({ libelle, valeur, max, texte, sens }: { libelle: string; valeur: number; max: number; texte: string; sens: 'objectif' | 'limite' }) {
+  const ratio = max > 0 ? Math.min(1, Math.max(0, valeur / max)) : 0;
+  // Objectif : plus c'est plein, mieux c'est. Limite de perte : orange à 50 %, rouge à 80 %.
+  const classe = sens === 'objectif' ? (ratio >= 1 ? 'ok' : 'progres') : ratio >= 0.8 ? 'danger' : ratio >= 0.5 ? 'attention' : 'calme';
+  return (
+    <div className="jauge-challenge">
+      <div className="jc-entete">
+        <span>{libelle}</span>
+        <strong>{texte}</strong>
+      </div>
+      <div className={`jc-barre ${classe}`}>
+        <i style={{ width: `${ratio * 100}%` }} />
+      </div>
+    </div>
+  );
+}
+
+const STATUTS: Record<Challenge['statut'], string> = { 'en-cours': 'En cours', reussi: 'Réussi 🏆', echoue: 'Échoué' };
+
+/** Mode challenge façon prop firm : démarrage, jauges des règles, fin et historique. */
+export function PanneauChallenge({ etat, capital, marges, maj }: Props) {
+  const ch = etat.challenge;
+  const [formule, setFormule] = useState(FORMULES[0].id);
+  const [montant, setMontant] = useState(100000);
+  const [replie, setReplie] = useState(false);
+
+  const archiver = (c: Challenge | null) => (c ? [c, ...(etat.challengesPasses ?? [])].slice(0, 30) : (etat.challengesPasses ?? []));
+
+  const demarrer = () => {
+    const f = FORMULES.find((x) => x.id === formule)!;
+    const message = ch
+      ? `Démarrer un nouveau challenge ${f.nom} de ${montant.toLocaleString('fr-FR')} $ ? Le compte du challenge actuel repart à zéro.`
+      : `Démarrer un challenge ${f.nom} de ${montant.toLocaleString('fr-FR')} $ ?\n\nVotre portefeuille papier actuel est mis de côté et sera restauré quand vous quitterez le mode challenge.`;
+    if (!window.confirm(message)) return;
+    const enCours = ch && ch.statut === 'en-cours' ? { ...ch, statut: 'echoue' as const, raison: 'Abandonné pour un nouveau challenge.', finLe: Date.now(), capitalFin: capital } : ch;
+    maj({
+      portefeuilleHorsChallenge: ch ? etat.portefeuilleHorsChallenge : etat.portefeuille,
+      portefeuille: reinitialiser(montant),
+      challenge: nouveauChallenge({ formule: f.nom, capital: montant, ...f.regles }),
+      challengesPasses: archiver(enCours),
+    });
+  };
+
+  const abandonner = () => {
+    if (!ch || !window.confirm('Abandonner ce challenge ? Il sera compté comme échoué.')) return;
+    maj({ challenge: { ...ch, statut: 'echoue', raison: 'Abandonné.', finLe: Date.now(), capitalFin: capital } });
+  };
+
+  const quitter = () => {
+    if (!ch) return;
+    if (!window.confirm('Quitter le mode challenge et retrouver votre portefeuille papier habituel ?')) return;
+    const fini = ch.statut === 'en-cours' ? { ...ch, statut: 'echoue' as const, raison: 'Abandonné.', finLe: Date.now(), capitalFin: capital } : ch;
+    maj({
+      challenge: null,
+      portefeuille: etat.portefeuilleHorsChallenge ?? reinitialiser(),
+      portefeuilleHorsChallenge: null,
+      challengesPasses: archiver(fini),
+    });
+  };
+
+  if (!ch) {
+    return (
+      <div className="carte panneau-challenge">
+        <div className="entete-carte">
+          <h3>Mode challenge · prop firm</h3>
+          <button className="lien discret" onClick={() => setReplie((r) => !r)}>
+            {replie ? 'Afficher' : 'Masquer'}
+          </button>
+        </div>
+        {!replie && (
+          <div className="pc-depart">
+            <p className="muet">
+              Passez un challenge comme chez FTMO : atteignez l'objectif de profit sans dépasser la perte journalière ni la perte maximale. Une règle
+              franchie fait échouer le challenge et ferme les positions.
+            </p>
+            <div className="pc-formules">
+              {FORMULES.map((f) => (
+                <button key={f.id} className={`pc-formule ${formule === f.id ? 'actif' : ''}`} onClick={() => setFormule(f.id)}>
+                  <strong>{f.nom}</strong>
+                  <span className="muet">{f.description}</span>
+                </button>
+              ))}
+            </div>
+            <div className="pc-capital">
+              <span className="muet">Capital</span>
+              {CAPITAUX.map((c) => (
+                <button key={c} className={`puce-bascule ${montant === c ? 'actif' : ''}`} onClick={() => setMontant(c)}>
+                  {(c / 1000).toLocaleString('fr-FR')} k$
+                </button>
+              ))}
+              <button className="bouton-principal" onClick={demarrer}>
+                Démarrer le challenge
+              </button>
+            </div>
+            {(etat.challengesPasses ?? []).length > 0 && <HistoriqueChallenges passes={etat.challengesPasses ?? []} />}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  const m = mesurer(ch, capital, etat.portefeuille.solde, marges, etat.portefeuille.operations);
+  const r = ch.regles;
+  const pct = (v: number) => `${((v / r.capital) * 100).toLocaleString('fr-FR', { maximumFractionDigits: 2 })} %`;
+  const duree = Math.max(1, Math.round(((ch.finLe ?? Date.now()) - ch.debutLe) / 86400000));
+
+  return (
+    <div className={`carte panneau-challenge statut-${ch.statut}`}>
+      <div className="entete-carte">
+        <h3>
+          Challenge {r.formule} · {r.capital.toLocaleString('fr-FR')} $
+        </h3>
+        <span className={`pc-statut ${ch.statut}`}>{STATUTS[ch.statut]}</span>
+      </div>
+      {ch.statut !== 'en-cours' && ch.raison && <p className={`pc-raison ${ch.statut}`}>{ch.raison}</p>}
+      <div className="pc-jauges">
+        <Jauge
+          libelle={`Objectif +${r.objectifPct} % (positions fermées)`}
+          valeur={Math.max(0, m.gainRealise)}
+          max={m.objectif}
+          sens="objectif"
+          texte={`${formaterUsdt(m.gainRealise, true)} / ${formaterUsdt(m.objectif)}`}
+        />
+        <Jauge
+          libelle={`Perte du jour (max ${r.perteJourPct} %)`}
+          valeur={m.perteJour}
+          max={m.limiteJour}
+          sens="limite"
+          texte={`${pct(m.perteJour)} · reste ${formaterUsdt(Math.max(0, m.limiteJour - m.perteJour))}`}
+        />
+        <Jauge
+          libelle={`Perte maximale (max ${r.perteMaxPct} %)`}
+          valeur={m.perteTotale}
+          max={m.limiteTotale}
+          sens="limite"
+          texte={`${pct(m.perteTotale)} · reste ${formaterUsdt(Math.max(0, m.limiteTotale - m.perteTotale))}`}
+        />
+        <Jauge
+          libelle={`Jours de trading (min ${r.joursMin})`}
+          valeur={m.jours}
+          max={Math.max(1, r.joursMin)}
+          sens="objectif"
+          texte={`${m.jours} / ${r.joursMin}`}
+        />
+      </div>
+      <div className="pc-pied">
+        <span className="muet">
+          Démarré le {new Date(ch.debutLe).toLocaleDateString('fr-FR')} · {duree} jour{duree > 1 ? 's' : ''} · fonds propres {formaterUsdt(capital)} · plus bas{' '}
+          {formaterUsdt(ch.plusBas)}
+        </span>
+        <div className="espace" />
+        {ch.statut === 'en-cours' ? (
+          <button className="bouton-secondaire danger" onClick={abandonner}>
+            Abandonner
+          </button>
+        ) : (
+          <button className="bouton-principal" onClick={demarrer}>
+            Nouveau challenge
+          </button>
+        )}
+        <button className="bouton-secondaire" onClick={quitter}>
+          Quitter le mode challenge
+        </button>
+      </div>
+      {ch.statut !== 'en-cours' && (
+        <div className="pc-relance">
+          <span className="muet">Formule</span>
+          <select className="selecteur" value={formule} onChange={(e) => setFormule(e.target.value)}>
+            {FORMULES.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.nom}
+              </option>
+            ))}
+          </select>
+          <select className="selecteur" value={montant} onChange={(e) => setMontant(Number(e.target.value))}>
+            {CAPITAUX.map((c) => (
+              <option key={c} value={c}>
+                {c.toLocaleString('fr-FR')} $
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HistoriqueChallenges({ passes }: { passes: Challenge[] }) {
+  return (
+    <div className="pc-historique">
+      <h4 className="sous-titre">Challenges précédents</h4>
+      <ul>
+        {passes.slice(0, 8).map((c) => {
+          const res = (c.capitalFin ?? c.regles.capital) - c.regles.capital;
+          return (
+            <li key={c.id}>
+              <span className={`pc-statut ${c.statut}`}>{STATUTS[c.statut]}</span>
+              <span>
+                {c.regles.formule} · {c.regles.capital.toLocaleString('fr-FR')} $
+              </span>
+              <span className={res >= 0 ? 'hausse' : 'baisse'}>{formaterUsdt(res, true)}</span>
+              <span className="muet">
+                {new Date(c.debutLe).toLocaleDateString('fr-FR')}
+                {c.finLe ? ` → ${new Date(c.finLe).toLocaleDateString('fr-FR')}` : ''}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
