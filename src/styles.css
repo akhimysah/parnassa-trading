@@ -2769,3 +2769,148 @@ th.trie {
     grid-row: auto;
   }
 }
+
+/* ---- Sélecteur d'instrument ---- */
+.selecteur-instrument {
+  position: relative;
+}
+.si-bouton {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 10px;
+  border-radius: var(--rayon);
+  border: 1px solid var(--bordure-2);
+  background: var(--fond);
+  color: var(--texte);
+  text-align: left;
+}
+.si-bouton:hover,
+.si-bouton[aria-expanded='true'] {
+  border-color: var(--accent);
+}
+.si-bouton .si-nom {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.si-code {
+  font-weight: 700;
+  font-size: 14px;
+  white-space: nowrap;
+}
+.si-prix {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.si-panneau {
+  position: absolute;
+  z-index: 60;
+  top: calc(100% + 6px);
+  left: 0;
+  width: max(100%, 420px);
+  max-width: calc(100vw - 32px);
+  background: var(--panneau);
+  border: 1px solid var(--bordure-2);
+  border-radius: 10px;
+  box-shadow: var(--ombre);
+  display: flex;
+  flex-direction: column;
+  max-height: 460px;
+}
+.si-recherche {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--bordure);
+  color: var(--texte-muet);
+}
+.si-recherche input {
+  flex: 1;
+  border: 0;
+  outline: none;
+  background: none;
+  color: var(--texte);
+  font: inherit;
+  font-size: 14px;
+}
+.si-filtres {
+  display: flex;
+  gap: 4px;
+  padding: 8px 10px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--bordure);
+  scrollbar-width: none;
+}
+.si-filtres button {
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--texte-muet);
+  white-space: nowrap;
+}
+.si-filtres button.actif {
+  background: var(--accent-fond);
+  color: var(--accent);
+  font-weight: 600;
+}
+.si-liste {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  overflow-y: auto;
+}
+.si-liste button {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 82px minmax(0, 1fr) auto 68px;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 8px;
+  border-radius: var(--rayon);
+  text-align: left;
+  font-size: 13px;
+}
+.si-liste button.surbrillance {
+  background: var(--panneau-2);
+}
+.si-liste button.choisi .si-code {
+  color: var(--accent);
+}
+.si-liste .si-nom {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.si-liste .si-nom em {
+  font-style: normal;
+  color: var(--texte-muet);
+  opacity: 0.8;
+}
+.si-var {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+}
+.formulaire-ordre .aide {
+  margin-top: 2px;
+}
+
+/* La liste déroulante du sélecteur doit pouvoir dépasser du cadre du formulaire. */
+.carte.formulaire-ordre,
+.carte.formulaire-alerte {
+  overflow: visible;
+}
+.si-recherche,
+.si-filtres {
+  flex-shrink: 0;
+}

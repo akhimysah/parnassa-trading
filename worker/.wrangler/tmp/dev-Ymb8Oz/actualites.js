@@ -692,6 +692,8 @@ var actualites_default = {
     } else if (url.pathname === "/annonces") {
       const depeches = await bilingue(await agreger([FLUX_FINANCIALJUICE], 200));
       reponse = json({ gener\u00E9Le: Date.now(), depeches }, 20);
+    } else if (url.pathname === "/binance/paires") {
+      reponse = json({ gener\u00E9Le: Date.now(), champs: ["symbole", "base", "cotation", "prix", "variation24h", "volume24h"], paires: await pairesBinance() }, 300);
     } else if (url.pathname === "/banques-centrales") {
       reponse = json({ gener\u00E9Le: Date.now(), banques: await banquesCentrales() }, 3600);
     } else if (url.pathname === "/resultats") {
@@ -723,6 +725,32 @@ var actualites_default = {
     return reponse;
   }
 };
+var DEVISES_COTATION = ["FDUSD", "USDT", "USDC", "TUSD", "BUSD", "USD1", "EURI", "AEUR", "DAI", "BTC", "ETH", "BNB", "EUR", "TRY", "BRL", "JPY", "MXN", "PLN", "RON", "ARS", "ZAR", "UAH", "COP", "CZK", "IDR", "GBP", "AUD", "RUB", "NGN", "USD", "XRP", "DOGE", "TRX", "SOL", "DOT"].sort(
+  (a, b) => b.length - a.length
+);
+function decomposer(symbole) {
+  for (const q of DEVISES_COTATION) if (symbole.endsWith(q) && symbole.length > q.length) return [symbole.slice(0, -q.length), q];
+  return null;
+}
+__name(decomposer, "decomposer");
+async function pairesBinance() {
+  const r = await fetch("https://data-api.binance.vision/api/v3/ticker/24hr?type=MINI", { signal: AbortSignal.timeout(1e4) });
+  if (!r.ok) throw new Error(`Binance ${r.status}`);
+  const brut = await r.json();
+  const sortie = [];
+  for (const t of brut) {
+    if (!t.count) continue;
+    const volume = Number(t.quoteVolume);
+    if (!(volume > 0)) continue;
+    const parties = decomposer(t.symbol);
+    if (!parties) continue;
+    const dernier = Number(t.lastPrice);
+    const ouverture = Number(t.openPrice);
+    sortie.push([t.symbol, parties[0], parties[1], dernier, ouverture > 0 ? Math.round((dernier - ouverture) / ouverture * 1e4) / 100 : 0, Math.round(volume)]);
+  }
+  return sortie.sort((a, b) => b[5] - a[5]);
+}
+__name(pairesBinance, "pairesBinance");
 var URL_APP = "https://akhimysah.github.io/parnassa-trading/";
 var SERVICES_PUSH = /^https:\/\/([a-z0-9-]+\.)*(fcm\.googleapis\.com|push\.services\.mozilla\.com|push\.apple\.com|notify\.windows\.com)\//i;
 async function cleAbonnement(endpoint) {

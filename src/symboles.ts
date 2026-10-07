@@ -1,4 +1,5 @@
 import type { Symbole } from './types';
+import { instrument } from './instruments';
 
 export const CATALOGUE: Symbole[] = [
   // Crypto
@@ -97,7 +98,7 @@ export function corriger(id: string): string {
 }
 
 export function nomSymbole(id: string): string {
-  return CATALOGUE.find((s) => s.id === id)?.nom ?? id.split(':').pop() ?? id;
+  return CATALOGUE.find((s) => s.id === id)?.nom ?? instrument(id)?.nom ?? id.split(':').pop() ?? id;
 }
 
 export function ticker(id: string): string {

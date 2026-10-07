@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { DispositionSauvee, Etat } from './types';
 import { chargerEtat, sauverEtat } from './stockage';
 import { BarreHaut, INTERVALLES } from './composants/BarreHaut';
@@ -21,6 +21,7 @@ import { motsClesTrouves, texteRecherche, titrePrincipal, useFilActualites } fro
 import { annoncer, couperSquawk, doitEtreLue, langueParlee, texteParle } from './squawk';
 import { useMoteurRappels } from './rappels';
 import { useSynchroPush } from './push';
+import { useCotationsScanner } from './instruments';
 import { estBinance, paireBinance } from './binance';
 import { appliquerFlux, enregistrerCapital, valeurPortefeuille } from './trading';
 import { nomSymbole } from './symboles';
@@ -68,11 +69,18 @@ export function App() {
   );
   const pairesSuivies = [
     ...etat.listeSuivi.filter(estBinance).map(paireBinance),
-    ...etat.portefeuille.positions.map((pos) => paireBinance(pos.symbole)),
-    ...etat.portefeuille.ordres.map((o) => paireBinance(o.symbole)),
+    // Seules les paires Binance vont au flux Binance (un symbole inconnu y couperait tout le flux).
+    ...etat.portefeuille.positions.filter((pos) => estBinance(pos.symbole)).map((pos) => paireBinance(pos.symbole)),
+    ...etat.portefeuille.ordres.filter((o) => estBinance(o.symbole)).map((o) => paireBinance(o.symbole)),
     ...(etat.page === 'trading' || etat.page === 'alertes' ? ['BTCUSDT', 'ETHUSDT'] : []),
   ];
-  const ticks = useMoteurAlertes(etat.alertes, pairesSuivies, majAlertes, setToast, etat.parametres.son);
+  const ticksBinance = useMoteurAlertes(etat.alertes, pairesSuivies, majAlertes, setToast, etat.parametres.son);
+  // Or, forex, indices, énergie, actions : cotations du scanner pour les positions, ordres et la page Trading.
+  const ticksScanner = useCotationsScanner([
+    ...etat.portefeuille.positions.map((pos) => pos.symbole),
+    ...etat.portefeuille.ordres.map((o) => o.symbole),
+  ]);
+  const ticks = useMemo(() => ({ ...ticksBinance, ...ticksScanner }), [ticksBinance, ticksScanner]);
 
   // Fil d'actualités : chargé sur la page Actualités, ou partout si des mots-clés sont surveillés.
   const motsCles = etat.parametres.motsCles;

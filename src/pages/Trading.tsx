@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react';
 import type { Etat, Sens } from '../types';
 import type { Tick } from '../binance';
-import { estBinance, formaterPrix, paireBinance } from '../binance';
-import { CATALOGUE, nomSymbole, normaliser, ticker } from '../symboles';
+import { estBinance, paireBinance, useFluxBinance } from '../binance';
+import { cleCotation, estNegociable, formaterCotation, instrument, uniteQuantite, useCotationsScanner } from '../instruments';
+import { SelecteurInstrument } from '../composants/SelecteurInstrument';
+import { nomSymbole, ticker } from '../symboles';
 import {
   annoterOperation,
   annoterPosition,
@@ -35,7 +37,6 @@ interface Props {
 type TypeOrdre = 'marche' | 'limite' | 'stop';
 type Onglet = 'positions' | 'ordres' | 'historique' | 'journal' | 'statistiques';
 
-const CRYPTOS = CATALOGUE.filter((s) => s.id.startsWith('BINANCE:'));
 const ORIGINES: Record<string, string> = { marche: 'marché', limite: 'limite', stop: 'stop', 'stop-loss': 'stop-loss', 'take-profit': 'take-profit' };
 
 function dateCourte(ms: number): string {
@@ -56,7 +57,7 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
   const [note, setNote] = useState('');
   const [clotureEnCours, setClotureEnCours] = useState<string | null>(null);
   const [quantiteCloture, setQuantiteCloture] = useState('');
-  const [symbole, setSymbole] = useState(estBinance(etat.symbole) ? etat.symbole : 'BINANCE:BTCUSDT');
+  const [symbole, setSymbole] = useState(estNegociable(etat.symbole) ? etat.symbole : 'OANDA:XAUUSD');
   const [typeOrdre, setTypeOrdre] = useState<TypeOrdre>('marche');
   const [prixOrdre, setPrixOrdre] = useState('');
   const [montant, setMontant] = useState('1000');
@@ -66,8 +67,12 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
   const [erreur, setErreur] = useState<string | null>(null);
   const [onglet, setOnglet] = useState<Onglet>('positions');
 
-  const paire = paireBinance(normaliser(symbole) || symbole);
-  const prix = ticks[paire]?.prix;
+  const paire = cleCotation(symbole);
+  // Prix de l'instrument choisi, même s'il n'est encore dans aucune position.
+  const fluxLocal = useFluxBinance(estBinance(symbole) ? [paire] : []);
+  const scannerLocal = useCotationsScanner([symbole]);
+  const prix = (ticks[paire] ?? fluxLocal[paire] ?? scannerLocal[paire])?.prix;
+  const infoInstrument = instrument(symbole);
   const montantNum = nombre(montant) ?? 0;
   const prixReference = typeOrdre === 'marche' ? prix : nombre(prixOrdre);
   const quantite = prixReference && montantNum > 0 ? montantNum / prixReference : 0;
@@ -129,9 +134,9 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
   });
 
   const passerOrdre = (sens: Sens) => {
-    const id = normaliser(symbole);
-    if (!estBinance(id)) {
-      setErreur('Le trading papier fonctionne avec les paires Binance (ex. BTCUSDT).');
+    const id = symbole;
+    if (!estNegociable(id)) {
+      setErreur('Choisissez un instrument dans la liste.');
       return;
     }
     if (!prix) {
@@ -301,22 +306,15 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
           </div>
           <label>
             Paire
-            <div className="champ-double">
-              <input list="paires-trading" value={symbole} onChange={(e) => setSymbole(e.target.value.toUpperCase())} />
-              <datalist id="paires-trading">
-                {CRYPTOS.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.nom}
-                  </option>
-                ))}
-              </datalist>
-              <span className="prix-direct">{prix ? formaterPrix(prix) : '…'}</span>
-            </div>
+            <SelecteurInstrument valeur={symbole} onChange={setSymbole} ticks={ticks} />
+            {infoInstrument && infoInstrument.differe > 0 && (
+              <span className="aide">Cotation gratuite différée d'environ {infoInstrument.differe} min : les ordres s'exécutent à ce prix.</span>
+            )}
           </label>
           {typeOrdre !== 'marche' && (
             <label>
               {typeOrdre === 'limite' ? 'Prix limite' : 'Prix de déclenchement (stop)'}
-              <input inputMode="decimal" value={prixOrdre} onChange={(e) => setPrixOrdre(e.target.value)} placeholder={prix ? formaterPrix(prix) : ''} />
+              <input inputMode="decimal" value={prixOrdre} onChange={(e) => setPrixOrdre(e.target.value)} placeholder={prix ? formaterCotation(symbole, prix) : ''} />
               <span className="aide">
                 {typeOrdre === 'limite'
                   ? 'Achat sous le prix actuel, vente au-dessus : exécuté au prix limite.'
@@ -387,7 +385,7 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
             <div>
               <dt>Quantité estimée</dt>
               <dd>
-                {quantite ? formaterQuantite(quantite) : '…'} {ticker(paire).replace(/USDT$|USDC$|BUSD$/, '')}
+                {quantite ? formaterQuantite(quantite) : '…'} {uniteQuantite(symbole)}
               </dd>
             </div>
             <div>
@@ -480,8 +478,8 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
                             </td>
                             <td className={pos.sens === 'achat' ? 'hausse' : 'baisse'}>{pos.sens === 'achat' ? 'Long' : 'Short'}</td>
                             <td className="num">{formaterQuantite(pos.quantite)}</td>
-                            <td className="num">{formaterPrix(pos.prixEntree)}</td>
-                            <td className="num">{actuel ? formaterPrix(actuel) : '…'}</td>
+                            <td className="num">{formaterCotation(pos.symbole, pos.prixEntree)}</td>
+                            <td className="num">{actuel ? formaterCotation(pos.symbole, actuel) : '…'}</td>
                             <td className={`num ${pnl === null ? '' : pnl >= 0 ? 'hausse' : 'baisse'}`}>
                               {pnl === null
                                 ? '…'
@@ -489,7 +487,7 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
                             </td>
                             <td className="num">
                               <button className="lien discret" onClick={() => editerProtections(pos.id)} title="Modifier stop-loss et take-profit">
-                                {pos.stopLoss ? formaterPrix(pos.stopLoss) : '—'} / {pos.takeProfit ? formaterPrix(pos.takeProfit) : '—'}
+                                {pos.stopLoss ? formaterCotation(pos.symbole, pos.stopLoss) : '—'} / {pos.takeProfit ? formaterCotation(pos.symbole, pos.takeProfit) : '—'}
                               </button>
                             </td>
                             <td>
@@ -581,15 +579,15 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
                               {o.type === 'limite' ? 'Limite' : 'Stop'} · {o.sens === 'achat' ? 'achat' : 'vente'}
                             </td>
                             <td className="num">
-                              {formaterPrix(o.prix)}
+                              {formaterCotation(o.symbole, o.prix)}
                               {distance !== null && (
                                 <span className="muet"> ({distance > 0 ? '+' : ''}{distance.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} %)</span>
                               )}
                             </td>
-                            <td className="num">{actuel ? formaterPrix(actuel) : '…'}</td>
+                            <td className="num">{actuel ? formaterCotation(o.symbole, actuel) : '…'}</td>
                             <td className="num">{formaterUsdt(o.montant)}</td>
                             <td className="num muet">
-                              {o.stopLoss ? formaterPrix(o.stopLoss) : '—'} / {o.takeProfit ? formaterPrix(o.takeProfit) : '—'}
+                              {o.stopLoss ? formaterCotation(o.symbole, o.stopLoss) : '—'} / {o.takeProfit ? formaterCotation(o.symbole, o.takeProfit) : '—'}
                             </td>
                             <td className="num">
                               <button className="icone petit" aria-label="Annuler l'ordre" onClick={() => maj({ portefeuille: annulerOrdre(p, o.id) })}>
@@ -629,7 +627,7 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
                           </strong>
                         </div>
                         <div className="journal-detail muet">
-                          {formaterQuantite(o.quantite)} · entrée {o.prixEntree ? formaterPrix(o.prixEntree) : '—'} → sortie {formaterPrix(o.prix)} · frais {formaterUsdt(o.frais)}
+                          {formaterQuantite(o.quantite)} · entrée {o.prixEntree ? formaterCotation(o.symbole, o.prixEntree) : '—'} → sortie {formaterCotation(o.symbole, o.prix)} · frais {formaterUsdt(o.frais)}
                         </div>
                         <button className="journal-note" onClick={() => editerNoteOperation(o.id)}>
                           {o.note ? o.note : 'Ajouter une note de journal…'}
@@ -767,7 +765,7 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
                             {o.origine && o.origine !== 'marche' && <span className="note"> {ORIGINES[o.origine]}</span>}
                           </td>
                           <td className="num">{formaterQuantite(o.quantite)}</td>
-                          <td className="num">{formaterPrix(o.prix)}</td>
+                          <td className="num">{formaterCotation(o.symbole, o.prix)}</td>
                           <td className="num muet">{formaterUsdt(o.frais)}</td>
                           <td className={`num ${o.resultat === undefined ? 'muet' : o.resultat >= 0 ? 'hausse' : 'baisse'}`}>
                             {o.resultat === undefined ? '—' : formaterUsdt(o.resultat, true)}

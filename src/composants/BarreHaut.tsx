@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { DispositionSauvee, Etat, Intervalle, StyleGraphique } from '../types';
 import { bourse, nomSymbole, ticker } from '../symboles';
-import { estBinance } from '../binance';
+import { estNegociable } from '../instruments';
 import {
   IconeChevron,
   IconeCloche,
@@ -314,7 +314,7 @@ export function BarreHaut({
 
       <div className="espace" />
 
-      {surGraphique && estBinance(etat.symbole) && (
+      {surGraphique && estNegociable(etat.symbole) && (
         <button className="bouton-trader" title="Trader ce symbole (portefeuille papier)" onClick={() => maj({ page: 'trading' })}>
           <IconeTrading width={16} height={16} />
           <span>Trader</span>
