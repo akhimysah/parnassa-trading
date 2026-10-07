@@ -357,9 +357,10 @@ export function FenetreComptes({
                   {comptes.map((c) => (
                     <li key={c.login} className={actif === c.login ? 'actif' : ''}>
                       <div className="lc-infos">
-                        <strong>
-                          {c.nom} <EtatCompte compte={c} />
-                        </strong>
+                        <strong>{c.nom}</strong>
+                        <div className="lc-etat">
+                          <EtatCompte compte={c} />
+                        </div>
                         <span className="muet">
                           n° {c.login} · {c.serveur} · {montant(c.capital)}
                           {c.regles ? ` · objectif +${c.regles.objectifPct} %, perte max ${c.regles.perteMaxPct} %` : ''}

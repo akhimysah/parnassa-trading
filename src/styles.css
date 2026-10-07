@@ -3737,3 +3737,14 @@ th.trie {
   margin-left: auto;
   white-space: nowrap;
 }
+.lc-etat {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+}
+.lc-etat .lc-resultat,
+.lc-etat .lc-badge {
+  margin-left: 0;
+  white-space: nowrap;
+}
