@@ -26,6 +26,20 @@ export const ETAT_DEFAUT: Etat = {
   challengesPasses: [],
 };
 
+/** Complète un état lu (stockage local, sauvegarde, compte Parnassa) avec les valeurs par défaut. */
+export function fusionnerEtat(lu: Partial<Etat>): Etat {
+  const etat = { ...ETAT_DEFAUT, ...lu };
+  return {
+    ...etat,
+    symbole: corriger(etat.symbole),
+    emplacements: etat.emplacements.map(corriger),
+    listeSuivi: Array.from(new Set(etat.listeSuivi.map(corriger))),
+    comparaisons: (etat.comparaisons ?? []).map(corriger),
+    portefeuille: { ...ETAT_DEFAUT.portefeuille, ...(etat.portefeuille ?? {}) },
+    parametres: { ...ETAT_DEFAUT.parametres, ...(etat.parametres ?? {}) },
+  };
+}
+
 export function chargerEtat(): Etat {
   try {
     const brut = localStorage.getItem(CLE);

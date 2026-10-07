@@ -44,6 +44,16 @@ les renvoie en JSON avec CORS. Déploiement :
 cd worker && npx wrangler deploy -c wrangler.json
 ```
 
+## Compte Parnassa et synchronisation
+
+Paramètres → « Se connecter avec Parnassa » ouvre une page de consentement sur la néobanque
+(`/api/parnassa/trading/autoriser`). Une fois accordé, un jeton propre à l'application revient dans le fragment de
+l'adresse (jamais transmis à un serveur) ; l'application l'utilise pour `GET / PUT / DELETE /api/parnassa/trading/sync`
+(CORS limité à `https://akhimysah.github.io`). Tout l'état est sauvegardé sur le compte (sauf la page affichée) et
+repris sur les autres appareils : envoi des changements au plus toutes les 15 s, lecture chaque minute et au retour
+sur l'onglet, conflits résolus en faveur de la version la plus récente du compte. Code côté néobanque :
+`modele-whop/src/lib/trading-sync.ts`, migration `0031_trading_sync.sql`.
+
 ## Notifications push (application fermée)
 
 Paramètres → « Notifications push » abonne l'appareil (Web Push standard, sans service tiers). Toutes les 2 minutes,

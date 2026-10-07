@@ -22,6 +22,7 @@ import { motsClesTrouves, texteRecherche, titrePrincipal, useFilActualites } fro
 import { annoncer, couperSquawk, doitEtreLue, langueParlee, texteParle } from './squawk';
 import { useMoteurRappels } from './rappels';
 import { useSynchroPush } from './push';
+import { useSynchro } from './synchro';
 import { symbolesConversion, useCotationsScanner } from './instruments';
 import { estBinance, paireBinance } from './binance';
 import { appliquerFlux, cloturer, enregistrerCapital, valeurPortefeuille } from './trading';
@@ -128,6 +129,8 @@ export function App() {
   // Rappels d'événements économiques (avant publication, puis chiffre réel), sur toutes les pages.
   useMoteurRappels(etat, maj, setToast);
   useSynchroPush(etat);
+  // Compte Parnassa : sauvegarde en ligne et synchronisation entre appareils.
+  const synchro = useSynchro(etat, setEtat, setToast);
 
   // Moteur de trading papier : ordres en attente, stop-loss / take-profit, courbe de capital.
   useEffect(() => {
@@ -407,6 +410,7 @@ export function App() {
         maj={maj}
         remplacerEtat={(e) => setEtat(e)}
         signaler={setToast}
+        synchro={synchro}
       />
       {toast && (
         <div className="toast" role="status">

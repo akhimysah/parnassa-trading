@@ -5,6 +5,7 @@ import { reinitialiser } from '../trading';
 import { horodatageFichier, telecharger } from '../export';
 import { notifier } from '../alertes';
 import { abonnementActuel, activerPush, desactiverPush, iosHorsApplication, pushDisponible, testerPush } from '../push';
+import { lienLiaison, type Synchro } from '../synchro';
 import { IconeCroix } from './Icones';
 
 interface Props {
@@ -14,6 +15,7 @@ interface Props {
   maj: (p: Partial<Etat>) => void;
   remplacerEtat: (e: Etat) => void;
   signaler: (message: string) => void;
+  synchro: Synchro;
 }
 
 const FUSEAUX = [
@@ -32,7 +34,7 @@ const FUSEAUX = [
   'Etc/UTC',
 ];
 
-export function Parametres({ ouvert, fermer, etat, maj, remplacerEtat, signaler }: Props) {
+export function Parametres({ ouvert, fermer, etat, maj, remplacerEtat, signaler, synchro }: Props) {
   const refFichier = useRef<HTMLInputElement>(null);
   const [capital, setCapital] = useState(String(etat.portefeuille.capitalInitial));
   const [erreur, setErreur] = useState<string | null>(null);
@@ -134,6 +136,55 @@ export function Parametres({ ouvert, fermer, etat, maj, remplacerEtat, signaler 
         </div>
 
         <div className="parametres-corps">
+          <section>
+            <h4>Compte Parnassa · synchronisation</h4>
+            {synchro.statut === 'deconnecte' ? (
+              <>
+                <p className="muet">
+                  Reliez l'application à votre compte Parnassa pour sauvegarder en ligne votre portefeuille papier, vos challenges, alertes,
+                  rappels et réglages, et les retrouver sur tous vos appareils.
+                </p>
+                <a className="bouton-principal lien-bouton" href={lienLiaison()}>
+                  Se connecter avec Parnassa
+                </a>
+              </>
+            ) : (
+              <>
+                <div className="ligne-parametre">
+                  <span>
+                    {synchro.compte ? (
+                      <>
+                        Relié à <strong>{synchro.compte.email}</strong>
+                      </>
+                    ) : (
+                      'Connexion au compte…'
+                    )}
+                  </span>
+                  <span className={`etat-synchro ${synchro.statut}`}>
+                    {synchro.statut === 'a-jour' ? 'À jour' : synchro.statut === 'envoi' ? 'Envoi…' : synchro.statut === 'erreur' ? 'Erreur' : 'Connexion…'}
+                  </span>
+                </div>
+                <p className="muet">
+                  {synchro.derniereSynchro ? `Dernière synchronisation : ${new Date(synchro.derniereSynchro).toLocaleTimeString('fr-FR')}.` : ''}
+                  {synchro.erreur ? ` ${synchro.erreur}` : ''}
+                </p>
+                <div className="boutons-parametres">
+                  <button className="bouton-secondaire" onClick={synchro.synchroniser}>
+                    Synchroniser maintenant
+                  </button>
+                  <button
+                    className="bouton-secondaire danger"
+                    onClick={() => {
+                      if (window.confirm('Déconnecter le compte Parnassa de cet appareil ? Vos données restent sur cet appareil et sur le compte.')) void synchro.deconnecter();
+                    }}
+                  >
+                    Déconnecter
+                  </button>
+                </div>
+              </>
+            )}
+          </section>
+
           <section>
             <h4>Graphiques</h4>
             <label className="ligne-parametre">

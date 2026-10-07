@@ -3364,3 +3364,31 @@ th.trie {
 .pc-historique .sous-titre {
   padding-left: 0;
 }
+
+/* ---- Compte Parnassa ---- */
+.lien-bouton {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+  margin-bottom: 4px;
+}
+.etat-synchro {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--panneau-2);
+  color: var(--texte-muet);
+}
+.etat-synchro.a-jour {
+  background: rgba(38, 166, 154, 0.18);
+  color: var(--hausse);
+}
+.etat-synchro.erreur {
+  background: rgba(239, 83, 80, 0.18);
+  color: var(--baisse);
+}
+.etat-synchro.envoi {
+  background: var(--accent-fond);
+  color: var(--accent);
+}

@@ -1,6 +1,10 @@
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import './styles.css';
+import { capturerJetonDepuisAdresse } from './synchro';
+
+// Retour de la page de consentement Parnassa : le jeton est pris dans l'adresse avant le premier affichage.
+capturerJetonDepuisAdresse();
 
 // Pas de StrictMode : il monterait chaque widget TradingView deux fois (double chargement d'iframes).
 createRoot(document.getElementById('racine')!).render(<App />);
