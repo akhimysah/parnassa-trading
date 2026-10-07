@@ -740,6 +740,39 @@ async function agreger(fluxs: Flux[], limite: number): Promise<Depeche[]> {
   return toutes.slice(0, limite);
 }
 
+// ---------- Cotations Swissquote (métaux) ----------
+
+const INSTRUMENTS_SWISSQUOTE = new Set(['XAU/USD', 'XAG/USD', 'XPT/USD', 'XPD/USD']);
+
+interface PrixSwissquote {
+  topo?: { platform?: string };
+  spreadProfilePrices?: { spreadProfile: string; bid: number; ask: number }[];
+  ts?: number;
+}
+
+/** Bid/Ask du profil « premium » (clients particuliers) de la plateforme SwissquoteLtd, par instrument. */
+async function cotationsSwissquote(instruments: string[]): Promise<Record<string, { bid: number; ask: number; ts: number }>> {
+  const sortie: Record<string, { bid: number; ask: number; ts: number }> = {};
+  await Promise.all(
+    instruments.map(async (i) => {
+      try {
+        const r = await fetch(`https://forex-data-feed.swissquote.com/public-quotes/bboquotes/instrument/${i}`, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36' },
+          signal: AbortSignal.timeout(4000),
+        });
+        if (!r.ok) return;
+        const d = (await r.json()) as PrixSwissquote[];
+        const plateforme = d.find((x) => x.topo?.platform === 'SwissquoteLtd') ?? d[0];
+        const profil = plateforme?.spreadProfilePrices?.find((p) => p.spreadProfile === 'premium') ?? plateforme?.spreadProfilePrices?.[0];
+        if (profil && profil.bid > 0 && profil.ask > 0) sortie[i.replace('/', '')] = { bid: profil.bid, ask: profil.ask, ts: plateforme.ts ?? Date.now() };
+      } catch {
+        // instrument indisponible : la page garde sa source de secours
+      }
+    }),
+  );
+  return sortie;
+}
+
 // ---------- Bougies (Yahoo Finance) ----------
 
 const INTERVALLES_YAHOO = new Set(['1m', '5m', '15m', '30m', '60m', '1d', '1wk', '1mo']);
@@ -861,8 +894,13 @@ export default {
       const bougies = await bougiesYahoo(s, i, r);
       if (!bougies) return json({ erreur: 'Historique indisponible.' }, 0);
       reponse = json({ generéLe: Date.now(), bougies }, i === '1m' || i === '5m' ? 30 : 120);
+    } else if (url.pathname === '/swissquote') {
+      // Cotations Bid/Ask d'un vrai courtier (Swissquote), à la seconde, pour Parnassa Trader : pas de CORS côté Swissquote.
+      const demandes = (url.searchParams.get('i') ?? '').split(',').filter((x) => INSTRUMENTS_SWISSQUOTE.has(x));
+      if (demandes.length === 0) return json({ erreur: 'Paramètre i requis (ex. XAU/USD,XAG/USD).' }, 0);
+      reponse = json({ generéLe: Date.now(), cotations: await cotationsSwissquote(demandes) }, 1);
     } else if (url.pathname === '/' || url.pathname === '/sante') {
-      reponse = json({ service: 'parnassa-actualites', flux: FLUX.length, routes: ['/flux', '/annonces', '/calendrier', '/surprises', '/banques-centrales', '/resultats', '/recherche?q=…&ticker=…', '/bougies?s=…&i=…&r=…'] }, 0);
+      reponse = json({ service: 'parnassa-actualites', flux: FLUX.length, routes: ['/flux', '/annonces', '/calendrier', '/surprises', '/banques-centrales', '/resultats', '/recherche?q=…&ticker=…', '/bougies?s=…&i=…&r=…', '/swissquote?i=…'] }, 0);
     } else {
       return json({ erreur: 'Route inconnue.' }, 0);
     }
