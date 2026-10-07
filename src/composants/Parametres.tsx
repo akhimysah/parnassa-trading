@@ -237,7 +237,7 @@ export function Parametres({ ouvert, fermer, etat, maj, remplacerEtat, signaler 
           <section>
             <h4>Trading papier</h4>
             <label className="ligne-parametre">
-              <span>Frais par ordre</span>
+              <span>Frais par ordre (crypto ; les CFD sont à 0,005 %)</span>
               <span className="champ-unite">
                 <input
                   inputMode="decimal"

@@ -2914,3 +2914,61 @@ th.trie {
 .si-filtres {
   flex-shrink: 0;
 }
+
+/* ---- Volume en lots ---- */
+.ligne-volume {
+  display: grid;
+  grid-template-columns: 1fr 110px;
+  gap: 8px;
+}
+.ligne-volume label {
+  padding-right: 0;
+}
+.ligne-volume label:last-child {
+  padding-left: 0;
+}
+.ligne-volume .selecteur {
+  height: 36px;
+  margin-left: 0;
+  width: 100%;
+}
+.champ-lots {
+  display: flex;
+  align-items: stretch;
+  height: 36px;
+  border: 1px solid var(--bordure-2);
+  border-radius: var(--rayon);
+  background: var(--fond);
+  overflow: hidden;
+}
+.champ-lots input {
+  flex: 1;
+  min-width: 0;
+  height: auto !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  text-align: center;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.champ-lots input[aria-invalid='true'] {
+  color: var(--baisse);
+}
+.champ-lots button {
+  width: 34px;
+  font-size: 18px;
+  color: var(--texte-muet);
+  background: var(--panneau-2);
+}
+.champ-lots button:hover {
+  color: var(--texte);
+}
+.sous-valeur {
+  display: block;
+  font-size: 11px;
+  color: var(--texte-muet);
+  font-weight: 400;
+}
+.recap-ordre dd {
+  text-align: right;
+}

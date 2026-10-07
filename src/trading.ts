@@ -1,27 +1,52 @@
 import type { Operation, OrdreEnAttente, Portefeuille, Position, Sens } from './types';
 import type { Tick } from './binance';
 import { paireBinance } from './binance';
+import { conversionUsd, instrument, normaliserLots, tailleContrat } from './instruments';
 
-/** Frais simulés par ordre (0,1 %, comme le tarif spot standard de Binance). */
+/** Frais par défaut sur la crypto (0,1 % du notionnel, tarif spot standard de Binance). */
 export const TAUX_FRAIS = 0.001;
+/** Commission des CFD (forex, métaux, indices, énergie, actions) : 0,005 % du notionnel, ≈ 5 $ par 100 000 $. */
+export const TAUX_FRAIS_CFD = 0.00005;
+/** Sous ce niveau de marge (fonds propres ÷ marge utilisée), toutes les positions sont fermées. */
+export const NIVEAU_STOP_OUT = 0.5;
+
+type Ticks = Record<string, Tick>;
 
 function identifiant(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
-export function pnlLatent(position: Position, prix: number): number {
-  return (prix - position.prixEntree) * position.quantite * (position.sens === 'achat' ? 1 : -1);
+/** Taux de commission : réglage utilisateur pour la crypto, commission CFD fixe pour le reste. */
+export function tauxFrais(symbole: string, tauxCrypto = TAUX_FRAIS): number {
+  const i = instrument(symbole);
+  return !i || i.categorie === 'crypto' ? tauxCrypto : TAUX_FRAIS_CFD;
 }
 
-export function valeurPortefeuille(p: Portefeuille, ticks: Record<string, Tick>): { capital: number; latent: number; immobilise: number } {
+/** P&L latent en USD (converti si l'instrument est coté en EUR, GBP, JPY…). */
+export function pnlLatent(position: Position, prix: number, ticks: Ticks = {}): number {
+  return (prix - position.prixEntree) * position.quantite * (position.sens === 'achat' ? 1 : -1) * conversionUsd(position.symbole, ticks);
+}
+
+export interface EtatCompte {
+  /** Fonds propres : solde + marges immobilisées + P&L latent. */
+  capital: number;
+  latent: number;
+  /** Marge utilisée par les positions ouvertes. */
+  immobilise: number;
+  /** Fonds propres ÷ marge utilisée (null sans position). */
+  niveauMarge: number | null;
+}
+
+export function valeurPortefeuille(p: Portefeuille, ticks: Ticks): EtatCompte {
   let latent = 0;
   let immobilise = 0;
   for (const pos of p.positions) {
     immobilise += pos.cout;
     const t = ticks[paireBinance(pos.symbole)];
-    if (t) latent += pnlLatent(pos, t.prix);
+    if (t) latent += pnlLatent(pos, t.prix, ticks);
   }
-  return { capital: p.solde + immobilise + latent, latent, immobilise };
+  const capital = p.solde + immobilise + latent;
+  return { capital, latent, immobilise, niveauMarge: immobilise > 0 ? capital / immobilise : null };
 }
 
 export function realiseTotal(p: Portefeuille): number {
@@ -46,62 +71,104 @@ export function verifierProtections(sens: Sens, prix: number, prot: Protections)
   return null;
 }
 
+export interface Engagement {
+  unites: number;
+  notionnel: number;
+  marge: number;
+  frais: number;
+}
+
+/** Ce qu'engage un ordre de `lots` lots au prix `prix` avec le levier `levier`. */
+export function engagement(symbole: string, lots: number, prix: number, levier: number, ticks: Ticks, tauxCrypto = TAUX_FRAIS): Engagement {
+  const unites = lots * tailleContrat(symbole);
+  const notionnel = unites * prix * conversionUsd(symbole, ticks);
+  return { unites, notionnel, marge: notionnel / Math.max(1, levier), frais: notionnel * tauxFrais(symbole, tauxCrypto) };
+}
+
+/** Volume maximal (lots) que permet la marge libre. */
+export function lotsMax(p: Portefeuille, symbole: string, prix: number, levier: number, ticks: Ticks, tauxCrypto = TAUX_FRAIS): number {
+  const parLot = engagement(symbole, 1, prix, levier, ticks, tauxCrypto);
+  const coutLot = parLot.marge + parLot.frais;
+  if (!(coutLot > 0)) return 0;
+  return Math.min(500, Math.floor((p.solde / coutLot) * 100) / 100);
+}
+
 export function ouvrir(
   p: Portefeuille,
   symbole: string,
   sens: Sens,
-  quantite: number,
+  lots: number,
   prix: number,
-  prot: Protections = {},
-  origine: Operation['origine'] = 'marche',
-  taux = TAUX_FRAIS,
+  ticks: Ticks,
+  options: { levier: number; prot?: Protections; origine?: Operation['origine']; tauxCrypto?: number },
 ): Portefeuille | string {
-  if (!(quantite > 0) || !(prix > 0)) return 'Quantité ou prix invalide.';
+  if (!(lots >= 0.01) || lots > 500) return 'Volume invalide : entre 0,01 et 500 lots.';
+  if (!(prix > 0)) return 'Prix invalide.';
+  const lotsNet = normaliserLots(lots);
+  const prot = options.prot ?? {};
   const erreur = verifierProtections(sens, prix, prot);
   if (erreur) return erreur;
-  const cout = quantite * prix;
-  const frais = cout * taux;
-  if (cout + frais > p.solde) return `Solde insuffisant : il faut ${(cout + frais).toFixed(2)} USDT.`;
+  const e = engagement(symbole, lotsNet, prix, options.levier, ticks, options.tauxCrypto);
+  if (e.marge + e.frais > p.solde) {
+    return `Marge insuffisante : il faut ${(e.marge + e.frais).toLocaleString('fr-FR', { maximumFractionDigits: 2 })} USDT (marge ${e.marge.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} + frais), marge libre ${p.solde.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} USDT.`;
+  }
   const position: Position = {
     id: identifiant(),
     symbole,
     sens,
-    quantite,
+    quantite: e.unites,
+    lots: lotsNet,
+    levier: options.levier,
     prixEntree: prix,
-    cout,
+    cout: e.marge,
     ouvertLe: Date.now(),
     stopLoss: prot.stopLoss,
     takeProfit: prot.takeProfit,
     note: prot.note?.trim() || undefined,
   };
-  const operation: Operation = { id: identifiant(), symbole, sens, type: 'ouverture', origine, quantite, prix, frais, note: position.note, date: Date.now() };
-  return { ...p, solde: p.solde - cout - frais, positions: [position, ...p.positions], operations: [operation, ...p.operations] };
+  const operation: Operation = {
+    id: identifiant(),
+    symbole,
+    sens,
+    type: 'ouverture',
+    origine: options.origine ?? 'marche',
+    quantite: e.unites,
+    lots: lotsNet,
+    prix,
+    frais: e.frais,
+    note: position.note,
+    date: Date.now(),
+  };
+  return { ...p, solde: p.solde - e.marge - e.frais, positions: [position, ...p.positions], operations: [operation, ...p.operations] };
 }
 
+/** Ferme tout ou partie d'une position (`quantite` en unités de l'actif). */
 export function cloturer(
   p: Portefeuille,
   positionId: string,
   prix: number,
-  origine: Operation['origine'] = 'marche',
-  taux = TAUX_FRAIS,
-  quantite?: number,
+  ticks: Ticks,
+  options: { origine?: Operation['origine']; tauxCrypto?: number; quantite?: number } = {},
 ): Portefeuille | string {
   const position = p.positions.find((x) => x.id === positionId);
   if (!position) return 'Position introuvable.';
   if (!(prix > 0)) return 'Prix indisponible.';
-  const q = quantite === undefined ? position.quantite : Math.min(quantite, position.quantite);
+  const q = options.quantite === undefined ? position.quantite : Math.min(options.quantite, position.quantite);
   if (!(q > 0)) return 'Quantité invalide.';
   const part = q / position.quantite;
-  const coutPart = position.cout * part;
-  const resultat = (prix - position.prixEntree) * q * (position.sens === 'achat' ? 1 : -1);
-  const frais = q * prix * taux;
+  const margePart = position.cout * part;
+  const conversion = conversionUsd(position.symbole, ticks);
+  const resultat = (prix - position.prixEntree) * q * (position.sens === 'achat' ? 1 : -1) * conversion;
+  const frais = q * prix * conversion * tauxFrais(position.symbole, options.tauxCrypto);
+  const lotsFermes = position.lots !== undefined ? Math.round(position.lots * part * 100) / 100 : undefined;
   const operation: Operation = {
     id: identifiant(),
     symbole: position.symbole,
     sens: position.sens === 'achat' ? 'vente' : 'achat',
     type: 'cloture',
-    origine,
+    origine: options.origine ?? 'marche',
     quantite: q,
+    lots: lotsFermes,
     prix,
     frais,
     resultat,
@@ -114,10 +181,14 @@ export function cloturer(
   const totale = reste <= position.quantite * 1e-6;
   const positions = totale
     ? p.positions.filter((x) => x.id !== positionId)
-    : p.positions.map((x) => (x.id === positionId ? { ...x, quantite: reste, cout: position.cout - coutPart } : x));
+    : p.positions.map((x) =>
+        x.id === positionId
+          ? { ...x, quantite: reste, cout: position.cout - margePart, lots: x.lots !== undefined ? Math.round((x.lots - (lotsFermes ?? 0)) * 100) / 100 : undefined }
+          : x,
+      );
   return {
     ...p,
-    solde: p.solde + (totale ? position.cout : coutPart) + resultat - frais,
+    solde: p.solde + (totale ? position.cout : margePart) + resultat - frais,
     positions,
     operations: [operation, ...p.operations],
   };
@@ -141,12 +212,15 @@ export function modifierProtections(p: Portefeuille, positionId: string, prot: P
 
 export function placerOrdre(
   p: Portefeuille,
-  ordre: Omit<OrdreEnAttente, 'id' | 'creeLe'>,
+  ordre: Omit<OrdreEnAttente, 'id' | 'creeLe'> & { lots: number; levier: number },
   prixActuel: number,
-  taux = TAUX_FRAIS,
+  ticks: Ticks,
+  tauxCrypto = TAUX_FRAIS,
 ): Portefeuille | string {
-  if (!(ordre.prix > 0) || !(ordre.montant > 0)) return 'Prix ou montant invalide.';
-  if (ordre.montant * (1 + taux) > p.solde) return 'Solde insuffisant pour cet ordre.';
+  if (!(ordre.prix > 0)) return 'Prix invalide.';
+  if (!(ordre.lots >= 0.01) || ordre.lots > 500) return 'Volume invalide : entre 0,01 et 500 lots.';
+  const e = engagement(ordre.symbole, ordre.lots, ordre.prix, ordre.levier, ticks, tauxCrypto);
+  if (e.marge + e.frais > p.solde) return 'Marge libre insuffisante pour cet ordre.';
   const erreur = verifierProtections(ordre.sens, ordre.prix, ordre);
   if (erreur) return erreur;
   // Un ordre déjà déclenchable serait exécuté immédiatement : on refuse pour éviter la confusion.
@@ -157,7 +231,7 @@ export function placerOrdre(
     if (ordre.sens === 'achat' && ordre.prix <= prixActuel) return 'Un stop d\'achat doit être au-dessus du prix actuel.';
     if (ordre.sens === 'vente' && ordre.prix >= prixActuel) return 'Un stop de vente doit être sous le prix actuel.';
   }
-  return { ...p, ordres: [{ ...ordre, id: identifiant(), creeLe: Date.now() }, ...p.ordres] };
+  return { ...p, ordres: [{ ...ordre, lots: normaliserLots(ordre.lots), id: identifiant(), creeLe: Date.now() }, ...p.ordres] };
 }
 
 export function annulerOrdre(p: Portefeuille, ordreId: string): Portefeuille {
@@ -169,26 +243,34 @@ function ordreDeclenchable(o: OrdreEnAttente, prix: number): boolean {
   return o.sens === 'achat' ? prix >= o.prix : prix <= o.prix;
 }
 
+/** Volume d'un ordre en lots (les anciens ordres en montant USDT sont convertis, sans levier). */
+function lotsOrdre(o: OrdreEnAttente, prix: number): { lots: number; levier: number } {
+  if (o.lots !== undefined) return { lots: o.lots, levier: o.levier ?? 1 };
+  const unites = (o.montant ?? 0) / prix;
+  return { lots: Math.max(0.01, Math.round((unites / tailleContrat(o.symbole)) * 100) / 100), levier: 1 };
+}
+
 /**
- * Applique le flux de prix : exécute les ordres en attente déclenchés, puis les stop-loss / take-profit.
- * Retourne le portefeuille mis à jour et les messages à afficher.
+ * Applique le flux de prix : exécute les ordres en attente déclenchés, puis les stop-loss / take-profit,
+ * puis le stop-out si le niveau de marge passe sous 50 %. Retourne le portefeuille et les messages.
  */
-export function appliquerFlux(p: Portefeuille, ticks: Record<string, Tick>, taux = TAUX_FRAIS): { portefeuille: Portefeuille; messages: string[] } {
+export function appliquerFlux(p: Portefeuille, ticks: Ticks, tauxCrypto = TAUX_FRAIS): { portefeuille: Portefeuille; messages: string[] } {
   let courant = p;
   const messages: string[] = [];
+  const nom = (s: string) => instrument(s)?.code ?? s.split(':').pop();
 
   for (const o of p.ordres) {
     const tick = ticks[paireBinance(o.symbole)];
     if (!tick || !ordreDeclenchable(o, tick.prix)) continue;
     // Une limite s'exécute à son prix ; un stop au prix du marché qui l'a franchi.
     const prixExecution = o.type === 'limite' ? o.prix : tick.prix;
-    const quantite = o.montant / prixExecution;
-    const r = ouvrir(courant, o.symbole, o.sens, quantite, prixExecution, o, o.type, taux);
+    const { lots, levier } = lotsOrdre(o, prixExecution);
+    const r = ouvrir(courant, o.symbole, o.sens, lots, prixExecution, ticks, { levier, prot: o, origine: o.type, tauxCrypto });
     courant = annulerOrdre(typeof r === 'string' ? courant : r, o.id);
     messages.push(
       typeof r === 'string'
-        ? `Ordre ${o.type} ${o.symbole.split(':').pop()} annulé : ${r}`
-        : `Ordre ${o.type} exécuté : ${o.sens === 'achat' ? 'achat' : 'vente'} ${o.symbole.split(':').pop()} à ${prixExecution.toLocaleString('fr-FR')}`,
+        ? `Ordre ${o.type} ${nom(o.symbole)} annulé : ${r}`
+        : `Ordre ${o.type} exécuté : ${o.sens === 'achat' ? 'achat' : 'vente'} ${lots.toLocaleString('fr-FR')} lot ${nom(o.symbole)} à ${prixExecution.toLocaleString('fr-FR')}`,
     );
   }
 
@@ -199,13 +281,25 @@ export function appliquerFlux(p: Portefeuille, ticks: Record<string, Tick>, taux
     const touchéSL = pos.stopLoss !== undefined && (pos.sens === 'achat' ? prix <= pos.stopLoss : prix >= pos.stopLoss);
     const touchéTP = pos.takeProfit !== undefined && (pos.sens === 'achat' ? prix >= pos.takeProfit : prix <= pos.takeProfit);
     if (!touchéSL && !touchéTP) continue;
-    const r = cloturer(courant, pos.id, prix, touchéSL ? 'stop-loss' : 'take-profit', taux);
+    const resultat = pnlLatent(pos, prix, ticks);
+    const r = cloturer(courant, pos.id, prix, ticks, { origine: touchéSL ? 'stop-loss' : 'take-profit', tauxCrypto });
     if (typeof r === 'string') continue;
     courant = r;
-    const resultat = pnlLatent(pos, prix);
     messages.push(
-      `${touchéSL ? 'Stop-loss' : 'Take-profit'} ${pos.symbole.split(':').pop()} : position fermée à ${prix.toLocaleString('fr-FR')} (${resultat >= 0 ? '+' : ''}${resultat.toFixed(2)} USDT)`,
+      `${touchéSL ? 'Stop-loss' : 'Take-profit'} ${nom(pos.symbole)} : position fermée à ${prix.toLocaleString('fr-FR')} (${resultat >= 0 ? '+' : ''}${resultat.toFixed(2)} USDT)`,
     );
+  }
+
+  // Stop-out : seulement si toutes les positions ont un prix (pas de décision sur une valorisation partielle).
+  const toutesCotees = courant.positions.every((pos) => ticks[paireBinance(pos.symbole)]);
+  const compte = valeurPortefeuille(courant, ticks);
+  if (toutesCotees && compte.niveauMarge !== null && compte.niveauMarge < NIVEAU_STOP_OUT) {
+    const niveau = Math.round(compte.niveauMarge * 100);
+    for (const pos of [...courant.positions]) {
+      const r = cloturer(courant, pos.id, ticks[paireBinance(pos.symbole)].prix, ticks, { origine: 'stop-out', tauxCrypto });
+      if (typeof r !== 'string') courant = r;
+    }
+    messages.push(`⚠️ Stop-out : niveau de marge à ${niveau} % (< ${NIVEAU_STOP_OUT * 100} %), toutes les positions ont été fermées.`);
   }
 
   return { portefeuille: courant, messages };
@@ -265,7 +359,7 @@ export function statistiques(p: Portefeuille): Statistiques {
     tauxReussite: clotures.length ? (gains.length / clotures.length) * 100 : 0,
     gainMoyen: gains.length ? sommeGains / gains.length : 0,
     perteMoyenne: pertes.length ? sommePertes / pertes.length : 0,
-    profitFactor: sommePertes > 0 ? sommeGains / sommePertes : clotures.length ? null : null,
+    profitFactor: sommePertes > 0 ? sommeGains / sommePertes : null,
     meilleur: clotures.reduce<Operation | null>((m, o) => (m === null || (o.resultat ?? 0) > (m.resultat ?? 0) ? o : m), null),
     pire: clotures.reduce<Operation | null>((m, o) => (m === null || (o.resultat ?? 0) < (m.resultat ?? 0) ? o : m), null),
     netFraisInclus: realiseTotal(p),
@@ -275,11 +369,12 @@ export function statistiques(p: Portefeuille): Statistiques {
   };
 }
 
-/** Montant à engager pour risquer `risque` USDT entre le prix d'entrée et le stop-loss. */
-export function montantParRisque(risque: number, prix: number, stopLoss: number): number | null {
+/** Volume (lots) pour risquer `risque` USDT entre le prix d'entrée et le stop-loss. */
+export function lotsParRisque(risque: number, prix: number, stopLoss: number, symbole: string, ticks: Ticks): number | null {
   const ecart = Math.abs(prix - stopLoss);
-  if (!(ecart > 0) || !(prix > 0) || !(risque > 0)) return null;
-  return (risque / ecart) * prix;
+  if (!(ecart > 0) || !(risque > 0)) return null;
+  const perteParLot = ecart * tailleContrat(symbole) * conversionUsd(symbole, ticks);
+  return perteParLot > 0 ? risque / perteParLot : null;
 }
 
 export function reinitialiser(capital = 100000): Portefeuille {
@@ -294,4 +389,8 @@ export function formaterUsdt(v: number, signe = false): string {
 
 export function formaterQuantite(q: number): string {
   return q.toLocaleString('fr-FR', { maximumFractionDigits: q >= 100 ? 2 : q >= 1 ? 4 : 6 });
+}
+
+export function formaterLots(lots: number): string {
+  return `${lots.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} lot${lots >= 2 ? 's' : ''}`;
 }

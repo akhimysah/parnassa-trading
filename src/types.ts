@@ -58,6 +58,8 @@ export interface Parametres {
   rappels: { delaiMinutes: number; fortImpactAuto: boolean };
   /** Notifications push (application fermée) : actives sur cet appareil, et annonces à recevoir. */
   push: { actif: boolean; annonces: 'aucune' | 'importantes' | 'toutes' };
+  /** Effet de levier du compte papier (1 = sans levier, 100 = 1:100). */
+  levier: number;
 }
 
 export interface Rappel {
@@ -74,10 +76,14 @@ export interface Position {
   id: string;
   symbole: string;
   sens: Sens;
+  /** Unités de l'actif (lots × taille du contrat). */
   quantite: number;
   prixEntree: number;
-  /** Notionnel immobilisé à l'ouverture (quantité × prix). */
+  /** Marge immobilisée en USD (notionnel ÷ levier ; notionnel complet pour les anciennes positions sans levier). */
   cout: number;
+  /** Volume en lots (absent sur les positions ouvertes avant le passage aux lots). */
+  lots?: number;
+  levier?: number;
   ouvertLe: number;
   stopLoss?: number;
   takeProfit?: number;
@@ -92,7 +98,10 @@ export interface OrdreEnAttente {
   /** Limite : s'exécute à un prix plus favorable ; stop : s'exécute au franchissement. */
   type: 'limite' | 'stop';
   prix: number;
-  montant: number;
+  /** Ancien format (montant en USDT) ; les nouveaux ordres utilisent `lots` et `levier`. */
+  montant?: number;
+  lots?: number;
+  levier?: number;
   stopLoss?: number;
   takeProfit?: number;
   note?: string;
@@ -110,8 +119,9 @@ export interface Operation {
   sens: Sens;
   type: 'ouverture' | 'cloture';
   /** Origine : marché, limite, stop, stop-loss, take-profit. */
-  origine?: 'marche' | 'limite' | 'stop' | 'stop-loss' | 'take-profit';
+  origine?: 'marche' | 'limite' | 'stop' | 'stop-loss' | 'take-profit' | 'stop-out';
   quantite: number;
+  lots?: number;
   prix: number;
   frais: number;
   /** Résultat réalisé (clôtures uniquement). */

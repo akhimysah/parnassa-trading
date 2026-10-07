@@ -221,7 +221,7 @@ export function Accueil({ etat, fil, ticks, maj, aller, ouvrirSymbole }: Props) 
           <ul className="liste-positions">
             {p.positions.slice(0, 4).map((pos) => {
               const prix = ticks[paireBinance(pos.symbole)]?.prix;
-              const pnl = prix ? pnlLatent(pos, prix) : null;
+              const pnl = prix ? pnlLatent(pos, prix, ticks) : null;
               return (
                 <li key={pos.id}>
                   <span>

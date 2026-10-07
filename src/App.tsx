@@ -21,7 +21,7 @@ import { motsClesTrouves, texteRecherche, titrePrincipal, useFilActualites } fro
 import { annoncer, couperSquawk, doitEtreLue, langueParlee, texteParle } from './squawk';
 import { useMoteurRappels } from './rappels';
 import { useSynchroPush } from './push';
-import { useCotationsScanner } from './instruments';
+import { symbolesConversion, useCotationsScanner } from './instruments';
 import { estBinance, paireBinance } from './binance';
 import { appliquerFlux, enregistrerCapital, valeurPortefeuille } from './trading';
 import { nomSymbole } from './symboles';
@@ -76,10 +76,9 @@ export function App() {
   ];
   const ticksBinance = useMoteurAlertes(etat.alertes, pairesSuivies, majAlertes, setToast, etat.parametres.son);
   // Or, forex, indices, énergie, actions : cotations du scanner pour les positions, ordres et la page Trading.
-  const ticksScanner = useCotationsScanner([
-    ...etat.portefeuille.positions.map((pos) => pos.symbole),
-    ...etat.portefeuille.ordres.map((o) => o.symbole),
-  ]);
+  const symbolesOuverts = [...etat.portefeuille.positions.map((pos) => pos.symbole), ...etat.portefeuille.ordres.map((o) => o.symbole)];
+  // Les taux de change servent à convertir en USD le P&L des instruments cotés en EUR, GBP, JPY…
+  const ticksScanner = useCotationsScanner([...symbolesOuverts, ...symbolesConversion(symbolesOuverts)]);
   const ticks = useMemo(() => ({ ...ticksBinance, ...ticksScanner }), [ticksBinance, ticksScanner]);
 
   // Fil d'actualités : chargé sur la page Actualités, ou partout si des mots-clés sont surveillés.

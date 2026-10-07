@@ -2,7 +2,22 @@ import { useMemo, useState } from 'react';
 import type { Etat, Sens } from '../types';
 import type { Tick } from '../binance';
 import { estBinance, paireBinance, useFluxBinance } from '../binance';
-import { cleCotation, estNegociable, formaterCotation, instrument, uniteQuantite, useCotationsScanner } from '../instruments';
+import {
+  LEVIERS,
+  LOT_MAX,
+  LOT_MIN,
+  cleCotation,
+  estNegociable,
+  formaterCotation,
+  instrument,
+  libelleUnite,
+  normaliserLots,
+  pasDePrix,
+  symbolesConversion,
+  tailleContrat,
+  useCotationsScanner,
+  conversionUsd,
+} from '../instruments';
 import { SelecteurInstrument } from '../composants/SelecteurInstrument';
 import { nomSymbole, ticker } from '../symboles';
 import {
@@ -16,7 +31,11 @@ import {
   ouvrir,
   placerOrdre,
   pnlLatent,
-  montantParRisque,
+  engagement,
+  formaterLots,
+  lotsMax,
+  lotsParRisque,
+  tauxFrais,
   realiseTotal,
   reinitialiser,
   statistiques,
@@ -37,7 +56,7 @@ interface Props {
 type TypeOrdre = 'marche' | 'limite' | 'stop';
 type Onglet = 'positions' | 'ordres' | 'historique' | 'journal' | 'statistiques';
 
-const ORIGINES: Record<string, string> = { marche: 'marché', limite: 'limite', stop: 'stop', 'stop-loss': 'stop-loss', 'take-profit': 'take-profit' };
+const ORIGINES: Record<string, string> = { marche: 'marché', limite: 'limite', stop: 'stop', 'stop-loss': 'stop-loss', 'take-profit': 'take-profit', 'stop-out': 'stop-out' };
 
 function dateCourte(ms: number): string {
   return new Date(ms).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
@@ -60,7 +79,8 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
   const [symbole, setSymbole] = useState(estNegociable(etat.symbole) ? etat.symbole : 'OANDA:XAUUSD');
   const [typeOrdre, setTypeOrdre] = useState<TypeOrdre>('marche');
   const [prixOrdre, setPrixOrdre] = useState('');
-  const [montant, setMontant] = useState('1000');
+  const [lots, setLots] = useState('0.10');
+  const levier = etat.parametres.levier;
   const [stopLoss, setStopLoss] = useState('');
   const [takeProfit, setTakeProfit] = useState('');
   const [protections, setProtections] = useState(false);
@@ -70,16 +90,21 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
   const paire = cleCotation(symbole);
   // Prix de l'instrument choisi, même s'il n'est encore dans aucune position.
   const fluxLocal = useFluxBinance(estBinance(symbole) ? [paire] : []);
-  const scannerLocal = useCotationsScanner([symbole]);
+  const scannerLocal = useCotationsScanner([symbole, ...symbolesConversion([symbole])]);
   const prix = (ticks[paire] ?? fluxLocal[paire] ?? scannerLocal[paire])?.prix;
   const infoInstrument = instrument(symbole);
   const ticksSelecteur = useMemo(() => ({ ...scannerLocal, ...fluxLocal, ...ticks }), [scannerLocal, fluxLocal, ticks]);
-  const montantNum = nombre(montant) ?? 0;
+  const lotsNum = nombre(lots.replace(',', '.')) ?? 0;
+  const lotsValides = lotsNum >= LOT_MIN && lotsNum <= LOT_MAX;
   const prixReference = typeOrdre === 'marche' ? prix : nombre(prixOrdre);
-  const quantite = prixReference && montantNum > 0 ? montantNum / prixReference : 0;
-  const frais = montantNum > 0 ? montantNum * TAUX_FRAIS : 0;
+  const calcul = prixReference && lotsValides ? engagement(symbole, lotsNum, prixReference, levier, ticksSelecteur, TAUX_FRAIS) : null;
+  const quantite = calcul?.unites ?? 0;
+  const pas = prixReference ? pasDePrix(symbole, prixReference) : null;
+  const valeurPas = pas && lotsValides ? pas.pas * lotsNum * tailleContrat(symbole) * conversionUsd(symbole, ticksSelecteur) : null;
+  const maxLots = prix ? lotsMax(p, symbole, prixReference ?? prix, levier, ticksSelecteur, TAUX_FRAIS) : 0;
+  const ajusterLots = (delta: number) => setLots(normaliserLots((lotsNum || 0) + delta).toFixed(2));
 
-  const { capital, latent, immobilise } = useMemo(() => valeurPortefeuille(p, ticks), [p, ticks]);
+  const { capital, latent, immobilise, niveauMarge } = useMemo(() => valeurPortefeuille(p, ticks), [p, ticks]);
   const realise = useMemo(() => realiseTotal(p), [p]);
   const stats = useMemo(() => statistiques(p), [p]);
 
@@ -89,7 +114,7 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
     const parSymbole = new Map<string, number>();
     for (const pos of p.positions) {
       const actuel = ticks[paireBinance(pos.symbole)]?.prix;
-      const valeur = pos.cout + (actuel ? pnlLatent(pos, actuel) : 0);
+      const valeur = pos.cout + (actuel ? pnlLatent(pos, actuel, ticks) : 0);
       parSymbole.set(pos.symbole, (parSymbole.get(pos.symbole) ?? 0) + valeur);
     }
     const lignes = [...parSymbole.entries()]
@@ -101,8 +126,8 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
   const slNum = protections ? nombre(stopLoss) : undefined;
   const risqueNum = nombre(risque);
   const prixEntreePrevu = typeOrdre === 'marche' ? prix : nombre(prixOrdre);
-  const perteSiStop = slNum && prixEntreePrevu && quantite ? Math.abs(prixEntreePrevu - slNum) * quantite : null;
-  const montantConseille = slNum && prixEntreePrevu && risqueNum ? montantParRisque((risqueNum / 100) * capital, prixEntreePrevu, slNum) : null;
+  const perteSiStop = slNum && prixEntreePrevu && quantite ? Math.abs(prixEntreePrevu - slNum) * quantite * conversionUsd(symbole, ticksSelecteur) : null;
+  const lotsConseilles = slNum && prixEntreePrevu && risqueNum ? lotsParRisque((risqueNum / 100) * capital, prixEntreePrevu, slNum, symbole, ticksSelecteur) : null;
 
   const exporterHistorique = () => {
     const lignes = p.operations
@@ -114,6 +139,7 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
         o.type === 'ouverture' ? 'Ouverture' : 'Clôture',
         o.sens,
         ORIGINES[o.origine ?? 'marche'],
+        o.lots ?? '',
         o.quantite,
         o.prix,
         o.frais,
@@ -121,7 +147,7 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
       ]);
     telecharger(
       `parnassa-trading-historique-${horodatageFichier()}.csv`,
-      versCsv(['Date', 'Paire', 'Opération', 'Sens', 'Origine', 'Quantité', 'Prix', 'Frais (USDT)', 'Résultat (USDT)'], lignes),
+      versCsv(['Date', 'Paire', 'Opération', 'Sens', 'Origine', 'Lots', 'Unités', 'Prix', 'Frais (USDT)', 'Résultat (USDT)'], lignes),
       'text/csv;charset=utf-8',
     );
   };
@@ -144,16 +170,20 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
       setErreur('Prix en direct indisponible pour cette paire, patientez une seconde.');
       return;
     }
+    if (!lotsValides) {
+      setErreur(`Volume invalide : de ${LOT_MIN.toLocaleString('fr-FR')} à ${LOT_MAX} lots, par pas de 0,01.`);
+      return;
+    }
     let resultat;
     if (typeOrdre === 'marche') {
-      resultat = ouvrir(p, id, sens, quantite, prix, prot(), 'marche', TAUX_FRAIS);
+      resultat = ouvrir(p, id, sens, lotsNum, prix, ticksSelecteur, { levier, prot: prot(), origine: 'marche', tauxCrypto: TAUX_FRAIS });
     } else {
       const prixCible = nombre(prixOrdre);
       if (!prixCible) {
         setErreur('Indiquez le prix de déclenchement.');
         return;
       }
-      resultat = placerOrdre(p, { symbole: id, sens, type: typeOrdre, prix: prixCible, montant: montantNum, ...prot() }, prix, TAUX_FRAIS);
+      resultat = placerOrdre(p, { symbole: id, sens, type: typeOrdre, prix: prixCible, lots: lotsNum, levier, ...prot() }, prix, ticksSelecteur, TAUX_FRAIS);
     }
     if (typeof resultat === 'string') {
       setErreur(resultat);
@@ -180,7 +210,7 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
       setErreur('Prix en direct indisponible, impossible de clôturer pour le moment.');
       return;
     }
-    appliquer(cloturer(p, positionId, prixActuel, 'marche', TAUX_FRAIS, quantite));
+    appliquer(cloturer(p, positionId, prixActuel, ticks, { tauxCrypto: TAUX_FRAIS, quantite }));
     setClotureEnCours(null);
     setQuantiteCloture('');
   };
@@ -232,7 +262,7 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
     for (const pos of p.positions) {
       const prixActuel = ticks[paireBinance(pos.symbole)]?.prix;
       if (!prixActuel) continue;
-      const r = cloturer(courant, pos.id, prixActuel, 'marche', TAUX_FRAIS);
+      const r = cloturer(courant, pos.id, prixActuel, ticks, { tauxCrypto: TAUX_FRAIS });
       if (typeof r !== 'string') courant = r;
     }
     maj({ portefeuille: courant });
@@ -266,9 +296,12 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
           </em>
         </div>
         <div className="kpi">
-          <span>Disponible</span>
+          <span>Marge libre</span>
           <strong>{formaterUsdt(p.solde)}</strong>
-          <em className="muet">{formaterUsdt(immobilise)} en positions</em>
+          <em className={niveauMarge !== null && niveauMarge < 1 ? 'baisse' : 'muet'}>
+            {formaterUsdt(immobilise)} de marge utilisée
+            {niveauMarge !== null && ` · niveau ${Math.round(niveauMarge * 100).toLocaleString('fr-FR')} %`}
+          </em>
         </div>
         <div className="kpi">
           <span>P&amp;L latent</span>
@@ -323,17 +356,47 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
               </span>
             </label>
           )}
-          <label>
-            Montant (USDT)
-            <input inputMode="decimal" value={montant} onChange={(e) => setMontant(e.target.value)} />
-          </label>
+          <div className="ligne-volume">
+            <label>
+              Volume (lots)
+              <span className="champ-lots">
+                <button type="button" onClick={() => ajusterLots(-0.01)} aria-label="Diminuer de 0,01 lot">
+                  −
+                </button>
+                <input
+                  inputMode="decimal"
+                  value={lots}
+                  onChange={(e) => setLots(e.target.value)}
+                  onBlur={() => lotsNum > 0 && setLots(normaliserLots(lotsNum).toFixed(2))}
+                  aria-invalid={!lotsValides}
+                />
+                <button type="button" onClick={() => ajusterLots(0.01)} aria-label="Augmenter de 0,01 lot">
+                  +
+                </button>
+              </span>
+            </label>
+            <label>
+              Levier
+              <select
+                className="selecteur"
+                value={levier}
+                onChange={(e) => maj({ parametres: { ...etat.parametres, levier: Number(e.target.value) } })}
+              >
+                {LEVIERS.map((l) => (
+                  <option key={l} value={l}>
+                    1:{l}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
           <div className="puces">
-            {[100, 500, 1000, 5000].map((m) => (
-              <button type="button" key={m} onClick={() => setMontant(String(m))}>
+            {[0.01, 0.1, 0.5, 1, 5, 10, 50].map((m) => (
+              <button type="button" key={m} onClick={() => setLots(m.toFixed(2))}>
                 {m.toLocaleString('fr-FR')}
               </button>
             ))}
-            <button type="button" onClick={() => setMontant(String(Math.floor(p.solde / (1 + TAUX_FRAIS))))}>
+            <button type="button" disabled={!(maxLots >= LOT_MIN)} onClick={() => setLots(maxLots.toFixed(2))} title="Volume maximal permis par la marge libre">
               Max
             </button>
           </div>
@@ -364,9 +427,9 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
                 <button
                   type="button"
                   className="bouton-secondaire"
-                  disabled={!montantConseille}
-                  onClick={() => montantConseille && setMontant(String(Math.floor(Math.min(montantConseille, p.solde / (1 + TAUX_FRAIS)))))}
-                  title="Calcule le montant pour que la perte au stop-loss corresponde au risque choisi"
+                  disabled={!lotsConseilles}
+                  onClick={() => lotsConseilles && setLots(normaliserLots(Math.min(lotsConseilles, maxLots || lotsConseilles)).toFixed(2))}
+                  title="Calcule le volume pour que la perte au stop-loss corresponde au risque choisi"
                 >
                   Dimensionner
                 </button>
@@ -384,26 +447,48 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
           </label>
           <dl className="recap-ordre">
             <div>
-              <dt>Quantité estimée</dt>
-              <dd>
-                {quantite ? formaterQuantite(quantite) : '…'} {uniteQuantite(symbole)}
-              </dd>
+              <dt>Taille du contrat</dt>
+              <dd>1 lot = {libelleUnite(symbole, tailleContrat(symbole))}</dd>
             </div>
             <div>
-              <dt>Frais ({(TAUX_FRAIS * 100).toLocaleString('fr-FR', { maximumFractionDigits: 3 })} %)</dt>
-              <dd>{formaterUsdt(frais)}</dd>
+              <dt>Volume</dt>
+              <dd>{lotsValides ? `${formaterLots(lotsNum)} = ${libelleUnite(symbole, quantite)}` : 'de 0,01 à 500 lots'}</dd>
+            </div>
+            <div>
+              <dt>Valeur notionnelle</dt>
+              <dd>{calcul ? formaterUsdt(calcul.notionnel) : '…'}</dd>
+            </div>
+            <div>
+              <dt>Marge requise (1:{levier})</dt>
+              <dd className={calcul && calcul.marge + calcul.frais > p.solde ? 'baisse' : ''}>{calcul ? formaterUsdt(calcul.marge) : '…'}</dd>
+            </div>
+            {pas && valeurPas !== null && (
+              <div>
+                <dt>
+                  Valeur du {pas.libelle} ({pas.pas.toLocaleString('fr-FR', { maximumFractionDigits: 8 })})
+                </dt>
+                <dd>{formaterUsdt(valeurPas)}</dd>
+              </div>
+            )}
+            <div>
+              <dt>Commission ({(tauxFrais(symbole, TAUX_FRAIS) * 100).toLocaleString('fr-FR', { maximumFractionDigits: 4 })} %)</dt>
+              <dd>{calcul ? formaterUsdt(calcul.frais) : '…'}</dd>
+            </div>
+            <div>
+              <dt>Volume max (marge libre)</dt>
+              <dd>{maxLots >= LOT_MIN ? formaterLots(maxLots) : 'insuffisant'}</dd>
             </div>
           </dl>
           {erreur && <p className="erreur">{erreur}</p>}
           <div className="boutons-ordre">
-            <button className="bouton-achat" onClick={() => passerOrdre('achat')} disabled={!prix || !(montantNum > 0)}>
+            <button className="bouton-achat" onClick={() => passerOrdre('achat')} disabled={!prix || !lotsValides}>
               {typeOrdre === 'marche' ? 'Acheter / Long' : 'Ordre d’achat'}
             </button>
-            <button className="bouton-vente" onClick={() => passerOrdre('vente')} disabled={!prix || !(montantNum > 0)}>
+            <button className="bouton-vente" onClick={() => passerOrdre('vente')} disabled={!prix || !lotsValides}>
               {typeOrdre === 'marche' ? 'Vendre / Short' : 'Ordre de vente'}
             </button>
           </div>
-          <p className="muet petit">Portefeuille virtuel : aucun ordre réel n'est transmis. Les ordres en attente et les protections sont surveillés tant que l'application est ouverte.</p>
+          <p className="muet petit">Compte papier avec effet de levier : aucun ordre réel n'est transmis. Stop-out automatique si le niveau de marge passe sous 50 %. Ordres en attente et protections surveillés tant que l'application est ouverte.</p>
         </div>
 
         <div className="carte">
@@ -455,7 +540,7 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
                       <tr>
                         <th>Paire</th>
                         <th>Sens</th>
-                        <th className="num">Quantité</th>
+                        <th className="num">Volume</th>
                         <th className="num">Entrée</th>
                         <th className="num">Actuel</th>
                         <th className="num">P&amp;L</th>
@@ -467,10 +552,14 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
                     <tbody>
                       {p.positions.map((pos) => {
                         const actuel = ticks[paireBinance(pos.symbole)]?.prix;
-                        const pnl = actuel ? pnlLatent(pos, actuel) : null;
+                        const pnl = actuel ? pnlLatent(pos, actuel, ticks) : null;
+                        // Rendement sur la marge immobilisée, comme sur les plateformes à effet de levier.
                         const pct = pnl !== null ? (pnl / pos.cout) * 100 : null;
                         const enCloture = clotureEnCours === pos.id;
-                        const qCloture = nombre(quantiteCloture);
+                        // Saisie en lots (ou en unités pour les anciennes positions sans lots).
+                        const enLots = pos.lots !== undefined;
+                        const saisie = nombre(quantiteCloture.replace(',', '.'));
+                        const qCloture = saisie === undefined ? undefined : enLots ? saisie * tailleContrat(pos.symbole) : saisie;
                         return (
                           <>
                           <tr key={pos.id} className={enCloture ? 'selectionnee' : ''}>
@@ -478,7 +567,13 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
                               <strong>{ticker(pos.symbole)}</strong> <span className="muet">{nomSymbole(pos.symbole)}</span>
                             </td>
                             <td className={pos.sens === 'achat' ? 'hausse' : 'baisse'}>{pos.sens === 'achat' ? 'Long' : 'Short'}</td>
-                            <td className="num">{formaterQuantite(pos.quantite)}</td>
+                            <td className="num">
+                              {pos.lots !== undefined ? formaterLots(pos.lots) : formaterQuantite(pos.quantite)}
+                              <span className="sous-valeur">
+                                {libelleUnite(pos.symbole, pos.quantite)}
+                                {pos.levier && pos.levier > 1 ? ` · 1:${pos.levier}` : ''}
+                              </span>
+                            </td>
                             <td className="num">{formaterCotation(pos.symbole, pos.prixEntree)}</td>
                             <td className="num">{actuel ? formaterCotation(pos.symbole, actuel) : '…'}</td>
                             <td className={`num ${pnl === null ? '' : pnl >= 0 ? 'hausse' : 'baisse'}`}>
@@ -526,14 +621,18 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
                                     inputMode="decimal"
                                     value={quantiteCloture}
                                     onChange={(e) => setQuantiteCloture(e.target.value)}
-                                    placeholder={`quantité ≤ ${formaterQuantite(pos.quantite)}`}
+                                    placeholder={enLots ? `lots ≤ ${(pos.lots ?? 0).toLocaleString('fr-FR')}` : `quantité ≤ ${formaterQuantite(pos.quantite)}`}
                                   />
-                                  <button className="bouton-secondaire" disabled={!qCloture || qCloture > pos.quantite} onClick={() => qCloture && fermer(pos.id, qCloture)}>
-                                    Clôturer la quantité
+                                  <button
+                                    className="bouton-secondaire"
+                                    disabled={!qCloture || qCloture > pos.quantite * 1.000001}
+                                    onClick={() => qCloture && fermer(pos.id, Math.min(qCloture, pos.quantite))}
+                                  >
+                                    {enLots ? 'Clôturer ces lots' : 'Clôturer la quantité'}
                                   </button>
-                                  {actuel && qCloture && qCloture <= pos.quantite && (
+                                  {actuel && qCloture && qCloture <= pos.quantite * 1.000001 && (
                                     <span className="muet">
-                                      ≈ {formaterUsdt(qCloture * actuel)} · P&amp;L {formaterUsdt((actuel - pos.prixEntree) * qCloture * (pos.sens === 'achat' ? 1 : -1), true)}
+                                      P&amp;L {formaterUsdt((actuel - pos.prixEntree) * qCloture * (pos.sens === 'achat' ? 1 : -1) * conversionUsd(pos.symbole, ticks), true)}
                                     </span>
                                   )}
                                 </div>
@@ -562,7 +661,7 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
                         <th>Type</th>
                         <th className="num">Déclenchement</th>
                         <th className="num">Actuel</th>
-                        <th className="num">Montant</th>
+                        <th className="num">Volume</th>
                         <th className="num">SL / TP</th>
                         <th></th>
                       </tr>
@@ -586,7 +685,9 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
                               )}
                             </td>
                             <td className="num">{actuel ? formaterCotation(o.symbole, actuel) : '…'}</td>
-                            <td className="num">{formaterUsdt(o.montant)}</td>
+                            <td className="num">
+                              {o.lots !== undefined ? `${formaterLots(o.lots)} · 1:${o.levier ?? 1}` : formaterUsdt(o.montant ?? 0)}
+                            </td>
                             <td className="num muet">
                               {o.stopLoss ? formaterCotation(o.symbole, o.stopLoss) : '—'} / {o.takeProfit ? formaterCotation(o.symbole, o.takeProfit) : '—'}
                             </td>
@@ -628,7 +729,7 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
                           </strong>
                         </div>
                         <div className="journal-detail muet">
-                          {formaterQuantite(o.quantite)} · entrée {o.prixEntree ? formaterCotation(o.symbole, o.prixEntree) : '—'} → sortie {formaterCotation(o.symbole, o.prix)} · frais {formaterUsdt(o.frais)}
+                          {o.lots !== undefined ? formaterLots(o.lots) : formaterQuantite(o.quantite)} · entrée {o.prixEntree ? formaterCotation(o.symbole, o.prixEntree) : '—'} → sortie {formaterCotation(o.symbole, o.prix)} · frais {formaterUsdt(o.frais)}
                         </div>
                         <button className="journal-note" onClick={() => editerNoteOperation(o.id)}>
                           {o.note ? o.note : 'Ajouter une note de journal…'}
@@ -747,7 +848,7 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
                         <th>Date</th>
                         <th>Paire</th>
                         <th>Opération</th>
-                        <th className="num">Quantité</th>
+                        <th className="num">Volume</th>
                         <th className="num">Prix</th>
                         <th className="num">Frais</th>
                         <th className="num">Résultat</th>
@@ -765,7 +866,7 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
                             {o.type === 'ouverture' ? 'Ouverture' : 'Clôture'} · {o.sens === 'achat' ? 'achat' : 'vente'}
                             {o.origine && o.origine !== 'marche' && <span className="note"> {ORIGINES[o.origine]}</span>}
                           </td>
-                          <td className="num">{formaterQuantite(o.quantite)}</td>
+                          <td className="num">{o.lots !== undefined ? formaterLots(o.lots) : formaterQuantite(o.quantite)}</td>
                           <td className="num">{formaterCotation(o.symbole, o.prix)}</td>
                           <td className="num muet">{formaterUsdt(o.frais)}</td>
                           <td className={`num ${o.resultat === undefined ? 'muet' : o.resultat >= 0 ? 'hausse' : 'baisse'}`}>
