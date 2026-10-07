@@ -740,9 +740,13 @@ async function agreger(fluxs: Flux[], limite: number): Promise<Depeche[]> {
   return toutes.slice(0, limite);
 }
 
-// ---------- Cotations Swissquote (métaux) ----------
+// ---------- Cotations Swissquote (métaux et forex) ----------
 
-const INSTRUMENTS_SWISSQUOTE = new Set(['XAU/USD', 'XAG/USD', 'XPT/USD', 'XPD/USD']);
+const INSTRUMENTS_SWISSQUOTE = new Set([
+  'XAU/USD', 'XAG/USD', 'XPT/USD', 'XPD/USD',
+  'EUR/USD', 'GBP/USD', 'USD/JPY', 'USD/CHF', 'AUD/USD', 'USD/CAD', 'NZD/USD',
+  'EUR/GBP', 'EUR/JPY', 'GBP/JPY', 'EUR/CHF', 'AUD/JPY', 'EUR/AUD', 'GBP/CHF',
+]);
 
 interface PrixSwissquote {
   topo?: { platform?: string };
@@ -895,7 +899,7 @@ export default {
       if (!bougies) return json({ erreur: 'Historique indisponible.' }, 0);
       reponse = json({ generéLe: Date.now(), bougies }, i === '1m' || i === '5m' ? 30 : 120);
     } else if (url.pathname === '/swissquote') {
-      // Cotations Bid/Ask d'un vrai courtier (Swissquote), à la seconde, pour Parnassa Trader : pas de CORS côté Swissquote.
+      // Cotations Bid/Ask d'un vrai courtier (Swissquote), à la seconde, pour Parnassa Trader (métaux et forex) : pas de CORS côté Swissquote.
       const demandes = (url.searchParams.get('i') ?? '').split(',').filter((x) => INSTRUMENTS_SWISSQUOTE.has(x));
       if (demandes.length === 0) return json({ erreur: 'Paramètre i requis (ex. XAU/USD,XAG/USD).' }, 0);
       reponse = json({ generéLe: Date.now(), cotations: await cotationsSwissquote(demandes) }, 1);
