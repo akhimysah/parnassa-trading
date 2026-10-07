@@ -1,9 +1,10 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Etat } from '../types';
 import { exporterEtat, importerEtat } from '../stockage';
 import { reinitialiser } from '../trading';
 import { horodatageFichier, telecharger } from '../export';
 import { notifier } from '../alertes';
+import { abonnementActuel, activerPush, desactiverPush, iosHorsApplication, pushDisponible, testerPush } from '../push';
 import { IconeCroix } from './Icones';
 
 interface Props {
@@ -35,7 +36,35 @@ export function Parametres({ ouvert, fermer, etat, maj, remplacerEtat, signaler 
   const refFichier = useRef<HTMLInputElement>(null);
   const [capital, setCapital] = useState(String(etat.portefeuille.capitalInitial));
   const [erreur, setErreur] = useState<string | null>(null);
+  const [etatPush, setEtatPush] = useState<'inconnu' | 'actif' | 'inactif'>('inconnu');
+  const [occupe, setOccupe] = useState(false);
+  useEffect(() => {
+    if (!ouvert) return;
+    void abonnementActuel().then((a) => setEtatPush(a ? 'actif' : 'inactif'));
+  }, [ouvert]);
   if (!ouvert) return null;
+
+  const basculerPush = async () => {
+    setOccupe(true);
+    setErreur(null);
+    try {
+      if (etatPush === 'actif') {
+        await desactiverPush();
+        maj({ parametres: { ...etat.parametres, push: { ...etat.parametres.push, actif: false } } });
+        setEtatPush('inactif');
+        signaler('Notifications push désactivées sur cet appareil');
+      } else {
+        await activerPush(etat);
+        maj({ parametres: { ...etat.parametres, push: { ...etat.parametres.push, actif: true } } });
+        setEtatPush('actif');
+        signaler('Notifications push activées : vous serez prévenu même application fermée');
+      }
+    } catch (e) {
+      setErreur(e instanceof Error ? e.message : 'Activation impossible.');
+    } finally {
+      setOccupe(false);
+    }
+  };
   const p = etat.parametres;
 
   const exporter = () => {
@@ -149,6 +178,60 @@ export function Parametres({ ouvert, fermer, etat, maj, remplacerEtat, signaler 
                 Tester
               </button>
             </div>
+          </section>
+
+          <section>
+            <h4>Notifications push · application fermée</h4>
+            {!pushDisponible() ? (
+              <p className="muet">Ce navigateur ne gère pas les notifications push.</p>
+            ) : (
+              <>
+                <div className="ligne-parametre">
+                  <span>
+                    Sur cet appareil :{' '}
+                    <strong className={etatPush === 'actif' ? 'hausse' : ''}>{etatPush === 'actif' ? 'activées' : etatPush === 'inactif' ? 'désactivées' : '…'}</strong>
+                  </span>
+                  <span className="champ-unite">
+                    {etatPush === 'actif' && (
+                      <button
+                        className="bouton-secondaire"
+                        disabled={occupe}
+                        onClick={async () => {
+                          try {
+                            const r = await testerPush();
+                            signaler(r === 'ok' ? 'Notification de test envoyée' : `Échec de l'envoi (${r})`);
+                          } catch (e) {
+                            setErreur(e instanceof Error ? e.message : 'Test impossible.');
+                          }
+                        }}
+                      >
+                        Tester
+                      </button>
+                    )}
+                    <button className={etatPush === 'actif' ? 'bouton-secondaire' : 'bouton-principal'} disabled={occupe || etatPush === 'inconnu'} onClick={() => void basculerPush()}>
+                      {etatPush === 'actif' ? 'Désactiver' : 'Activer'}
+                    </button>
+                  </span>
+                </div>
+                <label className="ligne-parametre">
+                  <span>Annonces FinancialJuice reçues</span>
+                  <select
+                    className="selecteur"
+                    value={p.push.annonces}
+                    onChange={(e) => maj({ parametres: { ...p, push: { ...p.push, annonces: e.target.value as 'aucune' | 'importantes' | 'toutes' } } })}
+                  >
+                    <option value="importantes">Importantes seulement</option>
+                    <option value="toutes">Toutes</option>
+                    <option value="aucune">Aucune (mots-clés seulement)</option>
+                  </select>
+                </label>
+                <p className="muet">
+                  Vous recevez aussi vos mots-clés surveillés, vos rappels d'événements (et les annonces à fort impact si l'option est cochée) et vos
+                  alertes de prix crypto. Vérification toutes les 2 minutes.
+                  {iosHorsApplication() && " Sur iPhone et iPad : ajoutez d'abord l'application à l'écran d'accueil."}
+                </p>
+              </>
+            )}
           </section>
 
           <section>

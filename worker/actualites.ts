@@ -364,8 +364,12 @@ async function bilingue(depeches: Depeche[]): Promise<Depeche[]> {
   }));
 }
 
+import { envoyerPush, type AbonnementPush, type MessagePush } from './push';
+
 interface Env {
   ANNONCES: KVNamespace;
+  VAPID_PRIVEE: string;
+  VAPID_PUBLIQUE: string;
 }
 
 let envGlobal: Env | undefined;
@@ -403,7 +407,7 @@ async function texteFinancialJuice(ctx?: ExecutionContext): Promise<string | nul
   memoireFJ = { lueLe: Date.now(), texte: copie?.texte ?? null };
   // Plan B si la tâche planifiée ne tourne pas : copie de plus de 150 s → un visiteur la rafraîchit,
   // au plus une tentative toutes les 2 minutes par centre de données (verrou dans le cache Cloudflare).
-  if (!copie || Date.now() - copie.t > 150000) {
+  if (!copie || Date.now() - copie.t > 300000) {
     const verrou = new Request(`${origine}/__cache/fj-tentative`);
     if (!(await caches.default.match(verrou))) {
       await caches.default.put(verrou, new Response('1', { headers: { 'Cache-Control': 'max-age=120' } }));
@@ -742,15 +746,24 @@ function json(donnees: unknown, maxAge: number): Response {
       'Content-Type': 'application/json; charset=utf-8',
       'Cache-Control': `public, max-age=${maxAge}, s-maxage=${maxAge}`,
       'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, OPTIONS',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type',
     },
   });
 }
 
 export default {
-  async scheduled(_evenement: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
-    ctx.waitUntil(rafraichirFinancialJuice(env).then((etat) => console.log(`FinancialJuice : ${etat}`)));
+  async scheduled(evenement: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    envGlobal = env;
+    ctx.waitUntil(
+      (async () => {
+        const etat = await rafraichirFinancialJuice(env);
+        console.log(`FinancialJuice : ${etat}`);
+        const bilan = await tourneePush(env, evenement.scheduledTime);
+        console.log(`Push : ${bilan}`);
+        await Promise.all([sauverSecours(), sauverDictionnaires()]);
+      })(),
+    );
   },
 
   async fetch(requete: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -760,6 +773,7 @@ export default {
     const url = new URL(requete.url);
     origine = url.origin;
     if (url.pathname.startsWith('/__cache/')) return json({ erreur: 'Route inconnue.' }, 0);
+    if (url.pathname.startsWith('/push/')) return routePush(requete, url, env);
     const cache = caches.default;
     const cleCache = new Request(url.toString(), { method: 'GET' });
     const enCache = await cache.match(cleCache);
@@ -804,3 +818,265 @@ export default {
     return reponse;
   },
 };
+
+
+// ---------- Notifications push (application fermée) ----------
+
+interface PreferencesPush {
+  langue: 'fr' | 'en';
+  annonces: 'aucune' | 'importantes' | 'toutes';
+  motsCles: string[];
+  rappels: { ids: string[]; delaiMinutes: number; fortImpactAuto: boolean };
+  alertes: { id: string; symbole: string; condition: 'au-dessus' | 'en-dessous'; seuil: number; note?: string }[];
+}
+
+interface EnregistrementPush {
+  abonnement: AbonnementPush;
+  preferences: PreferencesPush;
+  /** Identifiants déjà notifiés (alertes déclenchées, publications), pour ne jamais notifier deux fois. */
+  envoyes: string[];
+  majLe: number;
+}
+
+const URL_APP = 'https://akhimysah.github.io/parnassa-trading/';
+// Seuls les services de push des navigateurs sont acceptés (pas d'envoi vers une adresse arbitraire).
+const SERVICES_PUSH = /^https:\/\/([a-z0-9-]+\.)*(fcm\.googleapis\.com|push\.services\.mozilla\.com|push\.apple\.com|notify\.windows\.com)\//i;
+
+async function cleAbonnement(endpoint: string): Promise<string> {
+  const empreinte = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(endpoint));
+  return `abo:${[...new Uint8Array(empreinte)].slice(0, 12).map((o) => o.toString(16).padStart(2, '0')).join('')}`;
+}
+
+function nettoyerPreferences(p: Partial<PreferencesPush> | undefined): PreferencesPush {
+  return {
+    langue: p?.langue === 'en' ? 'en' : 'fr',
+    annonces: p?.annonces === 'toutes' || p?.annonces === 'aucune' ? p.annonces : 'importantes',
+    motsCles: (p?.motsCles ?? []).filter((m) => typeof m === 'string').slice(0, 30).map((m) => m.slice(0, 40)),
+    rappels: {
+      ids: (p?.rappels?.ids ?? []).filter((x) => typeof x === 'string').slice(0, 100),
+      delaiMinutes: Math.min(60, Math.max(1, Number(p?.rappels?.delaiMinutes) || 5)),
+      fortImpactAuto: Boolean(p?.rappels?.fortImpactAuto),
+    },
+    alertes: (p?.alertes ?? [])
+      .filter((a) => a && typeof a.id === 'string' && /^BINANCE:[A-Z0-9]{2,20}$/.test(a.symbole) && Number.isFinite(a.seuil))
+      .slice(0, 50)
+      .map((a) => ({ id: a.id, symbole: a.symbole, condition: a.condition === 'en-dessous' ? 'en-dessous' : 'au-dessus', seuil: Number(a.seuil), note: a.note?.slice(0, 80) })),
+  };
+}
+
+function vapid(env: Env) {
+  return { publique: env.VAPID_PUBLIQUE, privee: JSON.parse(env.VAPID_PRIVEE) as JsonWebKey, contact: URL_APP };
+}
+
+async function routePush(requete: Request, url: URL, env: Env): Promise<Response> {
+  if (url.pathname === '/push/cle') return json({ cle: env.VAPID_PUBLIQUE }, 3600);
+  if (requete.method !== 'POST') return json({ erreur: 'Méthode non autorisée.' }, 0);
+  let corps: { abonnement?: AbonnementPush; preferences?: Partial<PreferencesPush>; endpoint?: string };
+  try {
+    corps = (await requete.json()) as typeof corps;
+  } catch {
+    return json({ erreur: 'Corps JSON invalide.' }, 0);
+  }
+  const endpoint = corps.abonnement?.endpoint ?? corps.endpoint ?? '';
+  if (!SERVICES_PUSH.test(endpoint)) return json({ erreur: 'Service de push non reconnu.' }, 0);
+  const cle = await cleAbonnement(endpoint);
+
+  if (url.pathname === '/push/abonnement') {
+    const a = corps.abonnement;
+    if (!a?.keys?.p256dh || !a.keys.auth) return json({ erreur: 'Abonnement incomplet.' }, 0);
+    const existant = (await env.ANNONCES.get(cle, 'json')) as EnregistrementPush | null;
+    const enregistrement: EnregistrementPush = {
+      abonnement: { endpoint: a.endpoint, keys: { p256dh: a.keys.p256dh, auth: a.keys.auth } },
+      preferences: nettoyerPreferences(corps.preferences),
+      envoyes: existant?.envoyes ?? [],
+      majLe: Date.now(),
+    };
+    await env.ANNONCES.put(cle, JSON.stringify(enregistrement), { expirationTtl: 60 * 86400 });
+    return json({ ok: true }, 0);
+  }
+  if (url.pathname === '/push/desabonnement') {
+    await env.ANNONCES.delete(cle);
+    return json({ ok: true }, 0);
+  }
+  if (url.pathname === '/push/test') {
+    const e = (await env.ANNONCES.get(cle, 'json')) as EnregistrementPush | null;
+    if (!e) return json({ erreur: 'Abonnement inconnu.' }, 0);
+    const fr = e.preferences.langue === 'fr';
+    const r = await envoyerPush(
+      e.abonnement,
+      { titre: 'Parnassa Trading', corps: fr ? 'Les notifications push fonctionnent, même application fermée.' : 'Push notifications work, even with the app closed.', url: URL_APP, tag: 'test' },
+      vapid(env),
+    );
+    return json({ resultat: r }, 0);
+  }
+  return json({ erreur: 'Route inconnue.' }, 0);
+}
+
+function titreLangue(d: Depeche, langue: 'fr' | 'en'): string {
+  if (d.donnee) {
+    const indic = langue === 'fr' ? (d.donnee.indicateurFr ?? d.donnee.indicateur) : d.donnee.indicateur;
+    return `${indic} : ${langue === 'fr' ? 'réel' : 'actual'} ${d.donnee.actuel} (${langue === 'fr' ? 'prév.' : 'fcst'} ${d.donnee.prevision ?? '–'}, ${langue === 'fr' ? 'préc.' : 'prev.'} ${d.donnee.precedent ?? '–'})`;
+  }
+  return langue === 'fr' ? (d.titreFr ?? d.titre) : (d.titreEn ?? d.titre);
+}
+
+function motCleTrouve(texte: string, motsCles: string[]): string | null {
+  const sans = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const t = sans(texte);
+  for (const m of motsCles) {
+    const mot = sans(m.trim());
+    if (!mot) continue;
+    const echappe = mot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (new RegExp(`(^|[^a-z0-9])${echappe}([^a-z0-9]|$)`).test(t)) return m;
+  }
+  return null;
+}
+
+function valeurTexte(v: number | null, unite: string, echelle: string): string {
+  if (v === null) return '–';
+  return `${v}${echelle ? ` ${echelle}` : ''}${unite === '%' ? ' %' : unite ? ` ${unite}` : ''}`;
+}
+
+/**
+ * Tournée de la tâche planifiée : pour chaque appareil abonné, annonces FinancialJuice parues dans la fenêtre
+ * des 2 dernières minutes, rappels d'événements, publications suivies et alertes de prix franchies.
+ */
+async function tourneePush(env: Env, heurePlanifiee: number): Promise<string> {
+  const liste = await env.ANNONCES.list({ prefix: 'abo:' });
+  if (liste.keys.length === 0) return 'aucun abonné';
+  const enregistrements = (
+    await Promise.all(liste.keys.slice(0, 15).map(async (k) => ({ cle: k.name, e: (await env.ANNONCES.get(k.name, 'json')) as EnregistrementPush | null })))
+  ).filter((x): x is { cle: string; e: EnregistrementPush } => x.e !== null);
+
+  const fin = heurePlanifiee;
+  const debut = fin - 120000;
+
+  // Annonces FinancialJuice parues dans la fenêtre, traduites.
+  const texteFJ = (await lireCopieFJ(env))?.texte ?? null;
+  const nouvelles = texteFJ ? parser(texteFJ, FLUX_FINANCIALJUICE).filter((d) => d.date >= debut && d.date < fin) : [];
+  const nouvellesBilingues = nouvelles.length ? await bilingue(nouvelles) : [];
+
+  // Calendrier (rappels et publications) seulement si un abonné en a besoin.
+  const besoinCalendrier = enregistrements.some((x) => x.e.preferences.rappels.ids.length > 0 || x.e.preferences.rappels.fortImpactAuto);
+  const evenements = besoinCalendrier ? await calendrierBilingue() : [];
+
+  // Prix Binance (bougies 1 min) pour les alertes actives.
+  const paires = [...new Set(enregistrements.flatMap((x) => x.e.preferences.alertes.filter((a) => !x.e.envoyes.includes(`alerte:${a.id}`)).map((a) => a.symbole.split(':')[1])))].slice(0, 10);
+  const bougies = new Map<string, { ouverture: number; haut: number; bas: number; cloture: number }>();
+  await Promise.all(
+    paires.map(async (p) => {
+      try {
+        const r = await fetch(`https://data-api.binance.vision/api/v3/klines?symbol=${p}&interval=1m&limit=3`, { signal: AbortSignal.timeout(5000) });
+        if (!r.ok) return;
+        const k = (await r.json()) as string[][];
+        if (k.length === 0) return;
+        bougies.set(p, {
+          ouverture: Number(k[0][1]),
+          haut: Math.max(...k.map((x) => Number(x[2]))),
+          bas: Math.min(...k.map((x) => Number(x[3]))),
+          cloture: Number(k[k.length - 1][4]),
+        });
+      } catch {
+        // prix indisponible : alerte vérifiée au passage suivant
+      }
+    }),
+  );
+
+  let envois = 0;
+  let expires = 0;
+  const cles = vapid(env);
+  for (const { cle, e } of enregistrements) {
+    const p = e.preferences;
+    const fr = p.langue === 'fr';
+    const messages: MessagePush[] = [];
+    let modifie = false;
+
+    // 1. Annonces.
+    const retenues = nouvellesBilingues.filter((d) => {
+      const titre = `${d.titreFr ?? ''} ${d.titreEn ?? ''} ${d.titre}`;
+      return p.annonces === 'toutes' || (p.annonces === 'importantes' && d.important) || motCleTrouve(titre, p.motsCles) !== null;
+    });
+    if (retenues.length > 3) {
+      messages.push({
+        titre: `FinancialJuice · ${retenues.length} ${fr ? 'nouvelles annonces' : 'new headlines'}`,
+        corps: retenues.slice(0, 3).map((d) => `• ${titreLangue(d, p.langue)}`).join('\n'),
+        url: `${URL_APP}#actualites`,
+        tag: `fj-lot-${fin}`,
+      });
+    } else {
+      for (const d of retenues) {
+        const mot = motCleTrouve(`${d.titreFr ?? ''} ${d.titreEn ?? ''} ${d.titre}`, p.motsCles);
+        messages.push({
+          titre: mot ? `📰 ${mot} · FinancialJuice` : d.important ? `★ FinancialJuice` : 'FinancialJuice',
+          corps: titreLangue(d, p.langue),
+          url: `${URL_APP}#actualites`,
+          tag: `fj-${d.id}`,
+        });
+      }
+    }
+
+    // 2. Rappels avant publication, puis publication du chiffre suivi.
+    const suivis = new Set(p.rappels.ids);
+    for (const ev of evenements) {
+      const concerne = suivis.has(ev.id) || (p.rappels.fortImpactAuto && ev.importance >= 1);
+      if (!concerne) continue;
+      const nom = fr ? (ev.titreFr ?? ev.titre) : ev.titre;
+      const moment = ev.date - p.rappels.delaiMinutes * 60000;
+      if (moment >= debut && moment < fin) {
+        messages.push({
+          titre: `⏰ ${fr ? 'Dans' : 'In'} ${p.rappels.delaiMinutes} min · ${ev.pays}`,
+          corps: `${nom} — ${fr ? 'prévision' : 'forecast'} ${valeurTexte(ev.prevision, ev.unite, ev.echelle)}, ${fr ? 'précédent' : 'previous'} ${valeurTexte(ev.precedent, ev.unite, ev.echelle)}`,
+          url: `${URL_APP}#calendrier`,
+          tag: `rappel-${ev.id}`,
+        });
+      }
+      const clePublie = `publie:${ev.id}`;
+      if (ev.actuel !== null && ev.date <= fin && fin - ev.date < 3 * 3600000 && !e.envoyes.includes(clePublie)) {
+        const ecart = ev.prevision !== null ? Math.sign(ev.actuel - ev.prevision) : 0;
+        messages.push({
+          titre: `📊 ${fr ? 'Publié' : 'Released'} · ${ev.pays}`,
+          corps: `${nom} — ${fr ? 'réel' : 'actual'} ${valeurTexte(ev.actuel, ev.unite, ev.echelle)}${ecart > 0 ? ' ▲' : ecart < 0 ? ' ▼' : ''}, ${fr ? 'prévision' : 'forecast'} ${valeurTexte(ev.prevision, ev.unite, ev.echelle)}`,
+          url: `${URL_APP}#calendrier`,
+          tag: `publie-${ev.id}`,
+        });
+        e.envoyes.push(clePublie);
+        modifie = true;
+      }
+    }
+
+    // 3. Alertes de prix franchies dans la fenêtre.
+    for (const a of p.alertes) {
+      const cleAlerte = `alerte:${a.id}`;
+      if (e.envoyes.includes(cleAlerte)) continue;
+      const b = bougies.get(a.symbole.split(':')[1]);
+      if (!b) continue;
+      const franchie = a.condition === 'au-dessus' ? b.ouverture < a.seuil && b.haut >= a.seuil : b.ouverture > a.seuil && b.bas <= a.seuil;
+      if (!franchie) continue;
+      messages.push({
+        titre: `🔔 ${a.symbole.split(':')[1]} ${a.condition === 'au-dessus' ? (fr ? 'au-dessus de' : 'above') : fr ? 'sous' : 'below'} ${a.seuil}`,
+        corps: `${fr ? 'Dernier prix' : 'Last price'} ${b.cloture}${a.note ? ` — ${a.note}` : ''}`,
+        url: `${URL_APP}#alertes`,
+        tag: `alerte-${a.id}`,
+      });
+      e.envoyes.push(cleAlerte);
+      modifie = true;
+    }
+
+    for (const m of messages.slice(0, 6)) {
+      if (envois >= 20) break;
+      const r = await envoyerPush(e.abonnement, m, cles);
+      envois += 1;
+      if (r === 'expire') {
+        await env.ANNONCES.delete(cle);
+        expires += 1;
+        modifie = false;
+        break;
+      }
+    }
+    if (modifie) {
+      e.envoyes = e.envoyes.slice(-200);
+      await env.ANNONCES.put(cle, JSON.stringify(e), { expirationTtl: 60 * 86400 });
+    }
+  }
+  return `${enregistrements.length} abonné(s), ${nouvelles.length} annonce(s) dans la fenêtre, ${envois} envoi(s), ${expires} expiré(s)`;
+}

@@ -58,7 +58,7 @@ export function useMoteurRappels(etat: Etat, maj: (p: Partial<Etat>) => void, si
           const minutes = Math.max(1, Math.round(delai / 60000));
           const corps = `Dans ${minutes} min · prévision ${valeurCalendrier(ev.prevision, ev.unite, ev.echelle)} · précédent ${valeurCalendrier(ev.precedent, ev.unite, ev.echelle)}`;
           sig(`⏰ ${titre} — ${corps}`);
-          notifier(`Bientôt : ${titre}`, corps);
+          notifier(`Bientôt : ${titre}`, corps, undefined, `rappel-${ev.id}`);
           if (e.parametres.son) sonner();
         }
         const publie = `${ev.id}:publie`;
@@ -68,7 +68,7 @@ export function useMoteurRappels(etat: Etat, maj: (p: Partial<Etat>) => void, si
           const ecart = ev.prevision !== null ? Math.sign(ev.actuel - ev.prevision) : 0;
           const corps = `Réel ${valeurCalendrier(ev.actuel, ev.unite, ev.echelle)}${ecart > 0 ? ' ▲' : ecart < 0 ? ' ▼' : ''} · prévision ${valeurCalendrier(ev.prevision, ev.unite, ev.echelle)} · précédent ${valeurCalendrier(ev.precedent, ev.unite, ev.echelle)}`;
           sig(`📊 ${titre} — ${corps}`);
-          notifier(`Publié : ${titre}`, corps);
+          notifier(`Publié : ${titre}`, corps, undefined, `publie-${ev.id}`);
           if (e.parametres.son) sonner();
         }
       }

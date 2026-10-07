@@ -20,6 +20,7 @@ import { notifier, sonner, useMoteurAlertes } from './alertes';
 import { motsClesTrouves, texteRecherche, titrePrincipal, useFilActualites } from './actualites';
 import { annoncer, couperSquawk, doitEtreLue, langueParlee, texteParle } from './squawk';
 import { useMoteurRappels } from './rappels';
+import { useSynchroPush } from './push';
 import { estBinance, paireBinance } from './binance';
 import { appliquerFlux, enregistrerCapital, valeurPortefeuille } from './trading';
 import { nomSymbole } from './symboles';
@@ -103,13 +104,14 @@ export function App() {
     const mots = motsClesTrouves(texteRecherche(premiere), motsCles).join(', ');
     const titre = titrePrincipal(premiere, etat.parametres.langueActualites);
     setToast(`📰 ${mots} : ${titre}${touchees.length > 1 ? ` (+${touchees.length - 1})` : ''}`);
-    notifier(`Actualité : ${mots}`, `${titre} — ${premiere.source}`);
+    notifier(`Actualité : ${mots}`, `${titre} — ${premiere.source}`, undefined, `fj-${premiere.id}`);
     if (etat.parametres.son) sonner();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fil.nouvelles]);
 
   // Rappels d'événements économiques (avant publication, puis chiffre réel), sur toutes les pages.
   useMoteurRappels(etat, maj, setToast);
+  useSynchroPush(etat);
 
   // Moteur de trading papier : ordres en attente, stop-loss / take-profit, courbe de capital.
   useEffect(() => {

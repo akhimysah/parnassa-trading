@@ -1,5 +1,5 @@
 /* Service worker de Parnassa Trading : application installable, consultation hors ligne, notifications. */
-const VERSION = 'parnassa-trading-v2';
+const VERSION = 'parnassa-trading-v3';
 const COQUILLE = ['./', './index.html', './manifest.webmanifest', './icone.svg', './icone-192.png', './icone-512.png'];
 const RELAIS = 'parnassa-actualites.neobank.workers.dev';
 
@@ -91,6 +91,26 @@ self.addEventListener('notificationclick', (e) => {
         }
       }
       return self.clients.openWindow(cible);
+    }),
+  );
+});
+
+// Notifications push envoyées par le relais (application fermée).
+self.addEventListener('push', (e) => {
+  let message = { titre: 'Parnassa Trading', corps: '', url: './', tag: undefined };
+  try {
+    message = { ...message, ...e.data.json() };
+  } catch {
+    if (e.data) message.corps = e.data.text();
+  }
+  e.waitUntil(
+    self.registration.showNotification(message.titre, {
+      body: message.corps,
+      icon: 'icone-192.png',
+      badge: 'icone-192.png',
+      tag: message.tag,
+      renotify: Boolean(message.tag),
+      data: { url: message.url || './' },
     }),
   );
 });

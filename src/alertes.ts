@@ -31,9 +31,9 @@ export function demanderNotifications(): void {
  * Notification système. Passe par le service worker quand il existe (obligatoire sur Android, et la
  * notification ramène alors vers l'application au clic), sinon par l'API Notification classique.
  */
-export function notifier(titre: string, corps: string, lien?: string) {
+export function notifier(titre: string, corps: string, lien?: string, tag?: string) {
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
-  const options: NotificationOptions = { body: corps, icon: 'icone-192.png', badge: 'icone-192.png', data: { url: lien ?? window.location.href } };
+  const options: NotificationOptions = { body: corps, icon: 'icone-192.png', badge: 'icone-192.png', tag, data: { url: lien ?? window.location.href } };
   const classique = () => {
     try {
       new Notification(titre, options);
@@ -94,7 +94,7 @@ export function useMoteurAlertes(
       const sens = a.condition === 'au-dessus' ? 'passe au-dessus de' : 'passe sous';
       const corps = `${nomSymbole(a.symbole)} ${sens} ${formaterPrix(a.seuil)} (${formaterPrix(a.prixDeclenchement ?? 0)})${a.note ? ` — ${a.note}` : ''}`;
       refSignaler.current(`🔔 ${ticker(a.symbole)} : ${corps}`);
-      notifier(`Alerte ${ticker(a.symbole)}`, corps);
+      notifier(`Alerte ${ticker(a.symbole)}`, corps, undefined, `alerte-${a.id}`);
       if (son) sonner();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -1,6 +1,94 @@
 var __defProp = Object.defineProperty;
 var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
 
+// push.ts
+var encodeur = new TextEncoder();
+function versBase64Url(octets) {
+  const tab = octets instanceof Uint8Array ? octets : new Uint8Array(octets);
+  let binaire = "";
+  for (const o of tab) binaire += String.fromCharCode(o);
+  return btoa(binaire).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+__name(versBase64Url, "versBase64Url");
+function depuisBase64Url(texte) {
+  const b64 = texte.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - texte.length % 4) % 4);
+  const binaire = atob(b64);
+  const tab = new Uint8Array(binaire.length);
+  for (let i = 0; i < binaire.length; i++) tab[i] = binaire.charCodeAt(i);
+  return tab;
+}
+__name(depuisBase64Url, "depuisBase64Url");
+function concat(...parties) {
+  const total = parties.reduce((s, p) => s + p.length, 0);
+  const sortie = new Uint8Array(total);
+  let i = 0;
+  for (const p of parties) {
+    sortie.set(p, i);
+    i += p.length;
+  }
+  return sortie;
+}
+__name(concat, "concat");
+async function hkdf(sel, ikm, info, longueur) {
+  const cle = await crypto.subtle.importKey("raw", ikm, "HKDF", false, ["deriveBits"]);
+  const bits = await crypto.subtle.deriveBits({ name: "HKDF", hash: "SHA-256", salt: sel, info }, cle, longueur * 8);
+  return new Uint8Array(bits);
+}
+__name(hkdf, "hkdf");
+async function jetonVapid(endpoint, clePrivee, contact) {
+  const aud = new URL(endpoint).origin;
+  const entete = versBase64Url(encodeur.encode(JSON.stringify({ typ: "JWT", alg: "ES256" })));
+  const charge = versBase64Url(encodeur.encode(JSON.stringify({ aud, exp: Math.floor(Date.now() / 1e3) + 12 * 3600, sub: contact })));
+  const cle = await crypto.subtle.importKey("jwk", clePrivee, { name: "ECDSA", namedCurve: "P-256" }, false, ["sign"]);
+  const signature = await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, cle, encodeur.encode(`${entete}.${charge}`));
+  return `${entete}.${charge}.${versBase64Url(signature)}`;
+}
+__name(jetonVapid, "jetonVapid");
+async function chiffrer(abonnement, contenu) {
+  const clePubliqueUA = depuisBase64Url(abonnement.keys.p256dh);
+  const secretAuth = depuisBase64Url(abonnement.keys.auth);
+  const ephemere = await crypto.subtle.generateKey({ name: "ECDH", namedCurve: "P-256" }, true, ["deriveBits"]);
+  const clePubliqueAS = new Uint8Array(await crypto.subtle.exportKey("raw", ephemere.publicKey));
+  const cleUA = await crypto.subtle.importKey("raw", clePubliqueUA, { name: "ECDH", namedCurve: "P-256" }, false, []);
+  const partage = new Uint8Array(await crypto.subtle.deriveBits({ name: "ECDH", public: cleUA }, ephemere.privateKey, 256));
+  const infoCle = concat(encodeur.encode("WebPush: info\0"), clePubliqueUA, clePubliqueAS);
+  const ikm = await hkdf(secretAuth, partage, infoCle, 32);
+  const sel = crypto.getRandomValues(new Uint8Array(16));
+  const cek = await hkdf(sel, ikm, encodeur.encode("Content-Encoding: aes128gcm\0"), 16);
+  const nonce = await hkdf(sel, ikm, encodeur.encode("Content-Encoding: nonce\0"), 12);
+  const cleAes = await crypto.subtle.importKey("raw", cek, "AES-GCM", false, ["encrypt"]);
+  const clair = concat(contenu, new Uint8Array([2]));
+  const chiffre = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce }, cleAes, clair));
+  const taille = new Uint8Array(4);
+  new DataView(taille.buffer).setUint32(0, 4096);
+  return concat(sel, taille, new Uint8Array([clePubliqueAS.length]), clePubliqueAS, chiffre);
+}
+__name(chiffrer, "chiffrer");
+async function envoyerPush(abonnement, message, vapid2) {
+  try {
+    const corps = await chiffrer(abonnement, encodeur.encode(JSON.stringify(message)));
+    const jeton = await jetonVapid(abonnement.endpoint, vapid2.privee, vapid2.contact);
+    const r = await fetch(abonnement.endpoint, {
+      method: "POST",
+      headers: {
+        TTL: "3600",
+        Urgency: "high",
+        "Content-Encoding": "aes128gcm",
+        "Content-Type": "application/octet-stream",
+        Authorization: `vapid t=${jeton}, k=${vapid2.publique}`,
+        ...message.tag ? { Topic: message.tag.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 32) } : {}
+      },
+      body: corps,
+      signal: AbortSignal.timeout(8e3)
+    });
+    if (r.status === 404 || r.status === 410) return "expire";
+    return r.ok ? "ok" : "erreur";
+  } catch {
+    return "erreur";
+  }
+}
+__name(envoyerPush, "envoyerPush");
+
 // actualites.ts
 var FLUX_FINANCIALJUICE = { url: "https://www.financialjuice.com/feed.ashx?xy=rss", source: "FinancialJuice", categorie: "annonces", langue: "en" };
 var FLUX = [
@@ -296,7 +384,7 @@ async function texteFinancialJuice(ctx) {
   if (!envGlobal) return null;
   const copie = await lireCopieFJ(envGlobal);
   memoireFJ = { lueLe: Date.now(), texte: copie?.texte ?? null };
-  if (!copie || Date.now() - copie.t > 15e4) {
+  if (!copie || Date.now() - copie.t > 3e5) {
     const verrou = new Request(`${origine}/__cache/fj-tentative`);
     if (!await caches.default.match(verrou)) {
       await caches.default.put(verrou, new Response("1", { headers: { "Cache-Control": "max-age=120" } }));
@@ -563,15 +651,24 @@ function json(donnees, maxAge) {
       "Content-Type": "application/json; charset=utf-8",
       "Cache-Control": `public, max-age=${maxAge}, s-maxage=${maxAge}`,
       "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, OPTIONS",
+      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type"
     }
   });
 }
 __name(json, "json");
 var actualites_default = {
-  async scheduled(_evenement, env, ctx) {
-    ctx.waitUntil(rafraichirFinancialJuice(env).then((etat) => console.log(`FinancialJuice : ${etat}`)));
+  async scheduled(evenement, env, ctx) {
+    envGlobal = env;
+    ctx.waitUntil(
+      (async () => {
+        const etat = await rafraichirFinancialJuice(env);
+        console.log(`FinancialJuice : ${etat}`);
+        const bilan = await tourneePush(env, evenement.scheduledTime);
+        console.log(`Push : ${bilan}`);
+        await Promise.all([sauverSecours(), sauverDictionnaires()]);
+      })()
+    );
   },
   async fetch(requete, env, ctx) {
     envGlobal = env;
@@ -580,6 +677,7 @@ var actualites_default = {
     const url = new URL(requete.url);
     origine = url.origin;
     if (url.pathname.startsWith("/__cache/")) return json({ erreur: "Route inconnue." }, 0);
+    if (url.pathname.startsWith("/push/")) return routePush(requete, url, env);
     const cache = caches.default;
     const cleCache = new Request(url.toString(), { method: "GET" });
     const enCache = await cache.match(cleCache);
@@ -622,6 +720,221 @@ var actualites_default = {
     return reponse;
   }
 };
+var URL_APP = "https://akhimysah.github.io/parnassa-trading/";
+var SERVICES_PUSH = /^https:\/\/([a-z0-9-]+\.)*(fcm\.googleapis\.com|push\.services\.mozilla\.com|push\.apple\.com|notify\.windows\.com)\//i;
+async function cleAbonnement(endpoint) {
+  const empreinte = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(endpoint));
+  return `abo:${[...new Uint8Array(empreinte)].slice(0, 12).map((o) => o.toString(16).padStart(2, "0")).join("")}`;
+}
+__name(cleAbonnement, "cleAbonnement");
+function nettoyerPreferences(p) {
+  return {
+    langue: p?.langue === "en" ? "en" : "fr",
+    annonces: p?.annonces === "toutes" || p?.annonces === "aucune" ? p.annonces : "importantes",
+    motsCles: (p?.motsCles ?? []).filter((m) => typeof m === "string").slice(0, 30).map((m) => m.slice(0, 40)),
+    rappels: {
+      ids: (p?.rappels?.ids ?? []).filter((x) => typeof x === "string").slice(0, 100),
+      delaiMinutes: Math.min(60, Math.max(1, Number(p?.rappels?.delaiMinutes) || 5)),
+      fortImpactAuto: Boolean(p?.rappels?.fortImpactAuto)
+    },
+    alertes: (p?.alertes ?? []).filter((a) => a && typeof a.id === "string" && /^BINANCE:[A-Z0-9]{2,20}$/.test(a.symbole) && Number.isFinite(a.seuil)).slice(0, 50).map((a) => ({ id: a.id, symbole: a.symbole, condition: a.condition === "en-dessous" ? "en-dessous" : "au-dessus", seuil: Number(a.seuil), note: a.note?.slice(0, 80) }))
+  };
+}
+__name(nettoyerPreferences, "nettoyerPreferences");
+function vapid(env) {
+  return { publique: env.VAPID_PUBLIQUE, privee: JSON.parse(env.VAPID_PRIVEE), contact: URL_APP };
+}
+__name(vapid, "vapid");
+async function routePush(requete, url, env) {
+  if (url.pathname === "/push/cle") return json({ cle: env.VAPID_PUBLIQUE }, 3600);
+  if (requete.method !== "POST") return json({ erreur: "M\xE9thode non autoris\xE9e." }, 0);
+  let corps;
+  try {
+    corps = await requete.json();
+  } catch {
+    return json({ erreur: "Corps JSON invalide." }, 0);
+  }
+  const endpoint = corps.abonnement?.endpoint ?? corps.endpoint ?? "";
+  if (!SERVICES_PUSH.test(endpoint)) return json({ erreur: "Service de push non reconnu." }, 0);
+  const cle = await cleAbonnement(endpoint);
+  if (url.pathname === "/push/abonnement") {
+    const a = corps.abonnement;
+    if (!a?.keys?.p256dh || !a.keys.auth) return json({ erreur: "Abonnement incomplet." }, 0);
+    const existant = await env.ANNONCES.get(cle, "json");
+    const enregistrement = {
+      abonnement: { endpoint: a.endpoint, keys: { p256dh: a.keys.p256dh, auth: a.keys.auth } },
+      preferences: nettoyerPreferences(corps.preferences),
+      envoyes: existant?.envoyes ?? [],
+      majLe: Date.now()
+    };
+    await env.ANNONCES.put(cle, JSON.stringify(enregistrement), { expirationTtl: 60 * 86400 });
+    return json({ ok: true }, 0);
+  }
+  if (url.pathname === "/push/desabonnement") {
+    await env.ANNONCES.delete(cle);
+    return json({ ok: true }, 0);
+  }
+  if (url.pathname === "/push/test") {
+    const e = await env.ANNONCES.get(cle, "json");
+    if (!e) return json({ erreur: "Abonnement inconnu." }, 0);
+    const fr = e.preferences.langue === "fr";
+    const r = await envoyerPush(
+      e.abonnement,
+      { titre: "Parnassa Trading", corps: fr ? "Les notifications push fonctionnent, m\xEAme application ferm\xE9e." : "Push notifications work, even with the app closed.", url: URL_APP, tag: "test" },
+      vapid(env)
+    );
+    return json({ resultat: r }, 0);
+  }
+  return json({ erreur: "Route inconnue." }, 0);
+}
+__name(routePush, "routePush");
+function titreLangue(d, langue) {
+  if (d.donnee) {
+    const indic = langue === "fr" ? d.donnee.indicateurFr ?? d.donnee.indicateur : d.donnee.indicateur;
+    return `${indic} : ${langue === "fr" ? "r\xE9el" : "actual"} ${d.donnee.actuel} (${langue === "fr" ? "pr\xE9v." : "fcst"} ${d.donnee.prevision ?? "\u2013"}, ${langue === "fr" ? "pr\xE9c." : "prev."} ${d.donnee.precedent ?? "\u2013"})`;
+  }
+  return langue === "fr" ? d.titreFr ?? d.titre : d.titreEn ?? d.titre;
+}
+__name(titreLangue, "titreLangue");
+function motCleTrouve(texte, motsCles) {
+  const sans = /* @__PURE__ */ __name((t2) => t2.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase(), "sans");
+  const t = sans(texte);
+  for (const m of motsCles) {
+    const mot = sans(m.trim());
+    if (!mot) continue;
+    const echappe = mot.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    if (new RegExp(`(^|[^a-z0-9])${echappe}([^a-z0-9]|$)`).test(t)) return m;
+  }
+  return null;
+}
+__name(motCleTrouve, "motCleTrouve");
+function valeurTexte(v, unite, echelle) {
+  if (v === null) return "\u2013";
+  return `${v}${echelle ? ` ${echelle}` : ""}${unite === "%" ? " %" : unite ? ` ${unite}` : ""}`;
+}
+__name(valeurTexte, "valeurTexte");
+async function tourneePush(env, heurePlanifiee) {
+  const liste = await env.ANNONCES.list({ prefix: "abo:" });
+  if (liste.keys.length === 0) return "aucun abonn\xE9";
+  const enregistrements = (await Promise.all(liste.keys.slice(0, 15).map(async (k) => ({ cle: k.name, e: await env.ANNONCES.get(k.name, "json") })))).filter((x) => x.e !== null);
+  const fin = heurePlanifiee;
+  const debut = fin - 12e4;
+  const texteFJ = (await lireCopieFJ(env))?.texte ?? null;
+  const nouvelles = texteFJ ? parser(texteFJ, FLUX_FINANCIALJUICE).filter((d) => d.date >= debut && d.date < fin) : [];
+  const nouvellesBilingues = nouvelles.length ? await bilingue(nouvelles) : [];
+  const besoinCalendrier = enregistrements.some((x) => x.e.preferences.rappels.ids.length > 0 || x.e.preferences.rappels.fortImpactAuto);
+  const evenements = besoinCalendrier ? await calendrierBilingue() : [];
+  const paires = [...new Set(enregistrements.flatMap((x) => x.e.preferences.alertes.filter((a) => !x.e.envoyes.includes(`alerte:${a.id}`)).map((a) => a.symbole.split(":")[1])))].slice(0, 10);
+  const bougies = /* @__PURE__ */ new Map();
+  await Promise.all(
+    paires.map(async (p) => {
+      try {
+        const r = await fetch(`https://data-api.binance.vision/api/v3/klines?symbol=${p}&interval=1m&limit=3`, { signal: AbortSignal.timeout(5e3) });
+        if (!r.ok) return;
+        const k = await r.json();
+        if (k.length === 0) return;
+        bougies.set(p, {
+          ouverture: Number(k[0][1]),
+          haut: Math.max(...k.map((x) => Number(x[2]))),
+          bas: Math.min(...k.map((x) => Number(x[3]))),
+          cloture: Number(k[k.length - 1][4])
+        });
+      } catch {
+      }
+    })
+  );
+  let envois = 0;
+  let expires = 0;
+  const cles = vapid(env);
+  for (const { cle, e } of enregistrements) {
+    const p = e.preferences;
+    const fr = p.langue === "fr";
+    const messages = [];
+    let modifie = false;
+    const retenues = nouvellesBilingues.filter((d) => {
+      const titre = `${d.titreFr ?? ""} ${d.titreEn ?? ""} ${d.titre}`;
+      return p.annonces === "toutes" || p.annonces === "importantes" && d.important || motCleTrouve(titre, p.motsCles) !== null;
+    });
+    if (retenues.length > 3) {
+      messages.push({
+        titre: `FinancialJuice \xB7 ${retenues.length} ${fr ? "nouvelles annonces" : "new headlines"}`,
+        corps: retenues.slice(0, 3).map((d) => `\u2022 ${titreLangue(d, p.langue)}`).join("\n"),
+        url: `${URL_APP}#actualites`,
+        tag: `fj-lot-${fin}`
+      });
+    } else {
+      for (const d of retenues) {
+        const mot = motCleTrouve(`${d.titreFr ?? ""} ${d.titreEn ?? ""} ${d.titre}`, p.motsCles);
+        messages.push({
+          titre: mot ? `\u{1F4F0} ${mot} \xB7 FinancialJuice` : d.important ? `\u2605 FinancialJuice` : "FinancialJuice",
+          corps: titreLangue(d, p.langue),
+          url: `${URL_APP}#actualites`,
+          tag: `fj-${d.id}`
+        });
+      }
+    }
+    const suivis = new Set(p.rappels.ids);
+    for (const ev of evenements) {
+      const concerne = suivis.has(ev.id) || p.rappels.fortImpactAuto && ev.importance >= 1;
+      if (!concerne) continue;
+      const nom = fr ? ev.titreFr ?? ev.titre : ev.titre;
+      const moment = ev.date - p.rappels.delaiMinutes * 6e4;
+      if (moment >= debut && moment < fin) {
+        messages.push({
+          titre: `\u23F0 ${fr ? "Dans" : "In"} ${p.rappels.delaiMinutes} min \xB7 ${ev.pays}`,
+          corps: `${nom} \u2014 ${fr ? "pr\xE9vision" : "forecast"} ${valeurTexte(ev.prevision, ev.unite, ev.echelle)}, ${fr ? "pr\xE9c\xE9dent" : "previous"} ${valeurTexte(ev.precedent, ev.unite, ev.echelle)}`,
+          url: `${URL_APP}#calendrier`,
+          tag: `rappel-${ev.id}`
+        });
+      }
+      const clePublie = `publie:${ev.id}`;
+      if (ev.actuel !== null && ev.date <= fin && fin - ev.date < 3 * 36e5 && !e.envoyes.includes(clePublie)) {
+        const ecart = ev.prevision !== null ? Math.sign(ev.actuel - ev.prevision) : 0;
+        messages.push({
+          titre: `\u{1F4CA} ${fr ? "Publi\xE9" : "Released"} \xB7 ${ev.pays}`,
+          corps: `${nom} \u2014 ${fr ? "r\xE9el" : "actual"} ${valeurTexte(ev.actuel, ev.unite, ev.echelle)}${ecart > 0 ? " \u25B2" : ecart < 0 ? " \u25BC" : ""}, ${fr ? "pr\xE9vision" : "forecast"} ${valeurTexte(ev.prevision, ev.unite, ev.echelle)}`,
+          url: `${URL_APP}#calendrier`,
+          tag: `publie-${ev.id}`
+        });
+        e.envoyes.push(clePublie);
+        modifie = true;
+      }
+    }
+    for (const a of p.alertes) {
+      const cleAlerte = `alerte:${a.id}`;
+      if (e.envoyes.includes(cleAlerte)) continue;
+      const b = bougies.get(a.symbole.split(":")[1]);
+      if (!b) continue;
+      const franchie = a.condition === "au-dessus" ? b.ouverture < a.seuil && b.haut >= a.seuil : b.ouverture > a.seuil && b.bas <= a.seuil;
+      if (!franchie) continue;
+      messages.push({
+        titre: `\u{1F514} ${a.symbole.split(":")[1]} ${a.condition === "au-dessus" ? fr ? "au-dessus de" : "above" : fr ? "sous" : "below"} ${a.seuil}`,
+        corps: `${fr ? "Dernier prix" : "Last price"} ${b.cloture}${a.note ? ` \u2014 ${a.note}` : ""}`,
+        url: `${URL_APP}#alertes`,
+        tag: `alerte-${a.id}`
+      });
+      e.envoyes.push(cleAlerte);
+      modifie = true;
+    }
+    for (const m of messages.slice(0, 6)) {
+      if (envois >= 20) break;
+      const r = await envoyerPush(e.abonnement, m, cles);
+      envois += 1;
+      if (r === "expire") {
+        await env.ANNONCES.delete(cle);
+        expires += 1;
+        modifie = false;
+        break;
+      }
+    }
+    if (modifie) {
+      e.envoyes = e.envoyes.slice(-200);
+      await env.ANNONCES.put(cle, JSON.stringify(e), { expirationTtl: 60 * 86400 });
+    }
+  }
+  return `${enregistrements.length} abonn\xE9(s), ${nouvelles.length} annonce(s) dans la fen\xEAtre, ${envois} envoi(s), ${expires} expir\xE9(s)`;
+}
+__name(tourneePush, "tourneePush");
 
 // ../../modele-whop/node_modules/.pnpm/wrangler@4.124.0/node_modules/wrangler/templates/middleware/middleware-ensure-req-body-drained.ts
 var drainBody = /* @__PURE__ */ __name(async (request, env, _ctx, middlewareCtx) => {
@@ -686,7 +999,7 @@ var jsonError = /* @__PURE__ */ __name(async (request, env, _ctx, middlewareCtx)
 }, "jsonError");
 var middleware_miniflare3_json_error_default = jsonError;
 
-// .wrangler/tmp/bundle-qYONMX/middleware-insertion-facade.js
+// .wrangler/tmp/bundle-y42tPn/middleware-insertion-facade.js
 var __INTERNAL_WRANGLER_MIDDLEWARE__ = [
   middleware_ensure_req_body_drained_default,
   middleware_scheduled_default,
@@ -719,7 +1032,7 @@ function __facade_invoke__(request, env, ctx, dispatch, finalMiddleware) {
 }
 __name(__facade_invoke__, "__facade_invoke__");
 
-// .wrangler/tmp/bundle-qYONMX/middleware-loader.entry.ts
+// .wrangler/tmp/bundle-y42tPn/middleware-loader.entry.ts
 var __Facade_ScheduledController__ = class ___Facade_ScheduledController__ {
   constructor(scheduledTime, cron, noRetry) {
     this.scheduledTime = scheduledTime;

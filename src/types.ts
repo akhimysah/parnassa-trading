@@ -56,6 +56,8 @@ export interface Parametres {
   squawk: { actif: boolean; filtre: 'annonces' | 'importantes' | 'tout'; vitesse: number };
   /** Rappels : délai avant l'événement, et rappel automatique des annonces à fort impact. */
   rappels: { delaiMinutes: number; fortImpactAuto: boolean };
+  /** Notifications push (application fermée) : actives sur cet appareil, et annonces à recevoir. */
+  push: { actif: boolean; annonces: 'aucune' | 'importantes' | 'toutes' };
 }
 
 export interface Rappel {
