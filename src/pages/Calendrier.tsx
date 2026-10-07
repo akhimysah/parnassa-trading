@@ -1,6 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Etat } from '../types';
-import { compteARebours, drapeau, LIBELLES_DONNEE, useCalendrier, useSurprises, valeurCalendrier, type EvenementCalendrier } from '../actualites';
+import {
+  compteARebours,
+  drapeau,
+  LIBELLES_DONNEE,
+  useBanquesCentrales,
+  useCalendrier,
+  useResultats,
+  useSurprises,
+  valeurCalendrier,
+  type EvenementCalendrier,
+  type Resultat,
+} from '../actualites';
+import { Sessions } from '../composants/Sessions';
 import { Surprises } from '../composants/Surprises';
 
 interface Props {
@@ -25,6 +37,7 @@ const PAYS: { code: string; libelle: string }[] = [
 ];
 
 type Impact = 'tous' | 'moyen' | 'fort';
+type Vue = 'economie' | 'banques' | 'resultats';
 
 const CLE_FILTRES = 'parnassa-trading:calendrier:v1';
 
@@ -56,8 +69,11 @@ function cleJour(ms: number): string {
 
 /** Calendrier économique de la semaine, bilingue, avec valeurs publiées et compte à rebours. */
 export function Calendrier({ etat, maj }: Props) {
+  const [vue, setVue] = useState<Vue>('economie');
   const { evenements, chargement } = useCalendrier(true);
-  const surprises = useSurprises(true);
+  const surprises = useSurprises(vue === 'economie');
+  const banques = useBanquesCentrales(vue === 'banques');
+  const resultats = useResultats(vue === 'resultats');
   const [filtres, setFiltres] = useState(lireFiltres);
   const [recherche, setRecherche] = useState('');
   const [, tic] = useState(0);
@@ -124,6 +140,28 @@ export function Calendrier({ etat, maj }: Props) {
 
   return (
     <div className="page calendrier-page">
+      <div className="barre-vues">
+        <div className="segmente compact">
+          {(
+            [
+              ['economie', 'Économie'],
+              ['banques', 'Banques centrales'],
+              ['resultats', 'Résultats'],
+            ] as [Vue, string][]
+          ).map(([v, libelle]) => (
+            <button key={v} className={vue === v ? 'actif neutre' : ''} onClick={() => setVue(v)}>
+              {libelle}
+            </button>
+          ))}
+        </div>
+        <Sessions />
+      </div>
+
+      {vue === 'banques' && <VueBanques banques={banques.donnees} chargement={banques.chargement} langue={langue} />}
+      {vue === 'resultats' && <VueResultats resultats={resultats.donnees} chargement={resultats.chargement} />}
+
+      {vue === 'economie' && (
+      <>
       <div className="onglets">
         {PAYS.map((p) => (
           <button key={p.code} className={filtres.pays.includes(p.code) ? 'actif' : ''} onClick={() => basculerPays(p.code)} title={p.libelle}>
@@ -228,6 +266,131 @@ export function Calendrier({ etat, maj }: Props) {
           </section>
         ))}
       </div>
+      </>
+      )}
+    </div>
+  );
+}
+
+function VueBanques({ banques, chargement, langue }: { banques: import('../actualites').BanqueCentrale[]; chargement: boolean; langue: 'fr' | 'en' | 'fr+en' }) {
+  const [, tic] = useState(0);
+  useEffect(() => {
+    const t = window.setInterval(() => tic((n) => n + 1), 30000);
+    return () => window.clearInterval(t);
+  }, []);
+  const tries = [...banques].sort((a, b) => (a.prochaine?.date ?? Infinity) - (b.prochaine?.date ?? Infinity));
+  return (
+    <div className="calendrier-defilement">
+      {chargement && banques.length === 0 && <p className="vide">Chargement des banques centrales…</p>}
+      <div className="grille-banques">
+        {tries.map((b) => {
+          const v = b.derniere?.variation ?? null;
+          return (
+            <div key={b.pays} className="carte carte-banque">
+              <div className="banque-entete">
+                <span className="drapeau">{drapeau(b.pays)}</span>
+                <span>
+                  <strong>{langue === 'en' ? b.nom : b.nomFr}</strong>
+                  {langue === 'fr+en' && <span className="titre-traduit">{b.nom}</span>}
+                </span>
+                <span className="pastille">{b.devise}</span>
+              </div>
+              <div className="banque-taux">
+                <strong>{b.taux === null ? '–' : `${b.taux.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} %`}</strong>
+                {v !== null && (
+                  <span className={v > 0 ? 'hausse' : v < 0 ? 'baisse' : 'muet'}>
+                    {v > 0 ? `▲ +${v.toLocaleString('fr-FR')} pt` : v < 0 ? `▼ ${v.toLocaleString('fr-FR')} pt` : 'inchangé'}
+                  </span>
+                )}
+              </div>
+              <dl className="banque-dates">
+                <div>
+                  <dt>Dernière décision</dt>
+                  <dd>{b.derniere ? new Date(b.derniere.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' }) : '–'}</dd>
+                </div>
+                <div>
+                  <dt>Prochaine réunion</dt>
+                  <dd>
+                    {b.prochaine ? (
+                      <>
+                        {new Date(b.prochaine.date).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'long' })}{' '}
+                        <span className="rebours">{compteARebours(b.prochaine.date)}</span>
+                        {b.prochaine.prevision !== null && <span className="muet"> · prév. {b.prochaine.prevision.toLocaleString('fr-FR')} %</span>}
+                      </>
+                    ) : (
+                      <span className="muet">pas encore au calendrier</span>
+                    )}
+                  </dd>
+                </div>
+              </dl>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function VueResultats({ resultats, chargement }: { resultats: Resultat[]; chargement: boolean }) {
+  const [recherche, setRecherche] = useState('');
+  const q = recherche.trim().toLowerCase();
+  const filtres = resultats.filter((r) => !q || r.symbole.toLowerCase().includes(q) || r.nom.toLowerCase().includes(q));
+  const jours = [...new Set(filtres.map((r) => r.date))].sort();
+  const aujourdhui = new Date().toISOString().slice(0, 10);
+  const milliards = (v: number | null) => (v === null ? '–' : v >= 1e9 ? `${(v / 1e9).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} Md$` : `${Math.round(v / 1e6).toLocaleString('fr-FR')} M$`);
+  return (
+    <div className="calendrier-defilement">
+      <div className="fil-etat">
+        <span className="muet">Résultats trimestriels des sociétés cotées aux États-Unis (source Nasdaq), d'hier à J+7, 40 plus grosses capitalisations par jour.</span>
+        <input className="champ-texte" value={recherche} onChange={(e) => setRecherche(e.target.value)} placeholder="Société ou symbole…" />
+      </div>
+      {chargement && resultats.length === 0 && <p className="vide">Chargement des résultats…</p>}
+      {!chargement && filtres.length === 0 && <p className="vide">Aucun résultat trouvé.</p>}
+      {jours.map((j) => (
+        <section key={j}>
+          <h4 className={`jour ${j === aujourdhui ? 'aujourdhui' : ''}`}>
+            {new Date(`${j}T12:00:00`).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}
+            {j === aujourdhui && <span className="pastille-aujourdhui">Aujourd'hui</span>}
+          </h4>
+          <div className="defilement-x">
+            <table className="tableau-prix tableau-resultats">
+              <thead>
+                <tr>
+                  <th>Société</th>
+                  <th>Moment</th>
+                  <th className="num">Capitalisation</th>
+                  <th className="num">BPA prévu</th>
+                  <th className="num">BPA publié</th>
+                  <th className="num">Surprise</th>
+                  <th className="num">BPA an dernier</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtres
+                  .filter((r) => r.date === j)
+                  .map((r) => (
+                    <tr key={`${r.date}-${r.symbole}`}>
+                      <td>
+                        <strong>{r.symbole}</strong> <span className="muet">{r.nom}</span>
+                        {r.trimestre && <span className="muet"> · T. clos {r.trimestre}</span>}
+                      </td>
+                      <td className="muet">{r.moment === 'avant-ouverture' ? 'Avant ouverture' : r.moment === 'apres-cloture' ? 'Après clôture' : '–'}</td>
+                      <td className="num">{milliards(r.capitalisation)}</td>
+                      <td className="num muet">{r.bpaPrevu ?? '–'}</td>
+                      <td className="num">
+                        <strong>{r.bpaReel ?? '–'}</strong>
+                      </td>
+                      <td className={`num ${r.surprisePct === null ? 'muet' : r.surprisePct >= 0 ? 'hausse' : 'baisse'}`}>
+                        {r.surprisePct === null ? '–' : `${r.surprisePct >= 0 ? '+' : ''}${r.surprisePct.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} %`}
+                      </td>
+                      <td className="num muet">{r.bpaAnDernier ?? '–'}</td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ))}
     </div>
   );
 }

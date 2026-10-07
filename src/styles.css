@@ -2483,3 +2483,116 @@ th.trie {
   gap: 4px 10px;
   font-variant-numeric: tabular-nums;
 }
+
+/* ---- Vues du calendrier, sessions, banques centrales ---- */
+.barre-vues {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--bordure);
+  flex-wrap: wrap;
+}
+.sessions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-left: auto;
+  font-size: 12px;
+}
+.session {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--texte-muet);
+  cursor: default;
+  white-space: nowrap;
+}
+.session i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--bordure-2);
+}
+.session.ouverte {
+  color: var(--texte);
+}
+.session.ouverte i {
+  background: var(--hausse);
+  box-shadow: 0 0 0 3px rgba(38, 166, 154, 0.2);
+}
+.session em {
+  font-style: normal;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--texte-muet);
+}
+.grille-banques {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+  padding: 12px;
+}
+.carte-banque {
+  padding: 12px 14px;
+  gap: 10px;
+}
+.banque-entete {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.banque-entete > span:nth-child(2) {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+}
+.banque-entete .drapeau {
+  font-size: 20px;
+}
+.banque-taux {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.banque-taux strong {
+  font-size: 26px;
+  font-variant-numeric: tabular-nums;
+}
+.banque-taux span {
+  font-size: 12px;
+  font-weight: 600;
+}
+.banque-dates {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+.banque-dates div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.banque-dates dt {
+  color: var(--texte-muet);
+}
+.banque-dates dd {
+  margin: 0;
+  text-align: right;
+}
+.tableau-resultats td {
+  white-space: nowrap;
+}
+@media (max-width: 640px) {
+  .sessions {
+    margin-left: 0;
+  }
+}
+.banque-dates .rebours {
+  white-space: nowrap;
+}
+.banque-dates dt {
+  white-space: nowrap;
+}

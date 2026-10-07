@@ -431,6 +431,112 @@ async function surprises() {
   return liste;
 }
 __name(surprises, "surprises");
+var BANQUES = {
+  US: { nom: "Federal Reserve", nomFr: "R\xE9serve f\xE9d\xE9rale (Fed)" },
+  EU: { nom: "European Central Bank", nomFr: "Banque centrale europ\xE9enne (BCE)" },
+  GB: { nom: "Bank of England", nomFr: "Banque d'Angleterre (BoE)" },
+  JP: { nom: "Bank of Japan", nomFr: "Banque du Japon (BoJ)" },
+  CH: { nom: "Swiss National Bank", nomFr: "Banque nationale suisse (BNS)" },
+  CA: { nom: "Bank of Canada", nomFr: "Banque du Canada (BoC)" },
+  AU: { nom: "Reserve Bank of Australia", nomFr: "Banque de r\xE9serve d'Australie (RBA)" },
+  NZ: { nom: "Reserve Bank of New Zealand", nomFr: "Banque de r\xE9serve de Nouvelle-Z\xE9lande (RBNZ)" },
+  CN: { nom: "People's Bank of China (1-year LPR)", nomFr: "Banque populaire de Chine (LPR 1 an)" }
+};
+async function evenementsBruts(debut, fin, pays) {
+  try {
+    const r = await fetch(
+      `https://economic-calendar.tradingview.com/events?from=${new Date(debut).toISOString()}&to=${new Date(fin).toISOString()}&countries=${pays}`,
+      { headers: { Origin: "https://www.tradingview.com", "User-Agent": "Mozilla/5.0 (compatible; ParnassaTrading/1.0)" }, signal: AbortSignal.timeout(1e4) }
+    );
+    return r.ok ? (await r.json()).result ?? [] : [];
+  } catch {
+    return [];
+  }
+}
+__name(evenementsBruts, "evenementsBruts");
+var EST_DECISION = /* @__PURE__ */ __name((titre) => /(interest rate decision|loan prime rate 1y)/i.test(titre) && !/minutes/i.test(titre), "EST_DECISION");
+async function banquesCentrales() {
+  const jour = 864e5;
+  const maintenant = Date.now();
+  const pays = Object.keys(BANQUES).join(",");
+  const tranches = await Promise.all([
+    evenementsBruts(maintenant - 100 * jour, maintenant - 50 * jour, pays),
+    evenementsBruts(maintenant - 50 * jour, maintenant, pays),
+    evenementsBruts(maintenant, maintenant + 120 * jour, pays)
+  ]);
+  const decisions = tranches.flat().filter((e) => EST_DECISION(String(e.title ?? ""))).map((e) => ({
+    pays: String(e.country),
+    devise: String(e.currency ?? ""),
+    date: Date.parse(String(e.date)),
+    actuel: typeof e.actual === "number" ? e.actual : null,
+    prevision: typeof e.forecast === "number" ? e.forecast : null,
+    precedent: typeof e.previous === "number" ? e.previous : null
+  })).sort((a, b) => a.date - b.date);
+  return Object.entries(BANQUES).map(([code, b]) => {
+    const liste = decisions.filter((d) => d.pays === code);
+    const passees = liste.filter((d) => d.actuel !== null && d.date <= maintenant);
+    const derniere = passees[passees.length - 1] ?? null;
+    const prochaine = liste.find((d) => d.date > maintenant) ?? null;
+    return {
+      pays: code,
+      devise: liste[0]?.devise ?? "",
+      nom: b.nom,
+      nomFr: b.nomFr,
+      taux: derniere?.actuel ?? prochaine?.precedent ?? null,
+      derniere: derniere ? {
+        date: derniere.date,
+        actuel: derniere.actuel,
+        precedent: derniere.precedent,
+        variation: derniere.precedent !== null ? Math.round((derniere.actuel - derniere.precedent) * 100) / 100 : null
+      } : null,
+      prochaine: prochaine ? { date: prochaine.date, prevision: prochaine.prevision } : null
+    };
+  });
+}
+__name(banquesCentrales, "banquesCentrales");
+function nombreDollars(v) {
+  if (typeof v !== "string" || !v.trim() || v === "N/A") return null;
+  const n = Number(v.replace(/[$,()]/g, ""));
+  return Number.isFinite(n) ? v.includes("(") ? -n : n : null;
+}
+__name(nombreDollars, "nombreDollars");
+async function resultatsDuJour(date) {
+  try {
+    const r = await fetch(`https://api.nasdaq.com/api/calendar/earnings?date=${date}`, {
+      headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)", Accept: "application/json, text/plain, */*", Origin: "https://www.nasdaq.com", Referer: "https://www.nasdaq.com/" },
+      signal: AbortSignal.timeout(8e3)
+    });
+    if (!r.ok) return [];
+    const d = await r.json();
+    return (d.data?.rows ?? []).map((l) => ({
+      date,
+      symbole: l.symbol,
+      nom: l.name,
+      moment: l.time === "time-pre-market" ? "avant-ouverture" : l.time === "time-after-hours" ? "apres-cloture" : "inconnu",
+      capitalisation: nombreDollars(l.marketCap),
+      bpaPrevu: l.epsForecast || null,
+      bpaReel: l.eps || null,
+      surprisePct: l.surprise && l.surprise !== "N/A" ? Number(l.surprise) : null,
+      bpaAnDernier: l.lastYearEPS || null,
+      trimestre: l.fiscalQuarterEnding ?? ""
+    }));
+  } catch {
+    return [];
+  }
+}
+__name(resultatsDuJour, "resultatsDuJour");
+async function resultats() {
+  const jour = 864e5;
+  const dates = [];
+  for (let i = -1; i <= 7; i++) {
+    const d = new Date(Date.now() + i * jour);
+    if (d.getUTCDay() === 0 || d.getUTCDay() === 6) continue;
+    dates.push(d.toISOString().slice(0, 10));
+  }
+  const parJour = await Promise.all(dates.map(resultatsDuJour));
+  return parJour.flatMap((l) => l.sort((a, b) => (b.capitalisation ?? 0) - (a.capitalisation ?? 0)).slice(0, 40));
+}
+__name(resultats, "resultats");
 async function calendrierBilingue() {
   const evenements = await calendrier();
   const titres = [...new Set(evenements.map((e) => e.titre))];
@@ -485,6 +591,10 @@ var actualites_default = {
     } else if (url.pathname === "/annonces") {
       const depeches = await bilingue(await agreger([FLUX_FINANCIALJUICE], 200));
       reponse = json({ gener\u00E9Le: Date.now(), depeches }, 20);
+    } else if (url.pathname === "/banques-centrales") {
+      reponse = json({ gener\u00E9Le: Date.now(), banques: await banquesCentrales() }, 3600);
+    } else if (url.pathname === "/resultats") {
+      reponse = json({ gener\u00E9Le: Date.now(), resultats: await resultats() }, 1800);
     } else if (url.pathname === "/surprises") {
       reponse = json({ gener\u00E9Le: Date.now(), jours: 30, pays: await surprises() }, 1800);
     } else if (url.pathname === "/calendrier") {
@@ -504,7 +614,7 @@ var actualites_default = {
       const depeches = await bilingue(await agreger(fluxs, 80));
       reponse = json({ gener\u00E9Le: Date.now(), depeches }, 120);
     } else if (url.pathname === "/" || url.pathname === "/sante") {
-      reponse = json({ service: "parnassa-actualites", flux: FLUX.length, routes: ["/flux", "/annonces", "/calendrier", "/surprises", "/recherche?q=\u2026&ticker=\u2026"] }, 0);
+      reponse = json({ service: "parnassa-actualites", flux: FLUX.length, routes: ["/flux", "/annonces", "/calendrier", "/surprises", "/banques-centrales", "/resultats", "/recherche?q=\u2026&ticker=\u2026"] }, 0);
     } else {
       return json({ erreur: "Route inconnue." }, 0);
     }

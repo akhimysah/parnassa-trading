@@ -569,6 +569,149 @@ async function surprises(): Promise<SurprisePays[]> {
   return liste;
 }
 
+// ---------- Banques centrales ----------
+
+const BANQUES: Record<string, { nom: string; nomFr: string }> = {
+  US: { nom: 'Federal Reserve', nomFr: 'Réserve fédérale (Fed)' },
+  EU: { nom: 'European Central Bank', nomFr: 'Banque centrale européenne (BCE)' },
+  GB: { nom: 'Bank of England', nomFr: "Banque d'Angleterre (BoE)" },
+  JP: { nom: 'Bank of Japan', nomFr: 'Banque du Japon (BoJ)' },
+  CH: { nom: 'Swiss National Bank', nomFr: 'Banque nationale suisse (BNS)' },
+  CA: { nom: 'Bank of Canada', nomFr: 'Banque du Canada (BoC)' },
+  AU: { nom: 'Reserve Bank of Australia', nomFr: "Banque de réserve d'Australie (RBA)" },
+  NZ: { nom: 'Reserve Bank of New Zealand', nomFr: 'Banque de réserve de Nouvelle-Zélande (RBNZ)' },
+  CN: { nom: "People's Bank of China (1-year LPR)", nomFr: 'Banque populaire de Chine (LPR 1 an)' },
+};
+
+interface BanqueCentrale {
+  pays: string;
+  devise: string;
+  nom: string;
+  nomFr: string;
+  taux: number | null;
+  derniere: { date: number; actuel: number; precedent: number | null; variation: number | null } | null;
+  prochaine: { date: number; prevision: number | null } | null;
+}
+
+async function evenementsBruts(debut: number, fin: number, pays: string): Promise<Record<string, unknown>[]> {
+  try {
+    const r = await fetch(
+      `https://economic-calendar.tradingview.com/events?from=${new Date(debut).toISOString()}&to=${new Date(fin).toISOString()}&countries=${pays}`,
+      { headers: { Origin: 'https://www.tradingview.com', 'User-Agent': 'Mozilla/5.0 (compatible; ParnassaTrading/1.0)' }, signal: AbortSignal.timeout(10000) },
+    );
+    return r.ok ? (((await r.json()) as { result?: Record<string, unknown>[] }).result ?? []) : [];
+  } catch {
+    return [];
+  }
+}
+
+const EST_DECISION = (titre: string) => /(interest rate decision|loan prime rate 1y)/i.test(titre) && !/minutes/i.test(titre);
+
+async function banquesCentrales(): Promise<BanqueCentrale[]> {
+  const jour = 86400000;
+  const maintenant = Date.now();
+  const pays = Object.keys(BANQUES).join(',');
+  // Le service tronque à 2 000 événements : trois tranches pour couvrir 100 jours passés et 120 à venir.
+  const tranches = await Promise.all([
+    evenementsBruts(maintenant - 100 * jour, maintenant - 50 * jour, pays),
+    evenementsBruts(maintenant - 50 * jour, maintenant, pays),
+    evenementsBruts(maintenant, maintenant + 120 * jour, pays),
+  ]);
+  const decisions = tranches
+    .flat()
+    .filter((e) => EST_DECISION(String(e.title ?? '')))
+    .map((e) => ({
+      pays: String(e.country),
+      devise: String(e.currency ?? ''),
+      date: Date.parse(String(e.date)),
+      actuel: typeof e.actual === 'number' ? e.actual : null,
+      prevision: typeof e.forecast === 'number' ? e.forecast : null,
+      precedent: typeof e.previous === 'number' ? e.previous : null,
+    }))
+    .sort((a, b) => a.date - b.date);
+  return Object.entries(BANQUES).map(([code, b]) => {
+    const liste = decisions.filter((d) => d.pays === code);
+    const passees = liste.filter((d) => d.actuel !== null && d.date <= maintenant);
+    const derniere = passees[passees.length - 1] ?? null;
+    const prochaine = liste.find((d) => d.date > maintenant) ?? null;
+    return {
+      pays: code,
+      devise: liste[0]?.devise ?? '',
+      nom: b.nom,
+      nomFr: b.nomFr,
+      taux: derniere?.actuel ?? prochaine?.precedent ?? null,
+      derniere: derniere
+        ? {
+            date: derniere.date,
+            actuel: derniere.actuel!,
+            precedent: derniere.precedent,
+            variation: derniere.precedent !== null ? Math.round((derniere.actuel! - derniere.precedent) * 100) / 100 : null,
+          }
+        : null,
+      prochaine: prochaine ? { date: prochaine.date, prevision: prochaine.prevision } : null,
+    };
+  });
+}
+
+// ---------- Résultats d'entreprises (marché américain, Nasdaq) ----------
+
+interface Resultat {
+  date: string;
+  symbole: string;
+  nom: string;
+  moment: 'avant-ouverture' | 'apres-cloture' | 'inconnu';
+  capitalisation: number | null;
+  bpaPrevu: string | null;
+  bpaReel: string | null;
+  surprisePct: number | null;
+  bpaAnDernier: string | null;
+  trimestre: string;
+}
+
+function nombreDollars(v: unknown): number | null {
+  if (typeof v !== 'string' || !v.trim() || v === 'N/A') return null;
+  const n = Number(v.replace(/[$,()]/g, ''));
+  return Number.isFinite(n) ? (v.includes('(') ? -n : n) : null;
+}
+
+async function resultatsDuJour(date: string): Promise<Resultat[]> {
+  try {
+    const r = await fetch(`https://api.nasdaq.com/api/calendar/earnings?date=${date}`, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', Accept: 'application/json, text/plain, */*', Origin: 'https://www.nasdaq.com', Referer: 'https://www.nasdaq.com/' },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!r.ok) return [];
+    const d = (await r.json()) as { data?: { rows?: Record<string, string>[] | null } };
+    return (d.data?.rows ?? []).map((l) => ({
+      date,
+      symbole: l.symbol,
+      nom: l.name,
+      moment: l.time === 'time-pre-market' ? 'avant-ouverture' : l.time === 'time-after-hours' ? 'apres-cloture' : 'inconnu',
+      capitalisation: nombreDollars(l.marketCap),
+      bpaPrevu: l.epsForecast || null,
+      bpaReel: l.eps || null,
+      surprisePct: l.surprise && l.surprise !== 'N/A' ? Number(l.surprise) : null,
+      bpaAnDernier: l.lastYearEPS || null,
+      trimestre: l.fiscalQuarterEnding ?? '',
+    }));
+  } catch {
+    return [];
+  }
+}
+
+async function resultats(): Promise<Resultat[]> {
+  const jour = 86400000;
+  const dates: string[] = [];
+  for (let i = -1; i <= 7; i++) {
+    const d = new Date(Date.now() + i * jour);
+    if (d.getUTCDay() === 0 || d.getUTCDay() === 6) continue;
+    dates.push(d.toISOString().slice(0, 10));
+  }
+  const parJour = await Promise.all(dates.map(resultatsDuJour));
+  // Les 40 plus grosses capitalisations de chaque jour suffisent largement pour suivre le marché.
+  return parJour.flatMap((l) => l.sort((a, b) => (b.capitalisation ?? 0) - (a.capitalisation ?? 0)).slice(0, 40));
+}
+
 async function calendrierBilingue(): Promise<EvenementCalendrier[]> {
   const evenements = await calendrier();
   const titres = [...new Set(evenements.map((e) => e.titre))];
@@ -629,6 +772,10 @@ export default {
     } else if (url.pathname === '/annonces') {
       const depeches = await bilingue(await agreger([FLUX_FINANCIALJUICE], 200));
       reponse = json({ generéLe: Date.now(), depeches }, 20);
+    } else if (url.pathname === '/banques-centrales') {
+      reponse = json({ generéLe: Date.now(), banques: await banquesCentrales() }, 3600);
+    } else if (url.pathname === '/resultats') {
+      reponse = json({ generéLe: Date.now(), resultats: await resultats() }, 1800);
     } else if (url.pathname === '/surprises') {
       reponse = json({ generéLe: Date.now(), jours: 30, pays: await surprises() }, 1800);
     } else if (url.pathname === '/calendrier') {
@@ -649,7 +796,7 @@ export default {
       const depeches = await bilingue(await agreger(fluxs, 80));
       reponse = json({ generéLe: Date.now(), depeches }, 120);
     } else if (url.pathname === '/' || url.pathname === '/sante') {
-      reponse = json({ service: 'parnassa-actualites', flux: FLUX.length, routes: ['/flux', '/annonces', '/calendrier', '/surprises', '/recherche?q=…&ticker=…'] }, 0);
+      reponse = json({ service: 'parnassa-actualites', flux: FLUX.length, routes: ['/flux', '/annonces', '/calendrier', '/surprises', '/banques-centrales', '/resultats', '/recherche?q=…&ticker=…'] }, 0);
     } else {
       return json({ erreur: 'Route inconnue.' }, 0);
     }

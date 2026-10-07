@@ -241,6 +241,65 @@ export function useSurprises(actif = true) {
   return pays;
 }
 
+export interface BanqueCentrale {
+  pays: string;
+  devise: string;
+  nom: string;
+  nomFr: string;
+  taux: number | null;
+  derniere: { date: number; actuel: number; precedent: number | null; variation: number | null } | null;
+  prochaine: { date: number; prevision: number | null } | null;
+}
+
+export interface Resultat {
+  date: string;
+  symbole: string;
+  nom: string;
+  moment: 'avant-ouverture' | 'apres-cloture' | 'inconnu';
+  capitalisation: number | null;
+  bpaPrevu: string | null;
+  bpaReel: string | null;
+  surprisePct: number | null;
+  bpaAnDernier: string | null;
+  trimestre: string;
+}
+
+/** Charge une route JSON du relais quand `actif`, puis la rafraîchit toutes les `intervalleMs`. */
+function useRoute<T>(chemin: string, extraire: (d: unknown) => T, initial: T, actif: boolean, intervalleMs: number): { donnees: T; chargement: boolean } {
+  const [donnees, setDonnees] = useState<T>(initial);
+  const [chargement, setChargement] = useState(true);
+  useEffect(() => {
+    if (!actif) return;
+    let vivant = true;
+    const tour = () =>
+      fetch(`${URL_ACTUALITES}${chemin}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          if (vivant && d) setDonnees(extraire(d));
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          if (vivant) setChargement(false);
+        });
+    void tour();
+    const t = window.setInterval(tour, intervalleMs);
+    return () => {
+      vivant = false;
+      window.clearInterval(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chemin, actif, intervalleMs]);
+  return { donnees, chargement };
+}
+
+export function useBanquesCentrales(actif: boolean) {
+  return useRoute<BanqueCentrale[]>('/banques-centrales', (d) => (d as { banques: BanqueCentrale[] }).banques, [], actif, 3600000);
+}
+
+export function useResultats(actif: boolean) {
+  return useRoute<Resultat[]>('/resultats', (d) => (d as { resultats: Resultat[] }).resultats, [], actif, 1800000);
+}
+
 export function drapeau(pays: string): string {
   if (!/^[A-Z]{2}$/.test(pays)) return '🌐';
   return String.fromCodePoint(...[...pays].map((c) => 0x1f1e6 + c.charCodeAt(0) - 65));
