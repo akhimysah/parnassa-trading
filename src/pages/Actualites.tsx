@@ -21,6 +21,7 @@ import {
   type FilActualites,
 } from '../actualites';
 import { demanderNotifications } from '../alertes';
+import { annoncer, couperSquawk, langueParlee, squawkDisponible, texteParle } from '../squawk';
 import { sonner } from '../alertes';
 import { IconeCroix, IconeRecherche } from '../composants/Icones';
 import { CalendrierAnnonces } from '../composants/CalendrierAnnonces';
@@ -189,6 +190,40 @@ export function Actualites({ etat, fil, maj }: Props) {
           <button className={`puce-bascule ${sonBreaking ? 'actif' : ''}`} onClick={() => setSonBreaking((v) => !v)} title="Jouer un son à chaque nouvelle dépêche importante">
             🔔 Son
           </button>
+          {squawkDisponible() && (
+            <span className={`groupe-squawk ${etat.parametres.squawk.actif ? 'actif' : ''}`}>
+              <button
+                className={`puce-bascule ${etat.parametres.squawk.actif ? 'actif' : ''}`}
+                title="Lire à voix haute les nouvelles dépêches (squawk), sur toutes les pages"
+                onClick={() => {
+                  const actif = !etat.parametres.squawk.actif;
+                  maj({ parametres: { ...etat.parametres, squawk: { ...etat.parametres.squawk, actif } } });
+                  if (actif) {
+                    // Lecture immédiate de la dernière annonce : confirme la voix et débloque l'audio du navigateur.
+                    const derniere = depeches.find((d) => d.source === 'FinancialJuice') ?? depeches[0];
+                    const l = langueParlee(langue);
+                    annoncer([l === 'en' ? 'Squawk on.' : 'Squawk activé.', ...(derniere ? [texteParle(derniere, l)] : [])], l, etat.parametres.squawk.vitesse);
+                  } else couperSquawk();
+                }}
+              >
+                🔊 Squawk
+              </button>
+              {etat.parametres.squawk.actif && (
+                <select
+                  className="selecteur-mini"
+                  value={etat.parametres.squawk.filtre}
+                  onChange={(e) =>
+                    maj({ parametres: { ...etat.parametres, squawk: { ...etat.parametres.squawk, filtre: e.target.value as 'annonces' | 'importantes' | 'tout' } } })
+                  }
+                  title="Dépêches lues à voix haute (vos mots-clés sont toujours lus)"
+                >
+                  <option value="annonces">Annonces FinancialJuice</option>
+                  <option value="importantes">Importantes seulement</option>
+                  <option value="tout">Toutes les dépêches</option>
+                </select>
+              )}
+            </span>
+          )}
         </div>
       </div>
 

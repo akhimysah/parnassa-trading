@@ -50,6 +50,8 @@ export interface Parametres {
   motsCles: string[];
   /** Langue d'affichage des dépêches : tout en français, tout en anglais, ou les deux. */
   langueActualites: 'fr' | 'en' | 'fr+en';
+  /** Lecture vocale des nouvelles dépêches, façon « squawk » de salle de marché. */
+  squawk: { actif: boolean; filtre: 'annonces' | 'importantes' | 'tout'; vitesse: number };
 }
 
 export type Sens = 'achat' | 'vente';

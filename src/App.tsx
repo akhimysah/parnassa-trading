@@ -17,6 +17,7 @@ import { Alertes } from './pages/Alertes';
 import { Trading } from './pages/Trading';
 import { notifier, sonner, useMoteurAlertes } from './alertes';
 import { motsClesTrouves, texteRecherche, titrePrincipal, useFilActualites } from './actualites';
+import { annoncer, couperSquawk, doitEtreLue, langueParlee, texteParle } from './squawk';
 import { estBinance, paireBinance } from './binance';
 import { appliquerFlux, enregistrerCapital, valeurPortefeuille } from './trading';
 import { nomSymbole } from './symboles';
@@ -72,7 +73,26 @@ export function App() {
 
   // Fil d'actualités : chargé sur la page Actualités, ou partout si des mots-clés sont surveillés.
   const motsCles = etat.parametres.motsCles;
-  const fil = useFilActualites(etat.page === 'actualites' ? 20000 : 60000, etat.page === 'actualites' || motsCles.length > 0);
+  const squawk = etat.parametres.squawk;
+  const fil = useFilActualites(
+    etat.page === 'actualites' || squawk.actif ? 20000 : 60000,
+    etat.page === 'actualites' || motsCles.length > 0 || squawk.actif,
+  );
+
+  // Squawk : lecture à voix haute des nouvelles dépêches retenues, sur toutes les pages.
+  useEffect(() => {
+    if (!squawk.actif || fil.nouvelles.length === 0) return;
+    const langue = langueParlee(etat.parametres.langueActualites);
+    const aLire = fil.nouvelles
+      .filter((d) => doitEtreLue(d, etat.parametres))
+      .sort((a, b) => a.date - b.date)
+      .map((d) => texteParle(d, langue));
+    annoncer(aLire, langue, squawk.vitesse);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fil.nouvelles]);
+  useEffect(() => {
+    if (!squawk.actif) couperSquawk();
+  }, [squawk.actif]);
   useEffect(() => {
     if (motsCles.length === 0 || fil.nouvelles.length === 0) return;
     const touchees = fil.nouvelles.filter((d) => motsClesTrouves(texteRecherche(d), motsCles).length > 0);
@@ -276,7 +296,7 @@ export function App() {
         {etat.page === 'screener' && <Screener theme={etat.theme} />}
         {etat.page === 'symbole' && <Symbole etat={etat} ouvrirRecherche={ouvrirRecherche} />}
         {etat.page === 'actualites' && <Actualites etat={etat} fil={fil} maj={maj} />}
-        {etat.page === 'calendrier' && <Calendrier theme={etat.theme} />}
+        {etat.page === 'calendrier' && <Calendrier etat={etat} maj={maj} />}
         {etat.page === 'trading' && (
           <Trading
             etat={etat}

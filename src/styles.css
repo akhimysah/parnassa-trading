@@ -2199,3 +2199,183 @@ th.trie {
 .titre-annonce .titre-traduit {
   font-size: 11px;
 }
+
+/* ---- Squawk ---- */
+.groupe-squawk {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.groupe-squawk.actif .puce-bascule {
+  animation: pulsation 2.4s ease-in-out infinite;
+}
+.selecteur-mini {
+  height: 30px;
+  padding: 0 6px;
+  border-radius: var(--rayon);
+  border: 1px solid var(--bordure-2);
+  background: var(--panneau);
+  color: var(--texte);
+  font: inherit;
+  font-size: 12px;
+}
+
+/* ---- Page Calendrier ---- */
+.calendrier-page {
+  min-height: 0;
+}
+.champ-texte {
+  height: 30px;
+  width: 200px;
+  padding: 0 8px;
+  border-radius: var(--rayon);
+  border: 1px solid var(--bordure-2);
+  background: var(--fond);
+  color: var(--texte);
+  font: inherit;
+}
+.calendrier-defilement {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: 24px;
+}
+.jour.aujourdhui {
+  color: var(--accent);
+}
+.pastille-aujourdhui {
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  letter-spacing: 0.4px;
+}
+.tableau-calendrier td {
+  vertical-align: top;
+}
+.tableau-calendrier .heure {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  width: 70px;
+}
+.rebours-ligne {
+  display: block;
+  font-size: 11px;
+  color: var(--accent);
+  font-weight: 600;
+}
+.tableau-calendrier .evenement {
+  white-space: normal;
+  min-width: 260px;
+}
+.tableau-calendrier .reel {
+  font-weight: 700;
+}
+.tableau-calendrier tbody tr {
+  cursor: default;
+}
+.tableau-calendrier tr.passe td {
+  opacity: 0.85;
+}
+.tableau-calendrier tr.prochain td {
+  background: var(--accent-fond);
+}
+.tableau-calendrier tr.prochain .heure {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+/* ---- Téléphone : calendrier en cartes, barre du bas défilante ---- */
+@media (max-width: 640px) {
+  .rail-gauche {
+    overflow-x: auto;
+    justify-content: flex-start;
+    scrollbar-width: none;
+  }
+  .rail-gauche::-webkit-scrollbar {
+    display: none;
+  }
+  .rail-gauche button {
+    flex: 1 0 54px;
+    min-width: 54px;
+  }
+  .rail-gauche button span {
+    font-size: 9.5px;
+    white-space: nowrap;
+  }
+  .tableau-calendrier thead {
+    display: none;
+  }
+  .tableau-calendrier,
+  .tableau-calendrier tbody {
+    display: block;
+    width: 100%;
+  }
+  .tableau-calendrier tr {
+    display: grid;
+    grid-template-columns: 62px 1fr auto;
+    grid-template-areas:
+      'heure evenement impact'
+      'heure valeurs valeurs';
+    gap: 2px 8px;
+    padding: 8px 10px;
+    border-top: 1px solid var(--bordure);
+  }
+  .tableau-calendrier td {
+    border: 0;
+    padding: 0;
+    white-space: normal;
+  }
+  .tableau-calendrier td.heure {
+    grid-area: heure;
+    width: auto;
+  }
+  .tableau-calendrier td:nth-child(2) {
+    display: none;
+  }
+  .tableau-calendrier td.evenement {
+    grid-area: evenement;
+    min-width: 0;
+  }
+  .tableau-calendrier td:nth-child(4) {
+    grid-area: impact;
+  }
+  .tableau-calendrier td.num {
+    text-align: left;
+    font-size: 12px;
+  }
+  .tableau-calendrier td:nth-child(5) {
+    grid-area: valeurs;
+  }
+  .tableau-calendrier td:nth-child(6),
+  .tableau-calendrier td:nth-child(7) {
+    display: none;
+  }
+  .valeurs-mobile {
+    display: inline !important;
+  }
+  .calendrier-page .onglets {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+  }
+  .calendrier-page .outils-onglets {
+    flex-wrap: nowrap;
+  }
+}
+.valeurs-mobile {
+  display: none;
+  margin-left: 10px;
+  color: var(--texte-muet);
+  font-weight: 400;
+}
+
+.etiquette-mobile {
+  display: none;
+  font-weight: 400;
+}
+@media (max-width: 640px) {
+  .etiquette-mobile {
+    display: inline;
+  }
+}

@@ -19,7 +19,7 @@ export const ETAT_DEFAUT: Etat = {
   dispositionsSauvees: [],
   alertes: [],
   portefeuille: { capitalInitial: 100000, solde: 100000, positions: [], operations: [], ordres: [], historiqueCapital: [] },
-  parametres: { fuseau: 'Europe/Paris', frais: 0.001, son: true, motsCles: [], langueActualites: 'fr+en' },
+  parametres: { fuseau: 'Europe/Paris', frais: 0.001, son: true, motsCles: [], langueActualites: 'fr+en', squawk: { actif: false, filtre: 'annonces', vitesse: 1.1 } },
 };
 
 export function chargerEtat(): Etat {
