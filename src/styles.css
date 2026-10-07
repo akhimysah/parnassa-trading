@@ -3606,3 +3606,134 @@ th.trie {
 .pc-compte {
   margin: 10px 14px 0;
 }
+
+/* ---- Certificat de réussite ---- */
+.certificat {
+  width: min(900px, calc(100vw - 32px));
+  max-height: 90vh;
+}
+.certificat-corps {
+  padding: 14px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.certificat-corps canvas {
+  width: 100%;
+  height: auto;
+  border-radius: 10px;
+  box-shadow: 0 12px 40px rgba(20, 10, 60, 0.35);
+}
+.certificat-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.certificat-actions .champ {
+  flex: 1 1 220px;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: var(--rayon);
+  border: 1px solid var(--bordure-2);
+  background: var(--panneau);
+  color: var(--texte);
+  font: inherit;
+}
+.pc-regle-news {
+  margin: 10px 14px 0;
+  font-size: 12px;
+  color: var(--texte-muet);
+}
+.pc-succes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin: 12px 14px 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(212, 167, 44, 0.6);
+  background: linear-gradient(120deg, rgba(246, 226, 122, 0.16), rgba(139, 92, 246, 0.12));
+}
+.pc-succes > span {
+  font-size: 28px;
+}
+.pc-succes > div:not(.espace) {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.alerte-news {
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  background: rgba(255, 152, 0, 0.12);
+  border: 1px solid rgba(255, 152, 0, 0.45);
+}
+.alerte-news.bloquee {
+  background: rgba(239, 83, 80, 0.12);
+  border-color: rgba(239, 83, 80, 0.5);
+}
+.lc-resultat {
+  margin-left: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.lc-badge {
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.lc-badge.neutre {
+  color: var(--texte-muet);
+  background: color-mix(in srgb, var(--texte-muet) 14%, transparent);
+}
+.lc-badge.reussi {
+  color: var(--hausse);
+  background: color-mix(in srgb, var(--hausse) 16%, transparent);
+}
+.lc-badge.echoue {
+  color: var(--baisse);
+  background: color-mix(in srgb, var(--baisse) 16%, transparent);
+}
+.lc-badge.en-cours {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.synthese-comptes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.synthese-comptes > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid var(--bordure);
+  border-radius: 8px;
+}
+.synthese-comptes span {
+  font-size: 11px;
+  color: var(--texte-muet);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.synthese-comptes strong {
+  font-size: 15px;
+}
+.jauge-challenge .jc-entete {
+  flex-wrap: wrap;
+  gap: 2px 8px;
+}
+.jauge-challenge .jc-entete strong {
+  margin-left: auto;
+  white-space: nowrap;
+}

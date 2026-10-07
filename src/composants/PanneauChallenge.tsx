@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import type { Challenge, Etat } from '../types';
 import type { CompteDistant } from '../compteLocal';
-import { CAPITAUX, FORMULES, mesurer, nouveauChallenge } from '../challenge';
+import { CAPITAUX, FORMULES, formuleSuivante, mesurer, nouveauChallenge, reglesCompletes } from '../challenge';
+import { Certificat } from './Certificat';
 import { formaterUsdt, reinitialiser } from '../trading';
 
 interface Props {
@@ -11,6 +12,8 @@ interface Props {
   maj: (p: Partial<Etat>) => void;
   /** Compte de trading connecté : démo (pas de challenge ici) ou challenge (règles fixées à l'ouverture). */
   compte?: CompteDistant | null;
+  /** Compte challenge réussi en phase 1 : ouvre le compte de la phase suivante. */
+  ouvrirPhaseSuivante?: () => void;
 }
 
 function Jauge({ libelle, valeur, max, texte, sens }: { libelle: string; valeur: number; max: number; texte: string; sens: 'objectif' | 'limite' }) {
@@ -33,11 +36,12 @@ function Jauge({ libelle, valeur, max, texte, sens }: { libelle: string; valeur:
 const STATUTS: Record<Challenge['statut'], string> = { 'en-cours': 'En cours', reussi: 'Réussi 🏆', echoue: 'Échoué' };
 
 /** Mode challenge façon prop firm : démarrage, jauges des règles, fin et historique. */
-export function PanneauChallenge({ etat, capital, marges, maj, compte }: Props) {
+export function PanneauChallenge({ etat, capital, marges, maj, compte, ouvrirPhaseSuivante }: Props) {
   const ch = etat.challenge;
   const [formule, setFormule] = useState(FORMULES[0].id);
   const [montant, setMontant] = useState(100000);
   const [replie, setReplie] = useState(false);
+  const [certificat, setCertificat] = useState<Challenge | null>(null);
 
   const archiver = (c: Challenge | null) => (c ? [c, ...(etat.challengesPasses ?? [])].slice(0, 30) : (etat.challengesPasses ?? []));
 
@@ -53,6 +57,20 @@ export function PanneauChallenge({ etat, capital, marges, maj, compte }: Props) 
       portefeuille: reinitialiser(montant),
       challenge: nouveauChallenge({ formule: f.nom, capital: montant, ...f.regles }),
       challengesPasses: archiver(enCours),
+    });
+  };
+
+  /** Phase 1 réussie, en local : la phase 2 démarre avec le même capital. */
+  const passerPhaseSuivante = () => {
+    if (!ch) return;
+    const suivante = formuleSuivante(ch.regles.formule);
+    if (!suivante) return;
+    if (compte) return ouvrirPhaseSuivante?.();
+    if (!window.confirm(`Démarrer la ${suivante.nom} avec ${ch.regles.capital.toLocaleString('fr-FR')} $ ?`)) return;
+    maj({
+      portefeuille: reinitialiser(ch.regles.capital),
+      challenge: nouveauChallenge({ formule: suivante.nom, capital: ch.regles.capital, ...suivante.regles }),
+      challengesPasses: archiver(ch),
     });
   };
 
@@ -108,7 +126,8 @@ export function PanneauChallenge({ etat, capital, marges, maj, compte }: Props) 
                 Démarrer le challenge
               </button>
             </div>
-            {(etat.challengesPasses ?? []).length > 0 && <HistoriqueChallenges passes={etat.challengesPasses ?? []} />}
+            {(etat.challengesPasses ?? []).length > 0 && <HistoriqueChallenges passes={etat.challengesPasses ?? []} certificat={setCertificat} />}
+            {certificat && <Certificat challenge={certificat} fermer={() => setCertificat(null)} />}
           </div>
         )}
       </div>
@@ -116,7 +135,8 @@ export function PanneauChallenge({ etat, capital, marges, maj, compte }: Props) 
   }
 
   const m = mesurer(ch, capital, etat.portefeuille.solde, marges, etat.portefeuille.operations);
-  const r = ch.regles;
+  const r = reglesCompletes(ch.regles);
+  const suivante = ch.statut === 'reussi' ? formuleSuivante(r.formule) : undefined;
   const pct = (v: number) => `${((v / r.capital) * 100).toLocaleString('fr-FR', { maximumFractionDigits: 2 })} %`;
   const duree = Math.max(1, Math.round(((ch.finLe ?? Date.now()) - ch.debutLe) / 86400000));
 
@@ -145,12 +165,21 @@ export function PanneauChallenge({ etat, capital, marges, maj, compte }: Props) 
           texte={`${pct(m.perteJour)} · reste ${formaterUsdt(Math.max(0, m.limiteJour - m.perteJour))}`}
         />
         <Jauge
-          libelle={`Perte maximale (max ${r.perteMaxPct} %)`}
+          libelle={r.suiveuse ? `Perte max suiveuse (${r.perteMaxPct} %)` : `Perte maximale (max ${r.perteMaxPct} %)`}
           valeur={m.perteTotale}
           max={m.limiteTotale}
           sens="limite"
-          texte={`${pct(m.perteTotale)} · reste ${formaterUsdt(Math.max(0, m.limiteTotale - m.perteTotale))}`}
+          texte={r.suiveuse ? `plancher ${Math.round(m.plancher).toLocaleString('fr-FR')} $ · reste ${Math.round(Math.max(0, m.limiteTotale - m.perteTotale)).toLocaleString('fr-FR')} $` : `${pct(m.perteTotale)} · reste ${formaterUsdt(Math.max(0, m.limiteTotale - m.perteTotale))}`}
         />
+        {r.regularitePct ? (
+          <Jauge
+            libelle={`Régularité (meilleur jour ≤ ${r.regularitePct} %)`}
+            valeur={m.meilleurJourPct ?? 0}
+            max={r.regularitePct}
+            sens="limite"
+            texte={m.meilleurJourPct === null ? 'pas encore de profit' : `${Math.round(m.meilleurJourPct)} % (${formaterUsdt(m.meilleurJour, true)})`}
+          />
+        ) : null}
         <Jauge
           libelle={`Jours de trading (min ${r.joursMin})`}
           valeur={m.jours}
@@ -165,6 +194,28 @@ export function PanneauChallenge({ etat, capital, marges, maj, compte }: Props) 
           {ch.statut !== 'en-cours' ? 'Pour retenter, ouvrez un nouveau compte challenge dans « Comptes et accès ».' : ''}
         </p>
       )}
+      {r.newsMinutes ? (
+        <p className="pc-regle-news">📰 Règle des news : aucune ouverture de position {r.newsMinutes} min avant et après une annonce à fort impact sur la devise de l'instrument.</p>
+      ) : null}
+      {ch.statut === 'reussi' && (
+        <div className="pc-succes">
+          <span>🏆</span>
+          <div>
+            <strong>{suivante ? 'Phase validée !' : 'Félicitations, vous êtes trader financé !'}</strong>
+            <span className="muet">{suivante ? `Prochaine étape : ${suivante.nom} (${suivante.description.split('.')[0]}).` : 'Téléchargez votre certificat et partagez-le.'}</span>
+          </div>
+          <div className="espace" />
+          <button className="bouton-secondaire" onClick={() => setCertificat(ch)}>
+            Voir le certificat
+          </button>
+          {suivante && (
+            <button className="bouton-principal" onClick={passerPhaseSuivante}>
+              Passer à la {suivante.nom.toLowerCase()}
+            </button>
+          )}
+        </div>
+      )}
+      {certificat && <Certificat challenge={certificat} login={compte?.login} fermer={() => setCertificat(null)} />}
       <div className="pc-pied">
         <span className="muet">
           Démarré le {new Date(ch.debutLe).toLocaleDateString('fr-FR')} · {duree} jour{duree > 1 ? 's' : ''} · fonds propres {formaterUsdt(capital)} · plus bas{' '}
@@ -209,7 +260,7 @@ export function PanneauChallenge({ etat, capital, marges, maj, compte }: Props) 
   );
 }
 
-function HistoriqueChallenges({ passes }: { passes: Challenge[] }) {
+function HistoriqueChallenges({ passes, certificat }: { passes: Challenge[]; certificat: (c: Challenge) => void }) {
   return (
     <div className="pc-historique">
       <h4 className="sous-titre">Challenges précédents</h4>
@@ -223,6 +274,11 @@ function HistoriqueChallenges({ passes }: { passes: Challenge[] }) {
                 {c.regles.formule} · {c.regles.capital.toLocaleString('fr-FR')} $
               </span>
               <span className={res >= 0 ? 'hausse' : 'baisse'}>{formaterUsdt(res, true)}</span>
+              {c.statut === 'reussi' && (
+                <button className="lien discret" onClick={() => certificat(c)}>
+                  Certificat
+                </button>
+              )}
               <span className="muet">
                 {new Date(c.debutLe).toLocaleDateString('fr-FR')}
                 {c.finLe ? ` → ${new Date(c.finLe).toLocaleDateString('fr-FR')}` : ''}

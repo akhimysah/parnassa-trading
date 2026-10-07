@@ -24,6 +24,9 @@ import { CalendrierTrades } from '../composants/CalendrierTrades';
 import { BarreCompte, FenetreComptes } from '../composants/ComptesTrading';
 import type { GestionCompte } from '../comptes';
 import { PanneauChallenge } from '../composants/PanneauChallenge';
+import { annonceBloquante, devisesInstrument, formuleSuivante, reglesCompletes } from '../challenge';
+import { useCalendrier } from '../actualites';
+import { ouvrirCompte, type Acces } from '../comptes';
 import { nomSymbole, ticker } from '../symboles';
 import {
   annoterOperation,
@@ -113,6 +116,32 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
   const scannerLocal = useCotationsScanner([symbole, ...symbolesConversion([symbole])]);
   const prix = (ticks[paire] ?? fluxLocal[paire] ?? scannerLocal[paire])?.prix;
   const infoInstrument = instrument(symbole);
+
+  // Règle des news du challenge : pas d'ouverture autour des annonces à fort impact sur les devises de l'instrument.
+  const minutesNews = etat.challenge?.statut === 'en-cours' ? (reglesCompletes(etat.challenge.regles).newsMinutes ?? 0) : 0;
+  const { evenements } = useCalendrier(minutesNews > 0);
+  const devisesOrdre = devisesInstrument(infoInstrument?.code ?? symbole.split(':').pop() ?? '', infoInstrument?.devise);
+  const annonceEnCours = minutesNews > 0 ? annonceBloquante(evenements, devisesOrdre, minutesNews) : undefined;
+  const annonceProche =
+    minutesNews > 0 ? evenements.filter((e) => e.importance >= 1 && devisesOrdre.includes(e.devise) && e.date > Date.now() && e.date - Date.now() < 30 * 60000).sort((a, b) => a.date - b.date)[0] : undefined;
+  const [accesPhase, setAccesPhase] = useState<{ acces: Acces & { serveur: string }; nom: string } | null>(null);
+
+  /** Compte challenge réussi en phase 1 : ouverture du compte de la phase 2, accès affichés, connexion directe. */
+  const ouvrirPhaseSuivante = async () => {
+    const actuel = session?.compte;
+    const suivante = actuel?.regles ? formuleSuivante(actuel.regles.formule) : undefined;
+    if (!actuel || !suivante) return;
+    if (!window.confirm(`Ouvrir votre compte ${suivante.nom} de ${actuel.capital.toLocaleString('fr-FR')} $ ?\n\nVous recevez de nouveaux accès et êtes connecté directement.`)) return;
+    const r = await ouvrirCompte({ type: 'challenge', capital: actuel.capital, nom: `${suivante.nom}`, regles: { formule: suivante.nom, ...suivante.regles } });
+    if (typeof r === 'string') {
+      window.alert(r);
+      return;
+    }
+    const err = await compte.connecterProprietaire(r.compte.login);
+    if (err) window.alert(err);
+    setAccesPhase({ acces: { ...r.acces, serveur: r.compte.serveur }, nom: r.compte.nom });
+    setComptesOuverts(true);
+  };
   const ticksSelecteur = useMemo(() => ({ ...scannerLocal, ...fluxLocal, ...ticks }), [scannerLocal, fluxLocal, ticks]);
   const lotsNum = nombre(lots.replace(',', '.')) ?? 0;
   const lotsValides = lotsNum >= LOT_MIN && lotsNum <= LOT_MAX;
@@ -193,6 +222,10 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
     }
     if (etat.challenge && etat.challenge.statut !== 'en-cours') {
       setErreur('Challenge terminé : démarrez-en un nouveau ou quittez le mode challenge (en haut de la page).');
+      return;
+    }
+    if (annonceEnCours) {
+      setErreur(`Règle des news : annonce à fort impact ${annonceEnCours.devise} à ${new Date(annonceEnCours.date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })} (« ${annonceEnCours.titreFr ?? annonceEnCours.titre} »). Ouverture bloquée ${minutesNews} min avant et après.`);
       return;
     }
     if (!lotsValides) {
@@ -316,8 +349,18 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
   return (
     <div className="page defilable trading">
       <BarreCompte gestion={compte} ouvrir={() => setComptesOuverts(true)} />
-      <FenetreComptes ouvert={comptesOuverts} fermer={() => setComptesOuverts(false)} gestion={compte} lie={lie} signaler={signaler} />
-      <PanneauChallenge etat={etat} capital={capital} marges={immobilise} maj={maj} compte={session?.compte ?? null} />
+      <FenetreComptes
+        ouvert={comptesOuverts}
+        fermer={() => {
+          setComptesOuverts(false);
+          setAccesPhase(null);
+        }}
+        gestion={compte}
+        lie={lie}
+        signaler={signaler}
+        accesInitial={accesPhase}
+      />
+      <PanneauChallenge etat={etat} capital={capital} marges={immobilise} maj={maj} compte={session?.compte ?? null} ouvrirPhaseSuivante={() => void ouvrirPhaseSuivante()} />
       {p.crameLe ? (
         <div className="bandeau-crame" role="alert">
           <strong>🔥 Compte cramé</strong>
@@ -385,6 +428,14 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
       <div className="grille-trading">
         <div className="carte formulaire-ordre">
           <h3>Nouvel ordre</h3>
+          {(annonceEnCours || annonceProche) && (
+            <p className={`alerte-news ${annonceEnCours ? 'bloquee' : ''}`}>
+              {annonceEnCours ? '⛔ ' : '📰 '}
+              {(annonceEnCours ?? annonceProche)!.devise} · {(annonceEnCours ?? annonceProche)!.titreFr ?? (annonceEnCours ?? annonceProche)!.titre} à{' '}
+              {new Date((annonceEnCours ?? annonceProche)!.date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+              {annonceEnCours ? ` : ouverture bloquée (règle des news, ±${minutesNews} min).` : ` : ouverture bloquée de ${minutesNews} min avant à ${minutesNews} min après.`}
+            </p>
+          )}
           <div className="segmente trois">
             {(['marche', 'limite', 'stop'] as TypeOrdre[]).map((t) => (
               <button key={t} type="button" className={typeOrdre === t ? 'actif neutre' : ''} onClick={() => setTypeOrdre(t)}>

@@ -48,6 +48,70 @@ export function BarreCompte({ gestion, ouvrir }: { gestion: GestionCompte; ouvri
   );
 }
 
+/** Solde, résultat et statut d'un compte dans la liste. */
+function EtatCompte({ compte }: { compte: CompteDistant }) {
+  const r = compte.resume;
+  if (!r || r.balance === null) return <span className="lc-badge neutre">Jamais utilisé</span>;
+  const resultat = r.balance - compte.capital;
+  const pctRes = (resultat / compte.capital) * 100;
+  return (
+    <>
+      <span className={`lc-resultat ${resultat > 0 ? 'hausse' : resultat < 0 ? 'baisse' : ''}`}>
+        {montant(Math.round(r.balance))} ({pctRes >= 0 ? '+' : ''}
+        {pctRes.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} %)
+      </span>
+      {r.crame ? (
+        <span className="lc-badge echoue">Cramé 🔥</span>
+      ) : r.statut === 'reussi' ? (
+        <span className="lc-badge reussi">Réussi 🏆</span>
+      ) : r.statut === 'echoue' ? (
+        <span className="lc-badge echoue">Échoué</span>
+      ) : r.statut === 'en-cours' ? (
+        <span className="lc-badge en-cours">Challenge en cours</span>
+      ) : null}
+      {r.positions > 0 && (
+        <span className="lc-badge neutre">
+          {r.positions} position{r.positions > 1 ? 's' : ''}
+        </span>
+      )}
+    </>
+  );
+}
+
+/** Vue d'ensemble de tous les comptes. */
+function SyntheseComptes({ comptes }: { comptes: CompteDistant[] }) {
+  const utilises = comptes.filter((c) => c.resume?.balance !== null && c.resume?.balance !== undefined);
+  const capital = comptes.reduce((s, c) => s + c.capital, 0);
+  const resultat = utilises.reduce((s, c) => s + (c.resume!.balance! - c.capital), 0);
+  const reussis = comptes.filter((c) => c.resume?.statut === 'reussi').length;
+  const challenges = comptes.filter((c) => c.type === 'challenge').length;
+  return (
+    <div className="synthese-comptes">
+      <div>
+        <span>Comptes</span>
+        <strong>{comptes.length}</strong>
+      </div>
+      <div>
+        <span>Capital total</span>
+        <strong>{montant(capital)}</strong>
+      </div>
+      <div>
+        <span>Résultat cumulé</span>
+        <strong className={resultat > 0 ? 'hausse' : resultat < 0 ? 'baisse' : ''}>
+          {resultat >= 0 ? '+' : '−'}
+          {montant(Math.abs(Math.round(resultat)))}
+        </strong>
+      </div>
+      <div>
+        <span>Challenges réussis</span>
+        <strong>
+          {reussis} / {challenges}
+        </strong>
+      </div>
+    </div>
+  );
+}
+
 function CarteAcces({ acces, nom, fermer }: { acces: Acces & { serveur: string }; nom: string; fermer: () => void }) {
   const [copie, setCopie] = useState<string | null>(null);
   const copier = (texte: string, quoi: string) => {
@@ -94,7 +158,22 @@ function CarteAcces({ acces, nom, fermer }: { acces: Acces & { serveur: string }
 }
 
 /** Fenêtre « Comptes et accès » : connexion avec des accès, comptes du client, ouverture d'un compte. */
-export function FenetreComptes({ ouvert, fermer, gestion, lie, signaler }: { ouvert: boolean; fermer: () => void; gestion: GestionCompte; lie: boolean; signaler: (m: string) => void }) {
+export function FenetreComptes({
+  ouvert,
+  fermer,
+  gestion,
+  lie,
+  signaler,
+  accesInitial,
+}: {
+  ouvert: boolean;
+  fermer: () => void;
+  gestion: GestionCompte;
+  lie: boolean;
+  signaler: (m: string) => void;
+  /** Accès d'un compte ouvert ailleurs (phase suivante d'un challenge), à montrer une fois. */
+  accesInitial?: { acces: Acces & { serveur: string }; nom: string } | null;
+}) {
   const [login, setLogin] = useState('');
   const [motDePasse, setMotDePasse] = useState('');
   const [serveur, setServeur] = useState(SERVEURS[0]);
@@ -123,6 +202,10 @@ export function FenetreComptes({ ouvert, fermer, gestion, lie, signaler }: { ouv
   useEffect(() => {
     if (ouvert && lie) void charger();
   }, [ouvert, lie, charger]);
+
+  useEffect(() => {
+    if (accesInitial) setAcces(accesInitial);
+  }, [accesInitial]);
 
   // Le login choisit le serveur : 5… démo, 7… challenge.
   useEffect(() => {
@@ -269,11 +352,14 @@ export function FenetreComptes({ ouvert, fermer, gestion, lie, signaler }: { ouv
             ) : (
               <>
                 {comptes.length === 0 && <p className="muet">Aucun compte pour l'instant : ouvrez-en un ci-dessous.</p>}
+                {comptes.length > 0 && <SyntheseComptes comptes={comptes} />}
                 <ul className="liste-comptes">
                   {comptes.map((c) => (
                     <li key={c.login} className={actif === c.login ? 'actif' : ''}>
                       <div className="lc-infos">
-                        <strong>{c.nom}</strong>
+                        <strong>
+                          {c.nom} <EtatCompte compte={c} />
+                        </strong>
                         <span className="muet">
                           n° {c.login} · {c.serveur} · {montant(c.capital)}
                           {c.regles ? ` · objectif +${c.regles.objectifPct} %, perte max ${c.regles.perteMaxPct} %` : ''}

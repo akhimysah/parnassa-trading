@@ -77,6 +77,12 @@ export interface ReglesChallenge {
   /** Perte maximale totale, en % du capital. */
   perteMaxPct: number;
   joursMin: number;
+  /** Perte maximale suiveuse : la limite suit le plus haut des fonds propres, puis se bloque au capital de départ. */
+  suiveuse?: boolean;
+  /** Règle de régularité : le meilleur jour ne doit pas dépasser ce % du profit total pour valider. */
+  regularitePct?: number;
+  /** Règle des news : pas d'ouverture de position N minutes avant et après une annonce à fort impact. */
+  newsMinutes?: number;
 }
 
 export interface Challenge {
