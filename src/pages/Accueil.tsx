@@ -20,6 +20,7 @@ import {
 import { nomSymbole, ticker } from '../symboles';
 import { formaterUsdt, pnlLatent, valeurPortefeuille } from '../trading';
 import { MiniCourbe } from '../composants/MiniCourbe';
+import { PrixAnime } from '../composants/PrixAnime';
 import { Sessions } from '../composants/Sessions';
 import { rappelDepuis } from '../rappels';
 import { demanderNotifications } from '../alertes';
@@ -195,7 +196,7 @@ export function Accueil({ etat, fil, ticks, maj, aller, ouvrirSymbole }: Props) 
                     <span className="muet"> {nomSymbole(id)}</span>
                   </span>
                   <MiniCourbe valeurs={historiques[paireBinance(id)] ?? []} largeur={70} hauteur={22} />
-                  <span className="num">{t ? formaterPrix(t.prix) : '…'}</span>
+                  <PrixAnime className="num" valeur={t?.prix} texte={t ? formaterPrix(t.prix) : '…'} />
                   <span className={`num ${v === null ? '' : v >= 0 ? 'hausse' : 'baisse'}`}>
                     {v === null ? '' : `${v >= 0 ? '+' : ''}${v.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} %`}
                   </span>

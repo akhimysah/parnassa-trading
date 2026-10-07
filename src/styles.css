@@ -2971,3 +2971,39 @@ th.trie {
 .recap-ordre dd {
   text-align: right;
 }
+
+/* ---- Prix animés ---- */
+.prix-anime {
+  border-radius: 3px;
+  font-variant-numeric: tabular-nums;
+}
+.flash-monte {
+  animation: flash-monte 0.9s ease-out;
+}
+.flash-descend {
+  animation: flash-descend 0.9s ease-out;
+}
+@keyframes flash-monte {
+  0% {
+    background: rgba(38, 166, 154, 0.45);
+    color: var(--hausse);
+  }
+  100% {
+    background: transparent;
+  }
+}
+@keyframes flash-descend {
+  0% {
+    background: rgba(239, 83, 80, 0.45);
+    color: var(--baisse);
+  }
+  100% {
+    background: transparent;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .flash-monte,
+  .flash-descend {
+    animation: none;
+  }
+}

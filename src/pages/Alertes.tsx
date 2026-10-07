@@ -3,6 +3,7 @@ import type { Alerte, Etat } from '../types';
 import type { Tick } from '../binance';
 import { estBinance, formaterPrix, paireBinance, useCloturesJournalieres } from '../binance';
 import { MiniCourbe } from '../composants/MiniCourbe';
+import { PrixAnime } from '../composants/PrixAnime';
 import { CATALOGUE, bourse, nomSymbole, normaliser, ticker } from '../symboles';
 import { conditionRemplie, demanderNotifications } from '../alertes';
 import { IconeCroix, IconeTelecharger } from '../composants/Icones';
@@ -295,7 +296,9 @@ export function Alertes({ etat, ticks, maj, ouvrirSymbole }: Props) {
                     <strong>{ticker(id)}</strong> <span className="pastille">{bourse(id)}</span>
                   </td>
                   <td className="muet">{nomSymbole(id)}</td>
-                  <td className="num">{t ? formaterPrix(t.prix) : '…'}</td>
+                  <td className="num">
+                    <PrixAnime valeur={t?.prix} texte={t ? formaterPrix(t.prix) : '…'} />
+                  </td>
                   <td className={`num ${variation === null ? '' : variation >= 0 ? 'hausse' : 'baisse'}`}>
                     {variation === null ? '…' : `${variation >= 0 ? '+' : ''}${variation.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} %`}
                   </td>

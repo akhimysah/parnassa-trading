@@ -19,6 +19,7 @@ import {
   conversionUsd,
 } from '../instruments';
 import { SelecteurInstrument } from '../composants/SelecteurInstrument';
+import { PrixAnime } from '../composants/PrixAnime';
 import { nomSymbole, ticker } from '../symboles';
 import {
   annoterOperation,
@@ -575,7 +576,7 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
                               </span>
                             </td>
                             <td className="num">{formaterCotation(pos.symbole, pos.prixEntree)}</td>
-                            <td className="num">{actuel ? formaterCotation(pos.symbole, actuel) : '…'}</td>
+                            <td className="num"><PrixAnime valeur={actuel} texte={actuel ? formaterCotation(pos.symbole, actuel) : '…'} /></td>
                             <td className={`num ${pnl === null ? '' : pnl >= 0 ? 'hausse' : 'baisse'}`}>
                               {pnl === null
                                 ? '…'
@@ -684,7 +685,7 @@ export function Trading({ etat, ticks, maj, ouvrirSymbole }: Props) {
                                 <span className="muet"> ({distance > 0 ? '+' : ''}{distance.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} %)</span>
                               )}
                             </td>
-                            <td className="num">{actuel ? formaterCotation(o.symbole, actuel) : '…'}</td>
+                            <td className="num"><PrixAnime valeur={actuel} texte={actuel ? formaterCotation(o.symbole, actuel) : '…'} /></td>
                             <td className="num">
                               {o.lots !== undefined ? `${formaterLots(o.lots)} · 1:${o.levier ?? 1}` : formaterUsdt(o.montant ?? 0)}
                             </td>

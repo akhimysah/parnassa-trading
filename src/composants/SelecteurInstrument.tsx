@@ -11,6 +11,7 @@ import {
   type CategorieInstrument,
 } from '../instruments';
 import { IconeChevron, IconeRecherche } from './Icones';
+import { PrixAnime } from './PrixAnime';
 
 interface Props {
   valeur: string;
@@ -75,7 +76,7 @@ export function SelecteurInstrument({ valeur, onChange, ticks }: Props) {
         <span className="si-code">{actuel?.code ?? cleCotation(valeur)}</span>
         <span className="si-nom muet">{actuel?.nom ?? 'Paire Binance'}</span>
         {actuel && actuel.differe > 0 && <span className="pastille">différé {actuel.differe} min</span>}
-        <span className="si-prix">{tickActuel ? formaterCotation(valeur, tickActuel.prix) : '…'}</span>
+        <PrixAnime className="si-prix" valeur={tickActuel?.prix} texte={tickActuel ? formaterCotation(valeur, tickActuel.prix) : '…'} />
         <IconeChevron width={14} height={14} />
       </button>
 
@@ -141,7 +142,7 @@ export function SelecteurInstrument({ valeur, onChange, ticks }: Props) {
                       {i?.nom ?? 'Autre paire Binance'}
                       {i && i.differe > 0 && <em> · différé {i.differe} min</em>}
                     </span>
-                    <span className="si-prix">{t ? formaterCotation(id, t.prix) : '…'}</span>
+                    <PrixAnime className="si-prix" valeur={t?.prix} texte={t ? formaterCotation(id, t.prix) : '…'} />
                     <span className={`si-var ${variation === null ? '' : variation >= 0 ? 'hausse' : 'baisse'}`}>
                       {variation === null ? '' : `${variation >= 0 ? '+' : ''}${variation.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} %`}
                     </span>

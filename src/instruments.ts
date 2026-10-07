@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { abonner, lireTick, type SourceInstrument } from './flux';
 import type { Tick } from './binance';
 
 export type CategorieInstrument = 'crypto' | 'metaux' | 'energie' | 'indices' | 'forex' | 'actions-us' | 'actions-fr';
@@ -19,6 +20,10 @@ export interface Instrument {
   taille: number;
   /** Devise de cotation (le P&L est converti en USD). */
   devise: 'USD' | 'EUR' | 'GBP' | 'JPY' | 'CHF' | 'CAD';
+  /** Symbole du flux Yahoo en continu (forex, indices, actions). */
+  yahoo?: string;
+  /** Paire Binance qui anime le prix seconde par seconde (or ← PAXGUSDT). */
+  pilote?: string;
 }
 
 export const CATEGORIES_INSTRUMENTS: { id: CategorieInstrument; libelle: string }[] = [
@@ -50,17 +55,19 @@ const s = (
   categorie: CategorieInstrument,
   decimales: number,
   differe = 0,
-  options: { taille?: number; devise?: Instrument['devise'] } = {},
+  options: { taille?: number; devise?: Instrument['devise']; yahoo?: string; pilote?: string } = {},
 ): Instrument => {
   // Devise de cotation déduite du code pour le forex (EURGBP → GBP), sinon USD par défaut.
   const devise = options.devise ?? (categorie === 'forex' && code.length === 6 ? (code.slice(3) as Instrument['devise']) : 'USD');
-  return { id, code, nom, categorie, source: 'scanner', decimales, differe, taille: options.taille ?? TAILLES[categorie], devise };
+  // Un instrument diffusé en continu par Yahoo n'est plus différé.
+  const differeReel = options.yahoo ? 0 : differe;
+  return { id, code, nom, categorie, source: 'scanner', decimales, differe: differeReel, taille: options.taille ?? TAILLES[categorie], devise, yahoo: options.yahoo, pilote: options.pilote };
 };
 
 /** Les instruments les plus suivis, tous négociables dans le portefeuille papier. */
 export const INSTRUMENTS: Instrument[] = [
   // Métaux précieux (temps réel)
-  s('OANDA:XAUUSD', 'XAUUSD', 'Or', 'metaux', 2),
+  s('OANDA:XAUUSD', 'XAUUSD', 'Or', 'metaux', 2, 0, { pilote: 'PAXGUSDT' }),
   s('TVC:SILVER', 'XAGUSD', 'Argent', 'metaux', 3, 0, { taille: 5000 }),
   s('TVC:PLATINUM', 'XPTUSD', 'Platine', 'metaux', 2),
   s('COMEX:HG1!', 'COPPER', 'Cuivre', 'metaux', 4, 10, { taille: 25000 }),
@@ -81,43 +88,43 @@ export const INSTRUMENTS: Instrument[] = [
   c('DOTUSDT', 'Polkadot', 4, 100),
   c('PEPEUSDT', 'Pepe', 8, 10000000),
   // Forex (temps réel)
-  s('FX:EURUSD', 'EURUSD', 'Euro / Dollar', 'forex', 5),
-  s('FX:GBPUSD', 'GBPUSD', 'Livre / Dollar', 'forex', 5),
-  s('FX:USDJPY', 'USDJPY', 'Dollar / Yen', 'forex', 3),
-  s('FX:USDCHF', 'USDCHF', 'Dollar / Franc suisse', 'forex', 5),
-  s('FX:AUDUSD', 'AUDUSD', 'Dollar australien / Dollar', 'forex', 5),
-  s('FX:USDCAD', 'USDCAD', 'Dollar / Dollar canadien', 'forex', 5),
-  s('FX:NZDUSD', 'NZDUSD', 'Dollar néo-zélandais / Dollar', 'forex', 5),
-  s('FX:EURGBP', 'EURGBP', 'Euro / Livre', 'forex', 5),
-  s('FX:EURJPY', 'EURJPY', 'Euro / Yen', 'forex', 3),
-  s('FX:GBPJPY', 'GBPJPY', 'Livre / Yen', 'forex', 3),
-  s('FX:EURCHF', 'EURCHF', 'Euro / Franc suisse', 'forex', 5),
-  s('TVC:DXY', 'DXY', 'Indice dollar', 'forex', 3, 0, { taille: 1000, devise: 'USD' }),
+  s('FX:EURUSD', 'EURUSD', 'Euro / Dollar', 'forex', 5, 0, { yahoo: 'EURUSD=X' }),
+  s('FX:GBPUSD', 'GBPUSD', 'Livre / Dollar', 'forex', 5, 0, { yahoo: 'GBPUSD=X' }),
+  s('FX:USDJPY', 'USDJPY', 'Dollar / Yen', 'forex', 3, 0, { yahoo: 'JPY=X' }),
+  s('FX:USDCHF', 'USDCHF', 'Dollar / Franc suisse', 'forex', 5, 0, { yahoo: 'CHF=X' }),
+  s('FX:AUDUSD', 'AUDUSD', 'Dollar australien / Dollar', 'forex', 5, 0, { yahoo: 'AUDUSD=X' }),
+  s('FX:USDCAD', 'USDCAD', 'Dollar / Dollar canadien', 'forex', 5, 0, { yahoo: 'CAD=X' }),
+  s('FX:NZDUSD', 'NZDUSD', 'Dollar néo-zélandais / Dollar', 'forex', 5, 0, { yahoo: 'NZDUSD=X' }),
+  s('FX:EURGBP', 'EURGBP', 'Euro / Livre', 'forex', 5, 0, { yahoo: 'EURGBP=X' }),
+  s('FX:EURJPY', 'EURJPY', 'Euro / Yen', 'forex', 3, 0, { yahoo: 'EURJPY=X' }),
+  s('FX:GBPJPY', 'GBPJPY', 'Livre / Yen', 'forex', 3, 0, { yahoo: 'GBPJPY=X' }),
+  s('FX:EURCHF', 'EURCHF', 'Euro / Franc suisse', 'forex', 5, 0, { yahoo: 'EURCHF=X' }),
+  s('TVC:DXY', 'DXY', 'Indice dollar', 'forex', 3, 0, { taille: 1000, devise: 'USD', yahoo: 'DX-Y.NYB' }),
   // Indices
-  s('SP:SPX', 'SPX500', 'S&P 500', 'indices', 2, 10),
-  s('NASDAQ:NDX', 'NAS100', 'Nasdaq 100', 'indices', 2, 15),
-  s('DJ:DJI', 'US30', 'Dow Jones', 'indices', 2, 10),
-  s('XETR:DAX', 'GER40', 'DAX', 'indices', 2, 15, { devise: 'EUR' }),
-  s('EURONEXT:PX1', 'FRA40', 'CAC 40', 'indices', 2, 15, { devise: 'EUR' }),
-  s('TVC:UKX', 'UK100', 'FTSE 100', 'indices', 2, 0, { devise: 'GBP' }),
-  s('TVC:NI225', 'JPN225', 'Nikkei 225', 'indices', 2, 0, { taille: 100, devise: 'JPY' }),
+  s('SP:SPX', 'SPX500', 'S&P 500', 'indices', 2, 10, { yahoo: '^GSPC' }),
+  s('NASDAQ:NDX', 'NAS100', 'Nasdaq 100', 'indices', 2, 15, { yahoo: '^NDX' }),
+  s('DJ:DJI', 'US30', 'Dow Jones', 'indices', 2, 10, { yahoo: '^DJI' }),
+  s('XETR:DAX', 'GER40', 'DAX', 'indices', 2, 15, { devise: 'EUR', yahoo: '^GDAXI' }),
+  s('EURONEXT:PX1', 'FRA40', 'CAC 40', 'indices', 2, 15, { devise: 'EUR', yahoo: '^FCHI' }),
+  s('TVC:UKX', 'UK100', 'FTSE 100', 'indices', 2, 0, { devise: 'GBP', yahoo: '^FTSE' }),
+  s('TVC:NI225', 'JPN225', 'Nikkei 225', 'indices', 2, 0, { taille: 100, devise: 'JPY', yahoo: '^N225' }),
   s('CBOE:VIX', 'VIX', 'Volatilité S&P 500', 'indices', 2, 15, { taille: 100 }),
   // Énergie (contrats à terme, différés)
   s('NYMEX:CL1!', 'USOIL', 'Pétrole WTI', 'energie', 2, 10),
   s('ICEEUR:BRN1!', 'UKOIL', 'Pétrole Brent', 'energie', 2, 10),
   s('NYMEX:NG1!', 'NATGAS', 'Gaz naturel', 'energie', 3, 10, { taille: 10000 }),
   // Actions
-  s('NASDAQ:AAPL', 'AAPL', 'Apple', 'actions-us', 2, 15),
-  s('NASDAQ:MSFT', 'MSFT', 'Microsoft', 'actions-us', 2, 15),
-  s('NASDAQ:NVDA', 'NVDA', 'NVIDIA', 'actions-us', 2, 15),
-  s('NASDAQ:AMZN', 'AMZN', 'Amazon', 'actions-us', 2, 15),
-  s('NASDAQ:GOOGL', 'GOOGL', 'Alphabet', 'actions-us', 2, 15),
-  s('NASDAQ:META', 'META', 'Meta Platforms', 'actions-us', 2, 15),
-  s('NASDAQ:TSLA', 'TSLA', 'Tesla', 'actions-us', 2, 15),
-  s('EURONEXT:MC', 'MC', 'LVMH', 'actions-fr', 2, 15, { devise: 'EUR' }),
-  s('EURONEXT:TTE', 'TTE', 'TotalEnergies', 'actions-fr', 2, 15, { devise: 'EUR' }),
-  s('EURONEXT:AIR', 'AIR', 'Airbus', 'actions-fr', 2, 15, { devise: 'EUR' }),
-  s('EURONEXT:OR', 'OR', "L'Oréal", 'actions-fr', 2, 15, { devise: 'EUR' }),
+  s('NASDAQ:AAPL', 'AAPL', 'Apple', 'actions-us', 2, 15, { yahoo: 'AAPL' }),
+  s('NASDAQ:MSFT', 'MSFT', 'Microsoft', 'actions-us', 2, 15, { yahoo: 'MSFT' }),
+  s('NASDAQ:NVDA', 'NVDA', 'NVIDIA', 'actions-us', 2, 15, { yahoo: 'NVDA' }),
+  s('NASDAQ:AMZN', 'AMZN', 'Amazon', 'actions-us', 2, 15, { yahoo: 'AMZN' }),
+  s('NASDAQ:GOOGL', 'GOOGL', 'Alphabet', 'actions-us', 2, 15, { yahoo: 'GOOGL' }),
+  s('NASDAQ:META', 'META', 'Meta Platforms', 'actions-us', 2, 15, { yahoo: 'META' }),
+  s('NASDAQ:TSLA', 'TSLA', 'Tesla', 'actions-us', 2, 15, { yahoo: 'TSLA' }),
+  s('EURONEXT:MC', 'MC', 'LVMH', 'actions-fr', 2, 15, { devise: 'EUR', yahoo: 'MC.PA' }),
+  s('EURONEXT:TTE', 'TTE', 'TotalEnergies', 'actions-fr', 2, 15, { devise: 'EUR', yahoo: 'TTE.PA' }),
+  s('EURONEXT:AIR', 'AIR', 'Airbus', 'actions-fr', 2, 15, { devise: 'EUR', yahoo: 'AIR.PA' }),
+  s('EURONEXT:OR', 'OR', "L'Oréal", 'actions-fr', 2, 15, { devise: 'EUR', yahoo: 'OR.PA' }),
 ];
 
 const PAR_ID = new Map(INSTRUMENTS.map((i) => [i.id, i]));
@@ -216,66 +223,36 @@ export function libelleUnite(id: string, unites: number): string {
   return `${unites.toLocaleString('fr-FR', { maximumFractionDigits: unites >= 100 ? 0 : 4 })} ${u}`;
 }
 
-const URL_SCANNER = 'https://scanner.tradingview.com/global/scan';
-
 /**
- * Cotations des instruments hors Binance (or, forex, indices, actions…) via le scanner public TradingView,
- * interrogé toutes les `intervalleMs` ms tant que la liste n'est pas vide.
+ * Cotations en temps réel des instruments hors Binance (or, forex, indices, énergie, actions), via le hub
+ * partagé (flux Yahoo en continu, or animé par PAXG, scanner chaque seconde). Le second argument est conservé
+ * pour compatibilité : le rythme est désormais d'une seconde partout.
  */
-export function useCotationsScanner(ids: string[], intervalleMs = 3000): Record<string, Tick> {
-  const [ticks, setTicks] = useState<Record<string, Tick>>({});
+export function useCotationsScanner(ids: string[], _intervalleMs = 1000): Record<string, Tick> {
   const cle = [...new Set(ids.filter((id) => PAR_ID.get(id)?.source === 'scanner'))].sort().join(',');
-  const refEnCours = useRef(false);
+  const [version, setVersion] = useState(0);
+  const refSources = useRef<SourceInstrument[]>([]);
 
   useEffect(() => {
-    if (!cle) return;
-    const liste = cle.split(',');
-    let vivant = true;
-    let charge = false;
-    const tour = async () => {
-      // Onglet caché : on garde le premier chargement, puis on suspend les rafraîchissements.
-      if (refEnCours.current || (charge && document.visibilityState === 'hidden')) return;
-      refEnCours.current = true;
-      try {
-        // Corps en texte brut (pas d'en-tête JSON) : requête « simple », sans pré-vérification CORS,
-        // car le scanner n'autorise pas l'en-tête Content-Type: application/json.
-        const r = await fetch(URL_SCANNER, {
-          method: 'POST',
-          body: JSON.stringify({ symbols: { tickers: liste }, columns: ['close', 'change', 'high', 'low'] }),
-        });
-        if (!r.ok) return;
-        const d = (await r.json()) as { data?: { s: string; d: (number | null)[] }[] };
-        if (!vivant || !d.data) return;
-        charge = true;
-        const maintenant = Date.now();
-        const nouveaux: Record<string, Tick> = {};
-        for (const ligne of d.data) {
-          const [close, change, haut, bas] = ligne.d;
-          if (typeof close !== 'number') continue;
-          const variation = typeof change === 'number' ? change : 0;
-          nouveaux[cleCotation(ligne.s)] = {
-            prix: close,
-            ouverture24h: close / (1 + variation / 100),
-            haut24h: typeof haut === 'number' ? haut : close,
-            bas24h: typeof bas === 'number' ? bas : close,
-            volume24h: 0,
-            recuLe: maintenant,
-          };
-        }
-        setTicks((anciens) => ({ ...anciens, ...nouveaux }));
-      } catch {
-        // réseau indisponible : nouvel essai au tour suivant
-      } finally {
-        refEnCours.current = false;
-      }
-    };
-    void tour();
-    const t = window.setInterval(() => void tour(), intervalleMs);
-    return () => {
-      vivant = false;
-      window.clearInterval(t);
-    };
-  }, [cle, intervalleMs]);
+    if (!cle) {
+      refSources.current = [];
+      return;
+    }
+    const sources: SourceInstrument[] = cle.split(',').map((id) => {
+      const i = PAR_ID.get(id)!;
+      return { id, cle: cleCotation(id), yahoo: i.yahoo, pilote: i.pilote };
+    });
+    refSources.current = sources;
+    return abonner(sources, () => setVersion((v) => v + 1));
+  }, [cle]);
 
-  return ticks;
+  return useMemo(() => {
+    const sortie: Record<string, Tick> = {};
+    for (const s of refSources.current) {
+      const t = lireTick(s);
+      if (t) sortie[s.cle] = t;
+    }
+    return sortie;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [version, cle]);
 }
