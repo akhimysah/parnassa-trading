@@ -287,13 +287,15 @@ export function FenetreComptes({
     setAcces({ acces: { ...r.acces, serveur: r.compte.serveur }, nom: r.compte.nom });
     setNom('');
     setLibre('');
+    // Le nouveau compte devient le compte actif tout de suite.
+    const err = await gestion.connecterAvecAcces(r.acces.login, r.acces.motDePasse, r.compte.serveur);
+    if (err) setErreurComptes(`Compte ouvert, mais connexion impossible : ${err}`);
     try {
       sessionStorage.removeItem(CLE_CAPITAL_DEMANDE);
     } catch {
       // stockage indisponible
     }
-    signaler(`Compte ${r.compte.login} ouvert`);
-    void charger();
+    if (lie) void charger();
   };
 
   const nouveauxMdp = async (c: CompteDistant) => {
@@ -331,8 +333,79 @@ export function FenetreComptes({
     else fermer();
   };
 
-  const actif = gestion.session?.compte.login;
   const capitaux = type === 'demo' ? CAPITAUX_DEMO : CAPITAUX;
+  const blocCreation = (
+      <div className="ct-creation">
+        <div className="pc-capital">
+          <button className={`puce-bascule ${type === 'demo' ? 'actif' : ''}`} onClick={() => setType('demo')}>
+            Démo
+          </button>
+          <button
+            className={`puce-bascule ${type === 'challenge' ? 'actif' : ''}`}
+            disabled={!lie}
+            title={lie ? undefined : 'Les comptes challenge s’ouvrent avec un compte Parnassa relié.'}
+            onClick={() => {
+              setType('challenge');
+              setLibre('');
+              if (!CAPITAUX.includes(capital)) setCapital(100000);
+            }}
+          >
+            Challenge prop firm
+          </button>
+        </div>
+        {type === 'challenge' && (
+          <div className="pc-formules">
+            {FORMULES.map((f) => (
+              <button key={f.id} className={`pc-formule ${formule === f.id ? 'actif' : ''}`} onClick={() => setFormule(f.id)}>
+                <strong>{f.nom}</strong>
+                <span className="muet">{f.description}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        <div className="pc-capital">
+          <span className="muet">Capital</span>
+          {capitaux.map((c) => (
+            <button
+              key={c}
+              className={`puce-bascule ${capital === c && !libre ? 'actif' : ''}`}
+              onClick={() => {
+                setCapital(c);
+                setLibre('');
+              }}
+            >
+              {c >= 1000000 ? `${c / 1000000} M$` : `${(c / 1000).toLocaleString('fr-FR')} k$`}
+            </button>
+          ))}
+        </div>
+        {type === 'demo' && (
+          <div className="pc-capital">
+            <span className="muet">Ou montant libre</span>
+            <input
+              className="champ champ-montant"
+              inputMode="numeric"
+              placeholder="ex. 2 431 029 210"
+              value={libre}
+              onChange={(e) => {
+                const chiffres = e.target.value.replace(/\D/g, '').slice(0, 11);
+                setLibre(chiffres ? Number(chiffres).toLocaleString('fr-FR') : '');
+                if (chiffres) setCapital(Number(chiffres));
+                else setCapital(100000);
+              }}
+            />
+            <span className="muet">$ (de 100 $ à 10 milliards)</span>
+          </div>
+        )}
+        <div className="pc-capital">
+          <input className="champ" placeholder="Nom du compte (facultatif)" maxLength={40} value={nom} onChange={(e) => setNom(e.target.value)} />
+          <button className="bouton-principal" onClick={() => void creer()} disabled={occupe === 'creation'}>
+            {occupe === 'creation' ? 'Ouverture…' : 'Ouvrir le compte'}
+          </button>
+        </div>
+      </div>
+  );
+
+  const actif = gestion.session?.compte.login;
 
   return (
     <div className="voile" onMouseDown={fermer}>
@@ -386,11 +459,25 @@ export function FenetreComptes({
           </section>
 
           <section>
+            <h4>Ouvrir un compte</h4>
+            {lie && comptes && comptes.length >= max ? <p className="muet">{max} comptes ouverts au plus : fermez-en un pour en ouvrir un autre.</p> : blocCreation}
+            {erreurComptes && <p className="erreur">{erreurComptes}</p>}
+            {!lie && (
+              <p className="muet petit">
+                Sans compte Parnassa, le compte démo s'ouvre tout de suite : gardez bien ses accès, ce sont eux qui permettent d'y revenir depuis un autre
+                appareil.
+              </p>
+            )}
+          </section>
+
+          <section>
             <h4>Mes comptes</h4>
             {!lie ? (
               <>
-                <p className="muet">Pour ouvrir des comptes et recevoir leurs accès, reliez l'application à votre compte Parnassa.</p>
-                <a className="bouton-principal lien-bouton" href={lienLiaison()}>
+                <p className="muet">
+                  Reliez l'application à votre compte Parnassa pour retrouver tous vos comptes ici, ouvrir des challenges et changer les mots de passe.
+                </p>
+                <a className="bouton-secondaire lien-bouton" href={lienLiaison()}>
                   Se connecter avec Parnassa
                 </a>
               </>
@@ -438,79 +525,7 @@ export function FenetreComptes({
                     </li>
                   ))}
                 </ul>
-                {erreurComptes && <p className="erreur">{erreurComptes}</p>}
 
-                <h4>Ouvrir un compte</h4>
-                {comptes.length >= max ? (
-                  <p className="muet">{max} comptes ouverts au plus : fermez-en un pour en ouvrir un autre.</p>
-                ) : (
-                  <div className="ct-creation">
-                    <div className="pc-capital">
-                      <button className={`puce-bascule ${type === 'demo' ? 'actif' : ''}`} onClick={() => setType('demo')}>
-                        Démo
-                      </button>
-                      <button
-                        className={`puce-bascule ${type === 'challenge' ? 'actif' : ''}`}
-                        onClick={() => {
-                          setType('challenge');
-                          setLibre('');
-                          if (!CAPITAUX.includes(capital)) setCapital(100000);
-                        }}
-                      >
-                        Challenge prop firm
-                      </button>
-                    </div>
-                    {type === 'challenge' && (
-                      <div className="pc-formules">
-                        {FORMULES.map((f) => (
-                          <button key={f.id} className={`pc-formule ${formule === f.id ? 'actif' : ''}`} onClick={() => setFormule(f.id)}>
-                            <strong>{f.nom}</strong>
-                            <span className="muet">{f.description}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    <div className="pc-capital">
-                      <span className="muet">Capital</span>
-                      {capitaux.map((c) => (
-                        <button
-                          key={c}
-                          className={`puce-bascule ${capital === c && !libre ? 'actif' : ''}`}
-                          onClick={() => {
-                            setCapital(c);
-                            setLibre('');
-                          }}
-                        >
-                          {c >= 1000000 ? `${c / 1000000} M$` : `${(c / 1000).toLocaleString('fr-FR')} k$`}
-                        </button>
-                      ))}
-                    </div>
-                    {type === 'demo' && (
-                      <div className="pc-capital">
-                        <span className="muet">Ou montant libre</span>
-                        <input
-                          className="champ champ-montant"
-                          inputMode="numeric"
-                          placeholder="ex. 2 431 029 210"
-                          value={libre}
-                          onChange={(e) => {
-                            const chiffres = e.target.value.replace(/\D/g, '').slice(0, 11);
-                            setLibre(chiffres ? Number(chiffres).toLocaleString('fr-FR') : '');
-                            if (chiffres) setCapital(Number(chiffres));
-                            else setCapital(100000);
-                          }}
-                        />
-                        <span className="muet">$ (de 100 $ à 10 milliards)</span>
-                      </div>
-                    )}
-                    <div className="pc-capital">
-                      <input className="champ" placeholder="Nom du compte (facultatif)" maxLength={40} value={nom} onChange={(e) => setNom(e.target.value)} />
-                      <button className="bouton-principal" onClick={() => void creer()} disabled={occupe === 'creation'}>
-                        {occupe === 'creation' ? 'Ouverture…' : 'Ouvrir le compte'}
-                      </button>
-                    </div>
-                  </div>
-                )}
               </>
             )}
           </section>
