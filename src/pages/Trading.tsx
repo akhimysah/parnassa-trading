@@ -68,6 +68,9 @@ interface Props {
 type TypeOrdre = 'marche' | 'limite' | 'stop';
 type Onglet = 'positions' | 'ordres' | 'historique' | 'journal' | 'statistiques';
 
+/** Montants très longs (milliards) : chiffres un peu plus petits pour tenir sur une ligne. */
+const classeKpi = (texte: string) => (texte.length > 22 ? 'tres-long' : texte.length > 17 ? 'long' : '');
+
 const ORIGINES: Record<string, string> = { marche: 'marché', limite: 'limite', stop: 'stop', 'stop-loss': 'stop-loss', 'take-profit': 'take-profit', 'stop-out': 'stop-out', crame: 'compte cramé' };
 
 function dateCourte(ms: number): string {
@@ -386,7 +389,7 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
       <div className="kpis">
         <div className="kpi">
           <span>Capital total</span>
-          <strong>{formaterUsdt(capital)}</strong>
+          <strong className={classeKpi(formaterUsdt(capital))}>{formaterUsdt(capital)}</strong>
           <em className={performance >= 0 ? 'hausse' : 'baisse'}>
             {performance >= 0 ? '+' : ''}
             {performance.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} % depuis le départ
@@ -394,7 +397,7 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
         </div>
         <div className="kpi">
           <span>Marge libre</span>
-          <strong>{formaterUsdt(p.solde)}</strong>
+          <strong className={classeKpi(formaterUsdt(p.solde))}>{formaterUsdt(p.solde)}</strong>
           <em className={niveauMarge !== null && niveauMarge < 1 ? 'baisse' : 'muet'}>
             {formaterUsdt(immobilise)} de marge utilisée
             {niveauMarge !== null && ` · niveau ${Math.round(niveauMarge * 100).toLocaleString('fr-FR')} %`}
@@ -402,14 +405,14 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
         </div>
         <div className="kpi">
           <span>P&amp;L latent</span>
-          <strong className={latent >= 0 ? 'hausse' : 'baisse'}>{formaterUsdt(latent, true)}</strong>
+          <strong className={`${latent >= 0 ? 'hausse' : 'baisse'} ${classeKpi(formaterUsdt(latent, true))}`}>{formaterUsdt(latent, true)}</strong>
           <em className="muet">
             {p.positions.length} position{p.positions.length > 1 ? 's' : ''} · {p.ordres.length} ordre{p.ordres.length > 1 ? 's' : ''} en attente
           </em>
         </div>
         <div className="kpi">
           <span>P&amp;L réalisé (frais inclus)</span>
-          <strong className={realise >= 0 ? 'hausse' : 'baisse'}>{formaterUsdt(realise, true)}</strong>
+          <strong className={`${realise >= 0 ? 'hausse' : 'baisse'} ${classeKpi(formaterUsdt(realise, true))}`}>{formaterUsdt(realise, true)}</strong>
           <em className="muet">{p.operations.filter((o) => o.type === 'cloture').length} clôture(s)</em>
         </div>
       </div>

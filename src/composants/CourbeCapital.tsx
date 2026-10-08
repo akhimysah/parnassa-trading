@@ -81,7 +81,7 @@ export function CourbeCapital({ points, capitalInitial, courant }: Props) {
           <g key={i}>
             <line x1={MARGE.gauche} x2={LARGEUR - MARGE.droite} y1={y(g)} y2={y(g)} className="grille" />
             <text x={LARGEUR - MARGE.droite + 6} y={y(g) + 4} className="etiquette">
-              {g.toLocaleString('fr-FR', { maximumFractionDigits: 0 })}
+              {Math.abs(g) >= 1e6 ? g.toLocaleString('fr-FR', { notation: 'compact', maximumFractionDigits: 3 }) : g.toLocaleString('fr-FR', { maximumFractionDigits: 0 })}
             </text>
           </g>
         ))}

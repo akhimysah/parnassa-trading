@@ -3748,3 +3748,12 @@ th.trie {
   margin-left: 0;
   white-space: nowrap;
 }
+.kpi strong {
+  white-space: nowrap;
+}
+.kpi strong.long {
+  font-size: 17px;
+}
+.kpi strong.tres-long {
+  font-size: 15px;
+}
