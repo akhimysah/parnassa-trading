@@ -6,6 +6,29 @@ import { lienLiaison } from '../synchro';
 import { IconeCroix } from './Icones';
 
 const montant = (v: number) => `${v.toLocaleString('fr-FR')} $`;
+/** Montant demandé par un lien (?capital=…), gardé pendant la liaison au compte Parnassa. */
+export const CLE_CAPITAL_DEMANDE = 'parnassa-trading:capital-demande';
+
+/** Lit ?capital= dans l'adresse, le met de côté et l'efface de l'adresse. Vrai s'il y a un montant en attente. */
+export function capitalDemande(): number | null {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const v = params.get('capital');
+    if (v && /^\d{3,11}$/.test(v)) {
+      sessionStorage.setItem(CLE_CAPITAL_DEMANDE, v);
+      params.delete('capital');
+      const reste = params.toString();
+      window.history.replaceState(null, '', `${window.location.pathname}${reste ? `?${reste}` : ''}${window.location.hash}`);
+    }
+    const garde = sessionStorage.getItem(CLE_CAPITAL_DEMANDE);
+    return garde ? Number(garde) : null;
+  } catch {
+    return null;
+  }
+}
+
+const CAPITAL_LIBRE_MIN = 100;
+const CAPITAL_LIBRE_MAX = 10_000_000_000;
 
 /** Bandeau du compte en cours, en haut de la page Trading. */
 export function BarreCompte({ gestion, ouvrir }: { gestion: GestionCompte; ouvrir: () => void }) {
@@ -187,6 +210,8 @@ export function FenetreComptes({
   const [type, setType] = useState<TypeCompte>('demo');
   const [formule, setFormule] = useState(FORMULES[0].id);
   const [capital, setCapital] = useState(100000);
+  /** Montant libre (comptes démo), tel que saisi. */
+  const [libre, setLibre] = useState('');
   const [nom, setNom] = useState('');
 
   const charger = useCallback(async () => {
@@ -207,6 +232,17 @@ export function FenetreComptes({
   useEffect(() => {
     if (accesInitial) setAcces(accesInitial);
   }, [accesInitial]);
+
+  // Montant venu d'un lien : compte démo pré-rempli.
+  useEffect(() => {
+    if (!ouvert) return;
+    const demande = capitalDemande();
+    if (demande) {
+      setType('demo');
+      setCapital(demande);
+      setLibre(demande.toLocaleString('fr-FR'));
+    }
+  }, [ouvert]);
 
   // Le login choisit le serveur : 5… démo, 7… challenge.
   useEffect(() => {
@@ -234,6 +270,10 @@ export function FenetreComptes({
 
   const creer = async () => {
     const f = FORMULES.find((x) => x.id === formule)!;
+    if (type === 'demo' && !(Number.isSafeInteger(capital) && capital >= CAPITAL_LIBRE_MIN && capital <= CAPITAL_LIBRE_MAX)) {
+      setErreurComptes('Montant du compte démo : de 100 $ à 10 milliards de $, en dollars entiers.');
+      return;
+    }
     const demande = type === 'demo' ? { type, capital, nom: nom.trim() || undefined } : { type, capital, nom: nom.trim() || undefined, regles: { formule: f.nom, ...f.regles } };
     const resume = type === 'demo' ? `un compte démo de ${montant(capital)}` : `un compte challenge ${f.nom} de ${montant(capital)}`;
     if (!window.confirm(`Ouvrir ${resume} ?\n\nVous recevrez un numéro de compte, un mot de passe et un mot de passe investisseur, affichés une seule fois.`)) return;
@@ -246,6 +286,12 @@ export function FenetreComptes({
     }
     setAcces({ acces: { ...r.acces, serveur: r.compte.serveur }, nom: r.compte.nom });
     setNom('');
+    setLibre('');
+    try {
+      sessionStorage.removeItem(CLE_CAPITAL_DEMANDE);
+    } catch {
+      // stockage indisponible
+    }
     signaler(`Compte ${r.compte.login} ouvert`);
     void charger();
   };
@@ -407,6 +453,7 @@ export function FenetreComptes({
                         className={`puce-bascule ${type === 'challenge' ? 'actif' : ''}`}
                         onClick={() => {
                           setType('challenge');
+                          setLibre('');
                           if (!CAPITAUX.includes(capital)) setCapital(100000);
                         }}
                       >
@@ -426,11 +473,36 @@ export function FenetreComptes({
                     <div className="pc-capital">
                       <span className="muet">Capital</span>
                       {capitaux.map((c) => (
-                        <button key={c} className={`puce-bascule ${capital === c ? 'actif' : ''}`} onClick={() => setCapital(c)}>
+                        <button
+                          key={c}
+                          className={`puce-bascule ${capital === c && !libre ? 'actif' : ''}`}
+                          onClick={() => {
+                            setCapital(c);
+                            setLibre('');
+                          }}
+                        >
                           {c >= 1000000 ? `${c / 1000000} M$` : `${(c / 1000).toLocaleString('fr-FR')} k$`}
                         </button>
                       ))}
                     </div>
+                    {type === 'demo' && (
+                      <div className="pc-capital">
+                        <span className="muet">Ou montant libre</span>
+                        <input
+                          className="champ champ-montant"
+                          inputMode="numeric"
+                          placeholder="ex. 2 431 029 210"
+                          value={libre}
+                          onChange={(e) => {
+                            const chiffres = e.target.value.replace(/\D/g, '').slice(0, 11);
+                            setLibre(chiffres ? Number(chiffres).toLocaleString('fr-FR') : '');
+                            if (chiffres) setCapital(Number(chiffres));
+                            else setCapital(100000);
+                          }}
+                        />
+                        <span className="muet">$ (de 100 $ à 10 milliards)</span>
+                      </div>
+                    )}
                     <div className="pc-capital">
                       <input className="champ" placeholder="Nom du compte (facultatif)" maxLength={40} value={nom} onChange={(e) => setNom(e.target.value)} />
                       <button className="bouton-principal" onClick={() => void creer()} disabled={occupe === 'creation'}>

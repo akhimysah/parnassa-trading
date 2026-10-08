@@ -21,7 +21,7 @@ import {
 import { SelecteurInstrument } from '../composants/SelecteurInstrument';
 import { PrixAnime } from '../composants/PrixAnime';
 import { CalendrierTrades } from '../composants/CalendrierTrades';
-import { BarreCompte, FenetreComptes } from '../composants/ComptesTrading';
+import { BarreCompte, capitalDemande, FenetreComptes } from '../composants/ComptesTrading';
 import type { GestionCompte } from '../comptes';
 import { PanneauChallenge } from '../composants/PanneauChallenge';
 import { annonceBloquante, devisesInstrument, formuleSuivante, reglesCompletes } from '../challenge';
@@ -85,7 +85,8 @@ function nombre(texte: string): number | undefined {
 }
 
 export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie, signaler }: Props) {
-  const [comptesOuverts, setComptesOuverts] = useState(false);
+  // Un lien ?capital=… ouvre directement « Comptes et accès » avec ce montant.
+  const [comptesOuverts, setComptesOuverts] = useState(() => capitalDemande() !== null);
   const session = compte.session;
   const lecture = Boolean(session?.lecture);
   // Accès investisseur : on regarde le compte, sans pouvoir y toucher.

@@ -3757,3 +3757,7 @@ th.trie {
 .kpi strong.tres-long {
   font-size: 15px;
 }
+.ct-creation .champ.champ-montant {
+  flex: 0 1 200px;
+  font-variant-numeric: tabular-nums;
+}
