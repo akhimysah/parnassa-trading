@@ -3,7 +3,7 @@ import type { Etat, Sens } from '../types';
 import type { Tick } from '../binance';
 import { estBinance, useFluxBinance } from '../binance';
 import { cleCotation, estNegociable, formaterCotation, instrument, LOT_MAX, normaliserLots, symbolesConversion, useCotationsScanner } from '../instruments';
-import { formaterLots, formaterUsdt, ouvrir, pnlLatent, TAUX_FRAIS } from '../trading';
+import { formaterLots, formaterUsdt, lotsParRisque, ouvrir, pnlLatent, TAUX_FRAIS, valeurPortefeuille } from '../trading';
 import { annonceBloquante, devisesInstrument, reglesCompletes } from '../challenge';
 import { useCalendrier } from '../actualites';
 import { cloturerPositions, controleOuverture } from '../ordre';
@@ -47,12 +47,24 @@ export function BarreUnClic({ etat, symbole, ticks, maj, lecture, signaler, chan
   const fixer = (lots: number) => {
     const n = normaliserLots(lots, volumeMax);
     setSaisie(String(n));
-    maj({ parametres: { ...etat.parametres, unClic: { actif: true, lots: n } } });
+    maj({ parametres: { ...etat.parametres, unClic: { ...reglage, actif: true, lots: n } } });
   };
 
   const lotsSaisis = Number(saisie.replace(',', '.'));
+  // Mode risque : volume tel que le stop-loss des protections coûte ce % des fonds propres.
+  const modeRisque = Boolean(reglage.modeRisque);
+  const risquePct = reglage.risquePct ?? 1;
+  const distanceSl = reglage.protections?.actif ? reglage.protections.sl : undefined;
+  const fondsPropres = useMemo(() => valeurPortefeuille(p, tous).capital, [p, tous]);
+  const montantRisque = (fondsPropres * risquePct) / 100;
+  const lotsRisque = prix && distanceSl ? lotsParRisque(montantRisque, prix, prix - distanceSl, symbole, tous) : null;
+  const lotsRisqueBornes = lotsRisque ? Math.min(volumeMax, Math.max(0.01, Math.floor(lotsRisque * 100) / 100)) : null;
   const passer = (sens: Sens) => {
-    const lots = Number.isFinite(lotsSaisis) ? lotsSaisis : 0;
+    if (modeRisque && !lotsRisqueBornes) {
+      setErreur('Mode risque : réglez une distance de stop-loss dans 🛡 (et cochez « Poser sur chaque ordre »).');
+      return;
+    }
+    const lots = modeRisque ? lotsRisqueBornes! : Number.isFinite(lotsSaisis) ? lotsSaisis : 0;
     const probleme = controleOuverture({ etat, symbole, prix, lots, volumeMax, lecture, annonce, minutesNews });
     if (probleme || !prix) {
       setErreur(probleme);
@@ -87,9 +99,11 @@ export function BarreUnClic({ etat, symbole, ticks, maj, lecture, signaler, chan
       const cible = e.target as HTMLElement | null;
       if (cible && (cible.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(cible.tagName))) return;
       const k = e.key.toLowerCase();
-      if (k !== 'b' && k !== 's') return;
+      if (!['b', 's', 'x', 'r'].includes(k)) return;
       e.preventDefault();
-      refPasser.current(k === 'b' ? 'achat' : 'vente');
+      if (k === 'x') refFermer.current();
+      else if (k === 'r') refInverser.current();
+      else refPasser.current(k === 'b' ? 'achat' : 'vente');
     };
     window.addEventListener('keydown', touche);
     return () => window.removeEventListener('keydown', touche);
@@ -131,6 +145,11 @@ export function BarreUnClic({ etat, symbole, ticks, maj, lecture, signaler, chan
     signaler(`${r.fermees} position${r.fermees > 1 ? 's' : ''} ${info?.code ?? ''} fermée${r.fermees > 1 ? 's' : ''} : ${formaterUsdt(r.resultat, true)}`);
   };
 
+  const refFermer = useRef(fermer);
+  refFermer.current = fermer;
+  const refInverser = useRef(inverser);
+  refInverser.current = inverser;
+
   if (!reglage.actif) {
     return (
       <div className="un-clic replie">
@@ -151,10 +170,26 @@ export function BarreUnClic({ etat, symbole, ticks, maj, lecture, signaler, chan
         <span className="muet">Cet instrument ne se trade pas en papier ici : choisissez l'or, le forex, un indice ou une crypto de la liste.</span>
       ) : (
         <>
-          <button className="uc-vente" disabled={!prix || lecture} onClick={() => passer('vente')} title="Vendre au marché (Maj+S)">
+          <button className="uc-vente" disabled={!prix || lecture} onClick={() => passer('vente')} title="Vendre au marché (Maj+S) · Maj+X ferme l’instrument · Maj+R inverse">
             <span>Vendre</span>
             <strong>{prix ? formaterCotation(symbole, prix) : '…'}</strong>
           </button>
+          {modeRisque ? (
+            <div className="uc-volume uc-risque" title={distanceSl ? `Stop à ${distanceSl} du prix : ${lotsRisqueBornes ?? '—'} lots pour risquer ${formaterUsdt(montantRisque)}` : 'Réglez une distance de stop-loss dans 🛡'}>
+              <input
+                inputMode="decimal"
+                defaultValue={risquePct}
+                aria-label="Risque en % des fonds propres"
+                onBlur={(e) => {
+                  const v = Number(e.target.value.replace(',', '.'));
+                  if (v > 0 && v <= 100) maj({ parametres: { ...etat.parametres, unClic: { ...reglage, risquePct: v } } });
+                }}
+              />
+              <span className="muet">
+                % · {lotsRisqueBornes ? `${formaterLots(lotsRisqueBornes)} · ${formaterUsdt(montantRisque)} en jeu` : 'stop-loss à régler'}
+              </span>
+            </div>
+          ) : (
           <div className="uc-volume">
             <button type="button" onClick={() => fixer(lotsSaisis / 10 || 0.01)} aria-label="Diviser le volume par 10">
               ÷10
@@ -177,6 +212,14 @@ export function BarreUnClic({ etat, symbole, ticks, maj, lecture, signaler, chan
             </button>
             <span className="muet">lots</span>
           </div>
+          )}
+          <button
+            className={`uc-mode ${modeRisque ? 'actif' : ''}`}
+            onClick={() => maj({ parametres: { ...etat.parametres, unClic: { ...reglage, modeRisque: !modeRisque } } })}
+            title={modeRisque ? 'Revenir à un volume en lots' : 'Calculer le volume pour risquer un % du compte au stop-loss'}
+          >
+            {modeRisque ? 'risque %' : 'lots'}
+          </button>
           <button className="uc-achat" disabled={!prix || lecture} onClick={() => passer('achat')} title="Acheter au marché (Maj+B)">
             <span>Acheter</span>
             <strong>{prix ? formaterCotation(symbole, prix) : '…'}</strong>

@@ -75,6 +75,9 @@ export interface Parametres {
     lots: number;
     /** Protections posées sur chaque ordre en un clic, en distance de prix depuis l'entrée. */
     protections?: { actif: boolean; sl?: number; tp?: number; suiveur?: number };
+    /** Volume calculé pour risquer ce % des fonds propres au stop-loss (au lieu d'un nombre de lots). */
+    risquePct?: number;
+    modeRisque?: boolean;
   };
 }
 

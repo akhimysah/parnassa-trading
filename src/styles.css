@@ -4331,3 +4331,27 @@ th.trie {
   color: var(--hausse);
   font-variant-numeric: tabular-nums;
 }
+.uc-mode {
+  height: 30px;
+  padding: 0 8px;
+  border-radius: var(--rayon);
+  border: 1px solid var(--bordure-2);
+  background: var(--panneau-2);
+  color: var(--texte-muet);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.uc-mode.actif {
+  color: var(--texte);
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--bordure));
+}
+.uc-volume.uc-risque input {
+  width: 56px;
+}
+@media (max-width: 640px) {
+  .uc-mode {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+}
