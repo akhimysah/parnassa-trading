@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { Position } from '../types';
+import type { Palier, Position } from '../types';
 import type { Tick } from '../binance';
 import { formaterCotation } from '../instruments';
 import { formaterUsdt, pnlLatent } from '../trading';
@@ -8,7 +8,7 @@ interface Props {
   position: Position;
   prixActuel: number | undefined;
   ticks: Record<string, Tick>;
-  enregistrer: (prot: { stopLoss?: number; takeProfit?: number; suiveur?: number }) => void;
+  enregistrer: (prot: { stopLoss?: number; takeProfit?: number; suiveur?: number; paliers?: Palier[]; beApresPalier?: boolean }) => void;
   breakEven: () => void;
   fermer: () => void;
 }
@@ -23,6 +23,17 @@ export function EditeurProtections({ position, prixActuel, ticks, enregistrer, b
   const [sl, setSl] = useState(position.stopLoss ? String(position.stopLoss) : '');
   const [tp, setTp] = useState(position.takeProfit ? String(position.takeProfit) : '');
   const [suiveur, setSuiveur] = useState(position.suiveur ? String(position.suiveur) : '');
+  const faits = (position.paliers ?? []).filter((x) => x.fait);
+  const [lignes, setLignes] = useState<{ prix: string; pct: string }[]>(() => {
+    const restants = (position.paliers ?? []).filter((x) => !x.fait).map((x) => ({ prix: String(x.prix), pct: String(Math.round(x.part * 100)) }));
+    while (restants.length < 3) restants.push({ prix: '', pct: '' });
+    return restants.slice(0, 3);
+  });
+  const [beApresPalier, setBeApresPalier] = useState(Boolean(position.beApresPalier));
+  const paliers: Palier[] = lignes
+    .map((l) => ({ prix: lire(l.prix), part: (lire(l.pct) ?? 0) / 100 }))
+    .filter((x): x is Palier => x.prix !== undefined && x.part > 0);
+  const reference = position.quantiteInitiale && faits.length ? position.quantiteInitiale : position.quantite;
   const slNum = lire(sl);
   const tpNum = lire(tp);
   const suiveurNum = lire(suiveur);
@@ -56,14 +67,53 @@ export function EditeurProtections({ position, prixActuel, ticks, enregistrer, b
         <input inputMode="decimal" value={suiveur} placeholder="aucun" onChange={(e) => setSuiveur(e.target.value)} />
         {ecartSuiveur !== null && <em className="muet">≈ {formaterUsdt(ecartSuiveur)} derrière le meilleur prix</em>}
       </label>
+      <div className="ep-paliers">
+        <span className="muet">Prises de profit partielles (part du volume de départ)</span>
+        {faits.map((x, i) => (
+          <span key={`f${i}`} className="ep-palier-fait">
+            ✓ {formaterCotation(position.symbole, x.prix)} · {Math.round(x.part * 100)} % pris
+          </span>
+        ))}
+        {lignes.map((l, i) => {
+          const prixPalier = lire(l.prix);
+          const part = (lire(l.pct) ?? 0) / 100;
+          const gain = prixPalier !== undefined && part > 0 ? pnlLatent(position, prixPalier, ticks) * ((part * reference) / position.quantite) : null;
+          return (
+            <div key={i} className="ep-palier">
+              <span className="muet">TP{faits.length + i + 1}</span>
+              <input
+                inputMode="decimal"
+                placeholder="prix"
+                value={l.prix}
+                onChange={(e) => setLignes((ls) => ls.map((x, j) => (j === i ? { ...x, prix: e.target.value } : x)))}
+                aria-label={`Prix du palier ${faits.length + i + 1}`}
+              />
+              <input
+                className="ep-pct"
+                inputMode="numeric"
+                placeholder="%"
+                value={l.pct}
+                onChange={(e) => setLignes((ls) => ls.map((x, j) => (j === i ? { ...x, pct: e.target.value } : x)))}
+                aria-label={`Part du palier ${faits.length + i + 1} en %`}
+              />
+              <span className="muet">%</span>
+              {gain !== null && montant(gain)}
+            </div>
+          );
+        })}
+        <label className="case">
+          <input type="checkbox" checked={beApresPalier} onChange={(e) => setBeApresPalier(e.target.checked)} />
+          Stop au prix d'entrée dès le 1er palier atteint
+        </label>
+      </div>
       <div className="ep-boutons">
         <button className="bouton-secondaire" onClick={breakEven} disabled={!enGain} title={enGain ? 'Stop-loss au prix d’entrée' : 'Possible quand la position est en gain'}>
           Break-even
         </button>
-        <button className="bouton-principal" onClick={() => enregistrer({ stopLoss: slNum, takeProfit: tpNum, suiveur: suiveurNum })}>
+        <button className="bouton-principal" onClick={() => enregistrer({ stopLoss: slNum, takeProfit: tpNum, suiveur: suiveurNum, paliers: [...faits, ...paliers], beApresPalier })}>
           Enregistrer
         </button>
-        <button className="lien discret" onClick={() => enregistrer({})}>
+        <button className="lien discret" onClick={() => enregistrer({ paliers: [] })}>
           Tout retirer
         </button>
         <button className="lien discret" onClick={fermer}>

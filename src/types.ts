@@ -151,6 +151,12 @@ export interface Position {
   takeProfit?: number;
   /** Stop suiveur : distance (en prix) que le stop-loss garde derrière le meilleur prix atteint. */
   suiveur?: number;
+  /** Prises de profit partielles : à chaque prix, une part du volume de départ est fermée. */
+  paliers?: Palier[];
+  /** Volume (unités) de référence des paliers, fixé quand ils sont posés. */
+  quantiteInitiale?: number;
+  /** Stop-loss au prix d'entrée dès le premier palier atteint. */
+  beApresPalier?: boolean;
   /** Note de journal : plan, raison d'entrée… */
   note?: string;
 }
@@ -250,4 +256,11 @@ export interface ReglesDiscipline {
   tradesMax?: number;
   /** Fermer les positions quand la perte ou l'objectif du jour est atteint. */
   fermerAuto: boolean;
+}
+
+export interface Palier {
+  prix: number;
+  /** Part du volume de départ à fermer (0,5 = 50 %). */
+  part: number;
+  fait?: boolean;
 }

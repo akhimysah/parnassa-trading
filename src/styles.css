@@ -4306,3 +4306,28 @@ th.trie {
   margin-left: 8px;
   font-size: 12px;
 }
+.ep-paliers {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+}
+.ep-paliers > .muet:first-child {
+  flex-basis: 100%;
+}
+.ep-palier {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.editeur-protections .ep-palier input {
+  width: 110px;
+}
+.editeur-protections .ep-palier input.ep-pct {
+  width: 52px;
+}
+.ep-palier-fait {
+  color: var(--hausse);
+  font-variant-numeric: tabular-nums;
+}

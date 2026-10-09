@@ -353,7 +353,7 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
   const [editionProtections, setEditionProtections] = useState<string | null>(null);
   const [partage, setPartage] = useState<SujetPartage | null>(null);
   const editerProtections = (positionId: string) => setEditionProtections((x) => (x === positionId ? null : positionId));
-  const enregistrerProtections = (positionId: string, prot: { stopLoss?: number; takeProfit?: number; suiveur?: number }) => {
+  const enregistrerProtections = (positionId: string, prot: Parameters<typeof modifierProtections>[2]) => {
     const pos = p.positions.find((x) => x.id === positionId);
     const r = modifierProtections(p, positionId, prot, pos ? ticks[paireBinance(pos.symbole)]?.prix : undefined);
     if (typeof r === 'string') return setErreur(r);
@@ -750,6 +750,11 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
                               <button className="lien discret" onClick={() => editerProtections(pos.id)} title="Modifier stop-loss et take-profit">
                                 {pos.stopLoss ? formaterCotation(pos.symbole, pos.stopLoss) : '—'} / {pos.takeProfit ? formaterCotation(pos.symbole, pos.takeProfit) : '—'}
                                 {pos.suiveur ? <span className="badge-suiveur" title="Stop suiveur actif">↗ suiveur</span> : null}
+                                {pos.paliers?.length ? (
+                                  <span className="badge-suiveur" title="Prises de profit partielles">
+                                    {pos.paliers.filter((x) => x.fait).length}/{pos.paliers.length} paliers
+                                  </span>
+                                ) : null}
                               </button>
                             </td>
                             <td>

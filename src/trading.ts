@@ -1,4 +1,4 @@
-import type { Operation, OrdreEnAttente, Portefeuille, Position, Sens } from './types';
+import type { Operation, OrdreEnAttente, Palier, Portefeuille, Position, Sens } from './types';
 import type { Tick } from './binance';
 import { paireBinance } from './binance';
 import { conversionUsd, instrument, LOT_MAX, normaliserLots, tailleContrat } from './instruments';
@@ -250,7 +250,12 @@ export function annoterOperation(p: Portefeuille, operationId: string, note: str
  * Protections d'une position ouverte. Elles se jugent par rapport au prix actuel (un stop remonté au-dessus de
  * l'entrée verrouille un gain) ; sans prix connu, par rapport au prix d'entrée.
  */
-export function modifierProtections(p: Portefeuille, positionId: string, prot: Protections & { suiveur?: number }, prixActuel?: number): Portefeuille | string {
+export function modifierProtections(
+  p: Portefeuille,
+  positionId: string,
+  prot: Protections & { suiveur?: number; paliers?: Palier[]; beApresPalier?: boolean },
+  prixActuel?: number,
+): Portefeuille | string {
   const position = p.positions.find((x) => x.id === positionId);
   if (!position) return 'Position introuvable.';
   const reference = prixActuel ?? position.prixEntree;
@@ -263,12 +268,34 @@ export function modifierProtections(p: Portefeuille, positionId: string, prot: P
     if (position.sens === 'vente' && prot.takeProfit >= reference) return "Le take-profit d'un short doit être sous le prix actuel.";
   }
   if (prot.suiveur !== undefined && !(prot.suiveur > 0)) return 'La distance du stop suiveur doit être positive.';
+  const paliers = prot.paliers?.filter((x) => !x.fait);
+  if (paliers?.length) {
+    if (paliers.some((x) => !(x.part > 0) || (position.sens === 'achat' ? x.prix <= reference : x.prix >= reference))) {
+      return `Chaque palier doit être ${position.sens === 'achat' ? 'au-dessus' : 'en dessous'} du prix actuel, avec une part positive.`;
+    }
+    if (paliers.reduce((t, x) => t + x.part, 0) > 1.0001) return 'Les paliers ne peuvent pas fermer plus de 100 % du volume.';
+  }
   let stopLoss = prot.stopLoss;
   // Un stop suiveur sans stop-loss démarre à sa distance du prix actuel.
   if (prot.suiveur && stopLoss === undefined) stopLoss = position.sens === 'achat' ? reference - prot.suiveur : reference + prot.suiveur;
   return {
     ...p,
-    positions: p.positions.map((x) => (x.id === positionId ? { ...x, stopLoss, takeProfit: prot.takeProfit, suiveur: prot.suiveur } : x)),
+    positions: p.positions.map((x) => {
+      if (x.id !== positionId) return x;
+      // Paliers changés : le volume de référence devient le volume actuel.
+      const nouveaux = prot.paliers !== undefined ? (prot.paliers.length ? [...prot.paliers].sort((a, b) => (x.sens === 'achat' ? a.prix - b.prix : b.prix - a.prix)) : undefined) : x.paliers;
+      return {
+        ...x,
+        stopLoss,
+        takeProfit: prot.takeProfit,
+        suiveur: prot.suiveur,
+        paliers: nouveaux,
+        // Paliers déjà pris : la référence reste le volume de départ ; sinon, le volume actuel.
+        quantiteInitiale:
+          prot.paliers !== undefined ? (nouveaux ? (nouveaux.some((y) => y.fait) ? (x.quantiteInitiale ?? x.quantite) : x.quantite) : undefined) : x.quantiteInitiale,
+        beApresPalier: prot.beApresPalier ?? x.beApresPalier,
+      };
+    }),
   };
 }
 
@@ -278,7 +305,7 @@ export function breakEven(p: Portefeuille, positionId: string, prixActuel: numbe
   if (!position) return 'Position introuvable.';
   const enGain = position.sens === 'achat' ? prixActuel > position.prixEntree : prixActuel < position.prixEntree;
   if (!enGain) return "Break-even possible seulement quand la position est en gain.";
-  return modifierProtections(p, positionId, { stopLoss: position.prixEntree, takeProfit: position.takeProfit, suiveur: position.suiveur }, prixActuel);
+  return modifierProtections(p, positionId, { stopLoss: position.prixEntree, takeProfit: position.takeProfit, suiveur: position.suiveur, beApresPalier: position.beApresPalier }, prixActuel);
 }
 
 /**
@@ -358,6 +385,40 @@ export function appliquerFlux(p: Portefeuille, ticks: Ticks, tauxCrypto = TAUX_F
         ? `Ordre ${o.type} ${nom(o.symbole)} annulé : ${r}`
         : `Ordre ${o.type} exécuté : ${o.sens === 'achat' ? 'achat' : 'vente'} ${lots.toLocaleString('fr-FR')} lot ${nom(o.symbole)} à ${prixExecution.toLocaleString('fr-FR')}`,
     );
+  }
+
+  // Prises de profit partielles : chaque palier atteint ferme sa part du volume de départ.
+  for (const id of courant.positions.filter((x) => x.paliers?.some((pl) => !pl.fait)).map((x) => x.id)) {
+    const pos0 = courant.positions.find((x) => x.id === id);
+    const tick = pos0 && ticks[paireBinance(pos0.symbole)];
+    if (!pos0 || !tick) continue;
+    let premierAtteint = false;
+    for (let i = 0; i < (pos0.paliers?.length ?? 0); i++) {
+      const pos = courant.positions.find((x) => x.id === id);
+      if (!pos) break;
+      const pl = pos.paliers![i]!;
+      if (pl.fait) continue;
+      const atteint = pos.sens === 'achat' ? tick.prix >= pl.prix : tick.prix <= pl.prix;
+      if (!atteint) continue;
+      const q = Math.min(pos.quantite, pl.part * (pos.quantiteInitiale ?? pos.quantite));
+      const resultat = pnlLatent(pos, tick.prix, ticks) * (q / pos.quantite);
+      const r = cloturer(courant, id, tick.prix, ticks, { origine: 'take-profit', tauxCrypto, quantite: q });
+      if (typeof r === 'string') continue;
+      if (!pos.paliers!.slice(0, i).some((x) => x.fait)) premierAtteint = true;
+      courant = {
+        ...r,
+        positions: r.positions.map((x) =>
+          x.id === id
+            ? {
+                ...x,
+                paliers: x.paliers!.map((y, j) => (j === i ? { ...y, fait: true } : y)),
+                stopLoss: premierAtteint && x.beApresPalier ? x.prixEntree : x.stopLoss,
+              }
+            : x,
+        ),
+      };
+      messages.push(`Palier ${i + 1} ${nom(pos.symbole)} : ${Math.round(pl.part * 100)} % fermés à ${tick.prix.toLocaleString('fr-FR')} (${resultat >= 0 ? '+' : ''}${resultat.toFixed(2)} USDT)`);
+    }
   }
 
   // Stops suiveurs : ils montent (long) ou descendent (short) avec le prix, avant le contrôle des stops.
