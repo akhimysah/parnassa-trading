@@ -518,7 +518,7 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
             </label>
           </div>
           <div className="puces">
-            {[0.01, 0.1, 0.5, 1, 5, 10, 50].map((m) => (
+            {(volumeMax > LOT_MAX ? [0.1, 1, 10, 100, 500, 1000, 5000, 10000, 50000].filter((m) => m <= volumeMax) : [0.01, 0.1, 0.5, 1, 5, 10, 50]).map((m) => (
               <button type="button" key={m} onClick={() => setLots(m.toFixed(2))}>
                 {m.toLocaleString('fr-FR')}
               </button>
