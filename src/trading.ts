@@ -450,12 +450,31 @@ export function statistiques(p: Portefeuille): Statistiques {
     e.net += o.resultat ?? 0;
     parPaireMap.set(o.symbole, e);
   }
-  // Durée : on apparie chaque clôture à l'ouverture la plus récente du même symbole qui la précède.
-  const ouvertures = p.operations.filter((o) => o.type === 'ouverture').slice().sort((a, b) => a.date - b.date);
+  // Durée : on apparie chaque clôture à l'ouverture la plus récente du même symbole qui la précède
+  // (dates d'ouverture triées par symbole, recherche dichotomique : rapide même avec des milliers d'opérations).
+  const ouverturesParSymbole = new Map<string, number[]>();
+  for (const o of p.operations) {
+    if (o.type !== 'ouverture') continue;
+    const l = ouverturesParSymbole.get(o.symbole) ?? [];
+    l.push(o.date);
+    ouverturesParSymbole.set(o.symbole, l);
+  }
+  for (const l of ouverturesParSymbole.values()) l.sort((a, b) => a - b);
   const durees: number[] = [];
   for (const c of clotures) {
-    const o = [...ouvertures].reverse().find((x) => x.symbole === c.symbole && x.date <= c.date);
-    if (o) durees.push(c.date - o.date);
+    const l = ouverturesParSymbole.get(c.symbole);
+    if (!l?.length) continue;
+    let bas = 0;
+    let haut = l.length - 1;
+    let trouve = -1;
+    while (bas <= haut) {
+      const milieu = (bas + haut) >> 1;
+      if (l[milieu]! <= c.date) {
+        trouve = milieu;
+        bas = milieu + 1;
+      } else haut = milieu - 1;
+    }
+    if (trouve >= 0) durees.push(c.date - l[trouve]!);
   }
   return {
     nbTrades: clotures.length,

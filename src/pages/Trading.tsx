@@ -171,7 +171,11 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
   const { capital, latent, immobilise, niveauMarge } = useMemo(() => valeurPortefeuille(p, ticks), [p, ticks]);
   const perteCompte = p.capitalInitial > 0 ? Math.max(0, 1 - capital / p.capitalInitial) : 0;
   const realise = useMemo(() => realiseTotal(p), [p]);
-  const stats = useMemo(() => statistiques(p), [p]);
+  // Recalcul seulement quand les opérations changent (pas à chaque prix, ni à chaque mouvement de stop suiveur).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const stats = useMemo(() => statistiques(p), [p.operations, p.archive]);
+  /** Lignes de positions affichées : au-delà, un bouton affiche le reste (le tableau reste fluide avec des centaines de positions). */
+  const [positionsVisibles, setPositionsVisibles] = useState(100);
 
   // Répartition : liquidités + valeur actuelle de chaque paire (positions regroupées par symbole).
   const parts = useMemo<Part[]>(() => {
@@ -711,7 +715,7 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
                       </tr>
                     </thead>
                     <tbody>
-                      {p.positions.map((pos) => {
+                      {p.positions.slice(0, positionsVisibles).map((pos) => {
                         const actuel = ticks[paireBinance(pos.symbole)]?.prix;
                         const pnl = actuel ? pnlLatent(pos, actuel, ticks) : null;
                         // Rendement sur la marge immobilisée, comme sur les plateformes à effet de levier.
@@ -821,6 +825,11 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
                     </tbody>
                   </table>
                 </div>
+              )}
+              {p.positions.length > positionsVisibles && (
+                <button className="lien discret plus-positions" onClick={() => setPositionsVisibles((n) => n + 200)}>
+                  Afficher {Math.min(200, p.positions.length - positionsVisibles)} positions de plus ({p.positions.length - positionsVisibles} masquées)
+                </button>
               )}
             </>
           )}

@@ -86,7 +86,8 @@ function Barres({ groupes, etiquettes, titre, pasEtiquette = 1 }: { groupes: Gro
 
 /** Analyse avancée des trades clôturés : indicateurs clés, courbe du réalisé avec drawdown, achats/ventes, jours, heures. */
 export function AnalyseAvancee({ portefeuille }: { portefeuille: Portefeuille }) {
-  const a = useMemo(() => analyser(portefeuille), [portefeuille]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const a = useMemo(() => analyser(portefeuille), [portefeuille.operations, portefeuille.capitalInitial]);
   const boite = useRef<HTMLDivElement>(null);
   const [survol, setSurvol] = useState<number | null>(null);
   if (a.courbe.length === 0) return null;
