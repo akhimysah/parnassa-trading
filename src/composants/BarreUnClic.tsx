@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Etat, Sens } from '../types';
 import type { Tick } from '../binance';
 import { estBinance, useFluxBinance } from '../binance';
@@ -68,6 +68,24 @@ export function BarreUnClic({ etat, symbole, ticks, maj, lecture, signaler, chan
     signaler(`${sens === 'achat' ? 'Achat' : 'Vente'} ${formaterLots(lots)} ${info?.code ?? symbole} à ${formaterCotation(symbole, prix)}`);
   };
 
+  // Raccourcis : Maj+B achète, Maj+S vend (hors saisie). Le graphique TradingView garde le clavier quand on clique dedans.
+  const refPasser = useRef(passer);
+  refPasser.current = passer;
+  useEffect(() => {
+    if (!reglage.actif || !negociable) return;
+    const touche = (e: KeyboardEvent) => {
+      if (!e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
+      const cible = e.target as HTMLElement | null;
+      if (cible && (cible.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(cible.tagName))) return;
+      const k = e.key.toLowerCase();
+      if (k !== 'b' && k !== 's') return;
+      e.preventDefault();
+      refPasser.current(k === 'b' ? 'achat' : 'vente');
+    };
+    window.addEventListener('keydown', touche);
+    return () => window.removeEventListener('keydown', touche);
+  }, [reglage.actif, negociable]);
+
   const fermer = () => {
     if (lecture) return setErreur('Accès investisseur : lecture seule.');
     const r = cloturerPositions(p, tous, etat.parametres.frais ?? TAUX_FRAIS, (x) => x.symbole === symbole);
@@ -96,7 +114,7 @@ export function BarreUnClic({ etat, symbole, ticks, maj, lecture, signaler, chan
         <span className="muet">Cet instrument ne se trade pas en papier ici : choisissez l'or, le forex, un indice ou une crypto de la liste.</span>
       ) : (
         <>
-          <button className="uc-vente" disabled={!prix || lecture} onClick={() => passer('vente')} title="Vendre au marché">
+          <button className="uc-vente" disabled={!prix || lecture} onClick={() => passer('vente')} title="Vendre au marché (Maj+S)">
             <span>Vendre</span>
             <strong>{prix ? formaterCotation(symbole, prix) : '…'}</strong>
           </button>
@@ -122,7 +140,7 @@ export function BarreUnClic({ etat, symbole, ticks, maj, lecture, signaler, chan
             </button>
             <span className="muet">lots</span>
           </div>
-          <button className="uc-achat" disabled={!prix || lecture} onClick={() => passer('achat')} title="Acheter au marché">
+          <button className="uc-achat" disabled={!prix || lecture} onClick={() => passer('achat')} title="Acheter au marché (Maj+B)">
             <span>Acheter</span>
             <strong>{prix ? formaterCotation(symbole, prix) : '…'}</strong>
           </button>

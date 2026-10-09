@@ -81,6 +81,28 @@ export async function fermerCompteDistant(login: string): Promise<string | null>
   return r.statut === 200 ? null : messageErreur(r.donnees, 'Fermeture impossible.');
 }
 
+/* ---- Classement des traders ---- */
+
+export interface LigneClassement {
+  rang: number;
+  pseudo: string;
+  type: 'demo' | 'challenge';
+  formule: string | null;
+  capital: number;
+  balance: number;
+  performance: number;
+  trades: number;
+  statut: 'en-cours' | 'reussi' | 'echoue' | null;
+  crame: boolean;
+  depuis: number;
+}
+
+export async function chargerClassement(): Promise<LigneClassement[] | string> {
+  const r = await appel('classement');
+  if (r.statut !== 200) return messageErreur(r.donnees, 'Classement indisponible.');
+  return (r.donnees.classement as LigneClassement[]) ?? [];
+}
+
 /* ---- Session sur un compte ---- */
 
 function empreinte(p: PartieCompte): string {
@@ -115,6 +137,8 @@ export interface GestionCompte {
   erreur: string | null;
   connecterAvecAcces: (login: string, motDePasse: string, serveur: string) => Promise<string | null>;
   connecterProprietaire: (login: string) => Promise<string | null>;
+  /** Inscrit le compte au classement sous ce pseudo, ou l'en retire (null). Renvoie une erreur ou null. */
+  changerPseudo: (pseudo: string | null) => Promise<string | null>;
   deconnecter: (message?: string) => Promise<void>;
 }
 
@@ -293,5 +317,15 @@ export function useCompteTrading(etat: Etat, setEtat: (f: (e: Etat) => Etat) => 
     return () => window.clearTimeout(t);
   }, [cle, envoyer]);
 
-  return { session, statut, erreur, connecterAvecAcces, connecterProprietaire, deconnecter };
+  const changerPseudo = useCallback(async (pseudo: string | null) => {
+    const s = refSession.current;
+    if (!s) return 'Connectez-vous d’abord à un compte.';
+    const r = await appel('compte', { methode: 'PATCH', jeton: s.jeton, corps: { pseudo } });
+    if (r.statut !== 200) return messageErreur(r.donnees, 'Inscription au classement impossible.');
+    const actuelle = refSession.current;
+    if (actuelle?.jeton === s.jeton) fixerSession({ ...actuelle, compte: { ...actuelle.compte, pseudo: (r.donnees.pseudo as string | null) ?? null } });
+    return null;
+  }, []);
+
+  return { session, statut, erreur, connecterAvecAcces, connecterProprietaire, deconnecter, changerPseudo };
 }

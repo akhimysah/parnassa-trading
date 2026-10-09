@@ -19,6 +19,8 @@ export interface CompteDistant {
   creeLe: number;
   derniereConnexion: number | null;
   majLe: number | null;
+  /** Pseudo sous lequel le compte apparaît au classement (null : il n'y apparaît pas). */
+  pseudo?: string | null;
   /** Résumé donné par la liste des comptes : solde (hors P&L latent), positions, statut du challenge. */
   resume?: { balance: number | null; positions: number; statut: 'en-cours' | 'reussi' | 'echoue' | null; crame: boolean };
 }

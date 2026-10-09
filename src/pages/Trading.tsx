@@ -22,6 +22,7 @@ import {
 import { SelecteurInstrument } from '../composants/SelecteurInstrument';
 import { PrixAnime } from '../composants/PrixAnime';
 import { CalendrierTrades } from '../composants/CalendrierTrades';
+import { ClassementTraders } from '../composants/ClassementTraders';
 import { BarreCompte, capitalDemande, FenetreComptes } from '../composants/ComptesTrading';
 import type { GestionCompte } from '../comptes';
 import { PanneauChallenge } from '../composants/PanneauChallenge';
@@ -1027,6 +1028,7 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
       </div>
 
       <CalendrierTrades operations={p.operations} ouvrirSymbole={ouvrirSymbole} />
+      <ClassementTraders gestion={compte} ouvrirComptes={() => setComptesOuverts(true)} signaler={signaler} />
     </div>
   );
 }

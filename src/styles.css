@@ -3930,3 +3930,97 @@ th.trie {
     grid-column: 1 / -1;
   }
 }
+
+/* ---- Classement des traders ---- */
+.classement-traders .ct-entete {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+}
+.cl-inscription {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 8px 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--bordure);
+  border-radius: 10px;
+  font-size: 13px;
+}
+.cl-formulaire {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+.cl-formulaire .champ {
+  flex: 1 1 200px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: var(--rayon);
+  border: 1px solid var(--bordure-2);
+  background: var(--panneau);
+  color: var(--texte);
+  font: inherit;
+}
+.cl-tableau {
+  display: flex;
+  flex-direction: column;
+}
+.cl-ligne {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 110px 90px 64px;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 6px;
+  border-bottom: 1px solid var(--bordure);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.cl-titres {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--texte-muet);
+}
+.cl-ligne > span:nth-child(n + 3),
+.cl-ligne > strong {
+  text-align: right;
+}
+.cl-ligne.podium .cl-rang {
+  font-size: 18px;
+}
+.cl-ligne.moi {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-radius: 8px;
+}
+.cl-trader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+  min-width: 0;
+}
+.cl-trader strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cl-badges {
+  display: flex;
+  gap: 4px;
+}
+.cl-badges .lc-badge {
+  margin-left: 0;
+}
+@media (max-width: 560px) {
+  .cl-ligne {
+    grid-template-columns: 34px minmax(0, 1fr) 84px 70px;
+  }
+  .cl-ligne > span:nth-child(5) {
+    display: none;
+  }
+}
