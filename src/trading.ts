@@ -242,6 +242,11 @@ export function annoterPosition(p: Portefeuille, positionId: string, note: strin
   return { ...p, positions: p.positions.map((x) => (x.id === positionId ? { ...x, note: note.trim() || undefined } : x)) };
 }
 
+export function etiqueterOperation(p: Portefeuille, operationId: string, etiquettes: string[]): Portefeuille {
+  const propres = [...new Set(etiquettes.map((e) => e.trim().slice(0, 24)).filter(Boolean))].slice(0, 8);
+  return { ...p, operations: p.operations.map((o) => (o.id === operationId ? { ...o, etiquettes: propres.length ? propres : undefined } : o)) };
+}
+
 export function annoterOperation(p: Portefeuille, operationId: string, note: string): Portefeuille {
   return { ...p, operations: p.operations.map((o) => (o.id === operationId ? { ...o, note: note.trim() || undefined } : o)) };
 }

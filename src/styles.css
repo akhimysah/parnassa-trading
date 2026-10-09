@@ -4355,3 +4355,74 @@ th.trie {
     justify-self: start;
   }
 }
+
+/* ---- Journal : étiquettes ---- */
+.etiquette {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+}
+.etiquette button {
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+  font: inherit;
+}
+.journal-etiquettes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+.choix-etiquettes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 6px 0;
+  padding: 8px;
+  border: 1px solid var(--bordure);
+  border-radius: 8px;
+}
+.choix-etiquettes > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.choix-etiquettes form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.choix-etiquettes .champ {
+  height: 28px;
+  width: 180px;
+  padding: 0 8px;
+  border-radius: var(--rayon);
+  border: 1px solid var(--bordure-2);
+  background: var(--fond);
+  color: var(--texte);
+  font: inherit;
+}
+.perf-etiquettes h4 {
+  margin: 4px 0 6px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--texte-muet);
+}
+.perf-etiquettes tr {
+  cursor: pointer;
+}
+.filtre-journal {
+  margin: 10px 0 0;
+  font-size: 12px;
+}

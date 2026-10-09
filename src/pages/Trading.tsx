@@ -26,6 +26,7 @@ import { ClassementTraders } from '../composants/ClassementTraders';
 import { AnalyseAvancee } from '../composants/AnalyseAvancee';
 import { EditeurProtections } from '../composants/EditeurProtections';
 import { CartePartage, type SujetPartage } from '../composants/CartePartage';
+import { JournalTrades } from '../composants/JournalTrades';
 import { BarreCompte, capitalDemande, FenetreComptes } from '../composants/ComptesTrading';
 import type { GestionCompte } from '../comptes';
 import { PanneauChallenge } from '../composants/PanneauChallenge';
@@ -44,6 +45,7 @@ import {
   formaterQuantite,
   formaterUsdt,
   modifierProtections,
+  etiqueterOperation,
   breakEven,
   ouvrir,
   placerOrdre,
@@ -897,39 +899,14 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
           )}
 
           {onglet === 'journal' && (
-            <>
-              {journal.length === 0 && <p className="vide">Le journal se remplit à chaque clôture : résultat, prix d'entrée et de sortie, et vos notes.</p>}
-              {journal.length > 0 && (
-                <ul className="journal">
-                  {journal.map((o) => {
-                    const pct = o.prixEntree ? ((o.resultat ?? 0) / (o.prixEntree * o.quantite)) * 100 : null;
-                    return (
-                      <li key={o.id}>
-                        <div className="journal-entete">
-                          <button className="lien" onClick={() => ouvrirSymbole(o.symbole)}>
-                            <strong>{ticker(o.symbole)}</strong>
-                          </button>
-                          <span className={o.sens === 'vente' ? 'hausse' : 'baisse'}>{o.sens === 'vente' ? 'Long' : 'Short'}</span>
-                          <span className="muet">{dateCourte(o.date)}</span>
-                          {o.origine && o.origine !== 'marche' && <span className="note">{ORIGINES[o.origine]}</span>}
-                          <div className="espace" />
-                          <strong className={(o.resultat ?? 0) >= 0 ? 'hausse' : 'baisse'}>
-                            {formaterUsdt(o.resultat ?? 0, true)}
-                            {pct !== null && ` (${pct >= 0 ? '+' : ''}${pct.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} %)`}
-                          </strong>
-                        </div>
-                        <div className="journal-detail muet">
-                          {o.lots !== undefined ? formaterLots(o.lots) : formaterQuantite(o.quantite)} · entrée {o.prixEntree ? formaterCotation(o.symbole, o.prixEntree) : '—'} → sortie {formaterCotation(o.symbole, o.prix)} · frais {formaterUsdt(o.frais)}
-                        </div>
-                        <button className="journal-note" onClick={() => editerNoteOperation(o.id)}>
-                          {o.note ? o.note : 'Ajouter une note de journal…'}
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </>
+            <JournalTrades
+              journal={journal}
+              origines={ORIGINES}
+              dateCourte={dateCourte}
+              ouvrirSymbole={ouvrirSymbole}
+              editerNote={editerNoteOperation}
+              etiqueter={(id, etiquettes) => maj({ portefeuille: etiqueterOperation(p, id, etiquettes) })}
+            />
           )}
 
           {onglet === 'statistiques' && (

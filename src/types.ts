@@ -202,6 +202,8 @@ export interface Operation {
   /** Prix d'entrée de la position fermée (clôtures). */
   prixEntree?: number;
   note?: string;
+  /** Étiquettes de journal : setup (cassure, rebond…) et état d'esprit (plan respecté, FOMO…). */
+  etiquettes?: string[];
   date: number;
 }
 
