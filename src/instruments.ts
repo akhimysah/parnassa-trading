@@ -165,6 +165,8 @@ export const LOT_MIN = 0.01;
 export const LOT_MAX = 500;
 export const PAS_LOT = 0.01;
 export const LEVIERS = [1, 2, 5, 10, 20, 30, 50, 100, 200, 500];
+/** Volumes maximaux par ordre proposés (500 lots par défaut, plus pour les très gros comptes). */
+export const VOLUMES_MAX = [500, 1000, 5000, 10000, 100000];
 
 /** Taille du contrat ; une paire Binance saisie librement vaut 1 unité par lot. */
 export function tailleContrat(id: string): number {
@@ -198,10 +200,10 @@ export function symbolesConversion(ids: string[]): string[] {
   return [...new Set(ids.map(deviseCotation).filter((d): d is Exclude<Instrument['devise'], 'USD'> => d !== 'USD').map((d) => VIA[d].id))];
 }
 
-/** Arrondi au centième de lot, borné entre 0,01 et 500. */
-export function normaliserLots(lots: number): number {
+/** Arrondi au centième de lot, borné entre 0,01 et le volume maximal par ordre (500 par défaut). */
+export function normaliserLots(lots: number, max = LOT_MAX): number {
   if (!Number.isFinite(lots)) return LOT_MIN;
-  return Math.min(LOT_MAX, Math.max(LOT_MIN, Math.round(lots * 100) / 100));
+  return Math.min(max, Math.max(LOT_MIN, Math.round(lots * 100) / 100));
 }
 
 /** Pas affiché pour la « valeur du pip / point » : pip en forex, 1 point (ou 1 cent si le prix est petit) ailleurs. */

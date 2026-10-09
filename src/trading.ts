@@ -1,7 +1,7 @@
 import type { Operation, OrdreEnAttente, Portefeuille, Position, Sens } from './types';
 import type { Tick } from './binance';
 import { paireBinance } from './binance';
-import { conversionUsd, instrument, normaliserLots, tailleContrat } from './instruments';
+import { conversionUsd, instrument, LOT_MAX, normaliserLots, tailleContrat } from './instruments';
 
 /** Frais par défaut sur la crypto (0,1 % du notionnel, tarif spot standard de Binance). */
 export const TAUX_FRAIS = 0.001;
@@ -58,7 +58,43 @@ export function valeurPortefeuille(p: Portefeuille, ticks: Ticks): EtatCompte {
 }
 
 export function realiseTotal(p: Portefeuille): number {
-  return p.operations.reduce((s, o) => s + (o.resultat ?? 0) - o.frais, 0);
+  const archive = p.archive ? p.archive.resultat - p.archive.frais : 0;
+  return archive + p.operations.reduce((s, o) => s + (o.resultat ?? 0) - o.frais, 0);
+}
+
+/** Opérations gardées en détail ; au-delà, les plus anciennes sont résumées (nombre, résultat, frais). */
+export const OPERATIONS_MAX = 5000;
+
+const arrondi = (v: number, decimales: number) => Math.round(v * 10 ** decimales) / 10 ** decimales;
+/** Prix gardé avec 10 chiffres significatifs : assez pour tous les instruments, sans les décimales parasites. */
+const prixCompact = (v: number) => Number(v.toPrecision(10));
+
+/** Ajoute une opération (montants arrondis au centime) et résume les plus anciennes au-delà d'OPERATIONS_MAX. */
+export function ajouterOperation(p: Portefeuille, o: Operation): Portefeuille {
+  const compacte: Operation = {
+    ...o,
+    quantite: arrondi(o.quantite, 8),
+    prix: prixCompact(o.prix),
+    frais: arrondi(o.frais, 2),
+    ...(o.resultat !== undefined ? { resultat: arrondi(o.resultat, 2) } : {}),
+    ...(o.prixEntree !== undefined ? { prixEntree: prixCompact(o.prixEntree) } : {}),
+  };
+  if (compacte.note === undefined) delete compacte.note;
+  const operations = [compacte, ...p.operations];
+  if (operations.length <= OPERATIONS_MAX) return { ...p, operations };
+  const anciennes = operations.slice(OPERATIONS_MAX);
+  const a = p.archive ?? { operations: 0, clotures: 0, resultat: 0, frais: 0, jusquAu: 0 };
+  return {
+    ...p,
+    operations: operations.slice(0, OPERATIONS_MAX),
+    archive: {
+      operations: a.operations + anciennes.length,
+      clotures: a.clotures + anciennes.filter((x) => x.type === 'cloture').length,
+      resultat: arrondi(a.resultat + anciennes.reduce((s, x) => s + (x.resultat ?? 0), 0), 2),
+      frais: arrondi(a.frais + anciennes.reduce((s, x) => s + x.frais, 0), 2),
+      jusquAu: Math.max(a.jusquAu, ...anciennes.map((x) => x.date)),
+    },
+  };
 }
 
 export interface Protections {
@@ -94,11 +130,11 @@ export function engagement(symbole: string, lots: number, prix: number, levier: 
 }
 
 /** Volume maximal (lots) que permet la marge libre. */
-export function lotsMax(p: Portefeuille, symbole: string, prix: number, levier: number, ticks: Ticks, tauxCrypto = TAUX_FRAIS): number {
+export function lotsMax(p: Portefeuille, symbole: string, prix: number, levier: number, ticks: Ticks, tauxCrypto = TAUX_FRAIS, volumeMax = LOT_MAX): number {
   const parLot = engagement(symbole, 1, prix, levier, ticks, tauxCrypto);
   const coutLot = parLot.marge + parLot.frais;
   if (!(coutLot > 0)) return 0;
-  return Math.min(500, Math.floor((p.solde / coutLot) * 100) / 100);
+  return Math.min(volumeMax, Math.floor((p.solde / coutLot) * 100) / 100);
 }
 
 export function ouvrir(
@@ -108,12 +144,13 @@ export function ouvrir(
   lots: number,
   prix: number,
   ticks: Ticks,
-  options: { levier: number; prot?: Protections; origine?: Operation['origine']; tauxCrypto?: number },
+  options: { levier: number; prot?: Protections; origine?: Operation['origine']; tauxCrypto?: number; volumeMax?: number },
 ): Portefeuille | string {
   if (p.crameLe) return MESSAGE_CRAME;
-  if (!(lots >= 0.01) || lots > 500) return 'Volume invalide : entre 0,01 et 500 lots.';
+  const volumeMax = options.volumeMax ?? LOT_MAX;
+  if (!(lots >= 0.01) || lots > volumeMax) return `Volume invalide : entre 0,01 et ${volumeMax.toLocaleString('fr-FR')} lots.`;
   if (!(prix > 0)) return 'Prix invalide.';
-  const lotsNet = normaliserLots(lots);
+  const lotsNet = normaliserLots(lots, volumeMax);
   const prot = options.prot ?? {};
   const erreur = verifierProtections(sens, prix, prot);
   if (erreur) return erreur;
@@ -148,7 +185,7 @@ export function ouvrir(
     note: position.note,
     date: Date.now(),
   };
-  return { ...p, solde: p.solde - e.marge - e.frais, positions: [position, ...p.positions], operations: [operation, ...p.operations] };
+  return ajouterOperation({ ...p, solde: p.solde - e.marge - e.frais, positions: [position, ...p.positions] }, operation);
 }
 
 /** Ferme tout ou partie d'une position (`quantite` en unités de l'actif). */
@@ -195,12 +232,7 @@ export function cloturer(
           ? { ...x, quantite: reste, cout: position.cout - margePart, lots: x.lots !== undefined ? Math.round((x.lots - (lotsFermes ?? 0)) * 100) / 100 : undefined }
           : x,
       );
-  return {
-    ...p,
-    solde: p.solde + (totale ? position.cout : margePart) + resultat - frais,
-    positions,
-    operations: [operation, ...p.operations],
-  };
+  return ajouterOperation({ ...p, solde: p.solde + (totale ? position.cout : margePart) + resultat - frais, positions }, operation);
 }
 
 export function annoterPosition(p: Portefeuille, positionId: string, note: string): Portefeuille {
@@ -225,10 +257,11 @@ export function placerOrdre(
   prixActuel: number,
   ticks: Ticks,
   tauxCrypto = TAUX_FRAIS,
+  volumeMax = LOT_MAX,
 ): Portefeuille | string {
   if (p.crameLe) return MESSAGE_CRAME;
   if (!(ordre.prix > 0)) return 'Prix invalide.';
-  if (!(ordre.lots >= 0.01) || ordre.lots > 500) return 'Volume invalide : entre 0,01 et 500 lots.';
+  if (!(ordre.lots >= 0.01) || ordre.lots > volumeMax) return `Volume invalide : entre 0,01 et ${volumeMax.toLocaleString('fr-FR')} lots.`;
   const e = engagement(ordre.symbole, ordre.lots, ordre.prix, ordre.levier, ticks, tauxCrypto);
   if (e.marge + e.frais > p.solde) return 'Marge libre insuffisante pour cet ordre.';
   const erreur = verifierProtections(ordre.sens, ordre.prix, ordre);
@@ -241,7 +274,7 @@ export function placerOrdre(
     if (ordre.sens === 'achat' && ordre.prix <= prixActuel) return 'Un stop d\'achat doit être au-dessus du prix actuel.';
     if (ordre.sens === 'vente' && ordre.prix >= prixActuel) return 'Un stop de vente doit être sous le prix actuel.';
   }
-  return { ...p, ordres: [{ ...ordre, lots: normaliserLots(ordre.lots), id: identifiant(), creeLe: Date.now() }, ...p.ordres] };
+  return { ...p, ordres: [{ ...ordre, lots: normaliserLots(ordre.lots, volumeMax), id: identifiant(), creeLe: Date.now() }, ...p.ordres] };
 }
 
 export function annulerOrdre(p: Portefeuille, ordreId: string): Portefeuille {
@@ -275,7 +308,7 @@ export function appliquerFlux(p: Portefeuille, ticks: Ticks, tauxCrypto = TAUX_F
     // Une limite s'exécute à son prix ; un stop au prix du marché qui l'a franchi.
     const prixExecution = o.type === 'limite' ? o.prix : tick.prix;
     const { lots, levier } = lotsOrdre(o, prixExecution);
-    const r = ouvrir(courant, o.symbole, o.sens, lots, prixExecution, ticks, { levier, prot: o, origine: o.type, tauxCrypto });
+    const r = ouvrir(courant, o.symbole, o.sens, lots, prixExecution, ticks, { levier, prot: o, origine: o.type, tauxCrypto, volumeMax: Math.max(LOT_MAX, lots) });
     courant = annulerOrdre(typeof r === 'string' ? courant : r, o.id);
     messages.push(
       typeof r === 'string'

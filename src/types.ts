@@ -65,6 +65,8 @@ export interface Parametres {
   push: { actif: boolean; annonces: 'aucune' | 'importantes' | 'toutes' };
   /** Effet de levier du compte papier (1 = sans levier, 100 = 1:100). */
   levier: number;
+  /** Volume maximal d'un ordre, en lots (500 par défaut). */
+  volumeMax?: number;
 }
 
 export interface ReglesChallenge {
@@ -176,6 +178,8 @@ export interface Portefeuille {
   operations: Operation[];
   ordres: OrdreEnAttente[];
   historiqueCapital: PointCapital[];
+  /** Opérations anciennes résumées pour garder l'état léger : nombre, résultat et frais cumulés. */
+  archive?: { operations: number; clotures: number; resultat: number; frais: number; jusquAu: number };
   /** Compte « cramé » : 99 % du capital de départ perdu. Positions fermées, plus aucun ordre jusqu'à la remise à zéro. */
   crameLe?: number;
 }

@@ -5,6 +5,7 @@ import { estBinance, paireBinance, useFluxBinance } from '../binance';
 import {
   LEVIERS,
   LOT_MAX,
+  VOLUMES_MAX,
   LOT_MIN,
   cleCotation,
   estNegociable,
@@ -108,6 +109,8 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
   const [prixOrdre, setPrixOrdre] = useState('');
   const [lots, setLots] = useState('0.10');
   const levier = etat.parametres.levier;
+  /** Volume maximal par ordre : 500 lots par défaut, plus pour les très gros comptes (Paramètres de l'ordre). */
+  const volumeMax = etat.parametres.volumeMax ?? LOT_MAX;
   const [stopLoss, setStopLoss] = useState('');
   const [takeProfit, setTakeProfit] = useState('');
   const [protections, setProtections] = useState(false);
@@ -148,14 +151,14 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
   };
   const ticksSelecteur = useMemo(() => ({ ...scannerLocal, ...fluxLocal, ...ticks }), [scannerLocal, fluxLocal, ticks]);
   const lotsNum = nombre(lots.replace(',', '.')) ?? 0;
-  const lotsValides = lotsNum >= LOT_MIN && lotsNum <= LOT_MAX;
+  const lotsValides = lotsNum >= LOT_MIN && lotsNum <= volumeMax;
   const prixReference = typeOrdre === 'marche' ? prix : nombre(prixOrdre);
   const calcul = prixReference && lotsValides ? engagement(symbole, lotsNum, prixReference, levier, ticksSelecteur, TAUX_FRAIS) : null;
   const quantite = calcul?.unites ?? 0;
   const pas = prixReference ? pasDePrix(symbole, prixReference) : null;
   const valeurPas = pas && lotsValides ? pas.pas * lotsNum * tailleContrat(symbole) * conversionUsd(symbole, ticksSelecteur) : null;
-  const maxLots = prix ? lotsMax(p, symbole, prixReference ?? prix, levier, ticksSelecteur, TAUX_FRAIS) : 0;
-  const ajusterLots = (delta: number) => setLots(normaliserLots((lotsNum || 0) + delta).toFixed(2));
+  const maxLots = prix ? lotsMax(p, symbole, prixReference ?? prix, levier, ticksSelecteur, TAUX_FRAIS, volumeMax) : 0;
+  const ajusterLots = (delta: number) => setLots(normaliserLots((lotsNum || 0) + delta, volumeMax).toFixed(2));
 
   const { capital, latent, immobilise, niveauMarge } = useMemo(() => valeurPortefeuille(p, ticks), [p, ticks]);
   const perteCompte = p.capitalInitial > 0 ? Math.max(0, 1 - capital / p.capitalInitial) : 0;
@@ -233,19 +236,19 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
       return;
     }
     if (!lotsValides) {
-      setErreur(`Volume invalide : de ${LOT_MIN.toLocaleString('fr-FR')} à ${LOT_MAX} lots, par pas de 0,01.`);
+      setErreur(`Volume invalide : de ${LOT_MIN.toLocaleString('fr-FR')} à ${volumeMax.toLocaleString('fr-FR')} lots, par pas de 0,01.`);
       return;
     }
     let resultat;
     if (typeOrdre === 'marche') {
-      resultat = ouvrir(p, id, sens, lotsNum, prix, ticksSelecteur, { levier, prot: prot(), origine: 'marche', tauxCrypto: TAUX_FRAIS });
+      resultat = ouvrir(p, id, sens, lotsNum, prix, ticksSelecteur, { levier, prot: prot(), origine: 'marche', tauxCrypto: TAUX_FRAIS, volumeMax });
     } else {
       const prixCible = nombre(prixOrdre);
       if (!prixCible) {
         setErreur('Indiquez le prix de déclenchement.');
         return;
       }
-      resultat = placerOrdre(p, { symbole: id, sens, type: typeOrdre, prix: prixCible, lots: lotsNum, levier, ...prot() }, prix, ticksSelecteur, TAUX_FRAIS);
+      resultat = placerOrdre(p, { symbole: id, sens, type: typeOrdre, prix: prixCible, lots: lotsNum, levier, ...prot() }, prix, ticksSelecteur, TAUX_FRAIS, volumeMax);
     }
     if (typeof resultat === 'string') {
       setErreur(resultat);
@@ -414,7 +417,7 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
         <div className="kpi">
           <span>P&amp;L réalisé (frais inclus)</span>
           <strong className={`${realise >= 0 ? 'hausse' : 'baisse'} ${classeKpi(formaterUsdt(realise, true))}`}>{formaterUsdt(realise, true)}</strong>
-          <em className="muet">{p.operations.filter((o) => o.type === 'cloture').length} clôture(s)</em>
+          <em className="muet">{p.operations.filter((o) => o.type === 'cloture').length + (p.archive?.clotures ?? 0)} clôture(s)</em>
         </div>
       </div>
 
@@ -476,7 +479,7 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
                   inputMode="decimal"
                   value={lots}
                   onChange={(e) => setLots(e.target.value)}
-                  onBlur={() => lotsNum > 0 && setLots(normaliserLots(lotsNum).toFixed(2))}
+                  onBlur={() => lotsNum > 0 && setLots(normaliserLots(lotsNum, volumeMax).toFixed(2))}
                   aria-invalid={!lotsValides}
                 />
                 <button type="button" onClick={() => ajusterLots(0.01)} aria-label="Augmenter de 0,01 lot">
@@ -494,6 +497,21 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
                 {LEVIERS.map((l) => (
                   <option key={l} value={l}>
                     1:{l}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Max par ordre
+              <select
+                className="selecteur"
+                value={volumeMax}
+                title="Volume maximal d'un ordre. 500 lots par défaut ; plus pour les très gros comptes."
+                onChange={(e) => maj({ parametres: { ...etat.parametres, volumeMax: Number(e.target.value) } })}
+              >
+                {VOLUMES_MAX.map((v) => (
+                  <option key={v} value={v}>
+                    {v.toLocaleString('fr-FR')} lots
                   </option>
                 ))}
               </select>
@@ -537,7 +555,7 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
                   type="button"
                   className="bouton-secondaire"
                   disabled={!lotsConseilles}
-                  onClick={() => lotsConseilles && setLots(normaliserLots(Math.min(lotsConseilles, maxLots || lotsConseilles)).toFixed(2))}
+                  onClick={() => lotsConseilles && setLots(normaliserLots(Math.min(lotsConseilles, maxLots || lotsConseilles), volumeMax).toFixed(2))}
                   title="Calcule le volume pour que la perte au stop-loss corresponde au risque choisi"
                 >
                   Dimensionner
@@ -561,7 +579,7 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
             </div>
             <div>
               <dt>Volume</dt>
-              <dd>{lotsValides ? `${formaterLots(lotsNum)} = ${libelleUnite(symbole, quantite)}` : 'de 0,01 à 500 lots'}</dd>
+              <dd>{lotsValides ? `${formaterLots(lotsNum)} = ${libelleUnite(symbole, quantite)}` : `de 0,01 à ${volumeMax.toLocaleString('fr-FR')} lots`}</dd>
             </div>
             <div>
               <dt>Valeur notionnelle</dt>
@@ -948,6 +966,12 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
 
           {onglet === 'historique' && (
             <>
+              {p.archive && (
+                <p className="muet petit archive-operations">
+                  {p.archive.operations.toLocaleString('fr-FR')} opérations plus anciennes (jusqu'au {new Date(p.archive.jusquAu).toLocaleDateString('fr-FR')}) sont résumées pour
+                  garder le compte léger : résultat {formaterUsdt(p.archive.resultat - p.archive.frais, true)} frais inclus, compté dans le P&amp;L réalisé.
+                </p>
+              )}
               {p.operations.length === 0 && <p className="vide">Aucune opération pour l'instant.</p>}
               {p.operations.length > 0 && (
                 <div className="defilement-x">
