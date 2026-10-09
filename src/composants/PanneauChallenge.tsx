@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { Challenge, Etat } from '../types';
 import type { CompteDistant } from '../compteLocal';
-import { CAPITAUX, FORMULES, formuleSuivante, mesurer, nouveauChallenge, reglesCompletes } from '../challenge';
+import { CAPITAUX, demanderVersement, FORMULES, FORMULES_OUVERTES, formuleSuivante, mesurer, nouveauChallenge, prochainVersement, reglesCompletes } from '../challenge';
 import { Certificat } from './Certificat';
 import { formaterUsdt, reinitialiser } from '../trading';
 
@@ -42,6 +42,7 @@ export function PanneauChallenge({ etat, capital, marges, maj, compte, ouvrirPha
   const [montant, setMontant] = useState(100000);
   const [replie, setReplie] = useState(false);
   const [certificat, setCertificat] = useState<Challenge | null>(null);
+  const [erreurVersement, setErreurVersement] = useState<string | null>(null);
 
   const archiver = (c: Challenge | null) => (c ? [c, ...(etat.challengesPasses ?? [])].slice(0, 30) : (etat.challengesPasses ?? []));
 
@@ -108,7 +109,7 @@ export function PanneauChallenge({ etat, capital, marges, maj, compte, ouvrirPha
               franchie fait échouer le challenge et ferme les positions.
             </p>
             <div className="pc-formules">
-              {FORMULES.map((f) => (
+              {FORMULES_OUVERTES.map((f) => (
                 <button key={f.id} className={`pc-formule ${formule === f.id ? 'actif' : ''}`} onClick={() => setFormule(f.id)}>
                   <strong>{f.nom}</strong>
                   <span className="muet">{f.description}</span>
@@ -137,6 +138,16 @@ export function PanneauChallenge({ etat, capital, marges, maj, compte, ouvrirPha
   const m = mesurer(ch, capital, etat.portefeuille.solde, marges, etat.portefeuille.operations);
   const r = reglesCompletes(ch.regles);
   const suivante = ch.statut === 'reussi' ? formuleSuivante(r.formule) : undefined;
+  const versements = ch.versements ?? [];
+  const totalVerse = versements.reduce((t, v) => t + v.montant, 0);
+  const prochain = prochainVersement(ch);
+  const verser = () => {
+    const resultat = demanderVersement(ch, etat.portefeuille);
+    if (typeof resultat === 'string') return setErreurVersement(resultat);
+    if (!window.confirm(`Retirer ${formaterUsdt(resultat.versement.profit)} de profit ? Vous recevez ${formaterUsdt(resultat.versement.montant)} (${r.partage ?? 80} %), le compte repart de ${formaterUsdt(r.capital)}.`)) return;
+    setErreurVersement(null);
+    maj({ challenge: resultat.challenge, portefeuille: resultat.portefeuille });
+  };
   const pct = (v: number) => `${((v / r.capital) * 100).toLocaleString('fr-FR', { maximumFractionDigits: 2 })} %`;
   const duree = Math.max(1, Math.round(((ch.finLe ?? Date.now()) - ch.debutLe) / 86400000));
 
@@ -144,19 +155,31 @@ export function PanneauChallenge({ etat, capital, marges, maj, compte, ouvrirPha
     <div className={`carte panneau-challenge statut-${ch.statut}`}>
       <div className="entete-carte">
         <h3>
-          Challenge {r.formule} · {r.capital.toLocaleString('fr-FR')} $
+          {r.finance ? '💼 ' : 'Challenge '}
+          {r.formule} · {r.capital.toLocaleString('fr-FR')} $
         </h3>
-        <span className={`pc-statut ${ch.statut}`}>{STATUTS[ch.statut]}</span>
+        <span className={`pc-statut ${ch.statut}`}>{r.finance && ch.statut === 'en-cours' ? 'Actif' : r.finance && ch.statut === 'echoue' ? 'Clôturé' : STATUTS[ch.statut]}</span>
       </div>
       {ch.statut !== 'en-cours' && ch.raison && <p className={`pc-raison ${ch.statut}`}>{ch.raison}</p>}
       <div className="pc-jauges">
-        <Jauge
-          libelle={`Objectif +${r.objectifPct} % (positions fermées)`}
-          valeur={Math.max(0, m.gainRealise)}
-          max={m.objectif}
-          sens="objectif"
-          texte={`${formaterUsdt(m.gainRealise, true)} / ${formaterUsdt(m.objectif)}`}
-        />
+        {r.finance ? (
+          <div className="jauge-challenge pc-profit">
+            <div className="jc-entete">
+              <span>Profit réalisé · votre part {r.partage ?? 80} %</span>
+              <strong className={m.gainRealise >= 0 ? 'hausse' : 'baisse'}>
+                {formaterUsdt(m.gainRealise, true)} → {formaterUsdt(Math.max(0, m.gainRealise) * ((r.partage ?? 80) / 100))}
+              </strong>
+            </div>
+          </div>
+        ) : (
+          <Jauge
+            libelle={`Objectif +${r.objectifPct} % (positions fermées)`}
+            valeur={Math.max(0, m.gainRealise)}
+            max={m.objectif}
+            sens="objectif"
+            texte={`${formaterUsdt(m.gainRealise, true)} / ${formaterUsdt(m.objectif)}`}
+          />
+        )}
         <Jauge
           libelle={`Perte du jour (max ${r.perteJourPct} %)`}
           valeur={m.perteJour}
@@ -180,14 +203,44 @@ export function PanneauChallenge({ etat, capital, marges, maj, compte, ouvrirPha
             texte={m.meilleurJourPct === null ? 'pas encore de profit' : `${Math.round(m.meilleurJourPct)} % (${formaterUsdt(m.meilleurJour, true)})`}
           />
         ) : null}
-        <Jauge
-          libelle={`Jours de trading (min ${r.joursMin})`}
-          valeur={m.jours}
-          max={Math.max(1, r.joursMin)}
-          sens="objectif"
-          texte={`${m.jours} / ${r.joursMin}`}
-        />
+        {!r.finance && (
+          <Jauge
+            libelle={`Jours de trading (min ${r.joursMin})`}
+            valeur={m.jours}
+            max={Math.max(1, r.joursMin)}
+            sens="objectif"
+            texte={`${m.jours} / ${r.joursMin}`}
+          />
+        )}
       </div>
+      {r.finance && ch.statut === 'en-cours' && (
+        <div className="pc-versements">
+          <div className="pv-entete">
+            <div>
+              <strong>💸 Versements</strong>
+              <span className="muet">
+                {totalVerse > 0 ? `${formaterUsdt(totalVerse)} versés en ${versements.length} fois` : 'Aucun versement pour le moment'} · prochain possible{' '}
+                {Date.now() >= prochain ? 'dès maintenant' : `le ${new Date(prochain).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}`}
+              </span>
+            </div>
+            <button className="bouton-principal" onClick={verser} disabled={Date.now() < prochain || m.gainRealise <= 0}>
+              Demander un versement
+            </button>
+          </div>
+          {erreurVersement && <p className="erreur">{erreurVersement}</p>}
+          {versements.length > 0 && (
+            <ul>
+              {[...versements].reverse().map((v) => (
+                <li key={v.date}>
+                  <span className="muet">{new Date(v.date).toLocaleDateString('fr-FR')}</span>
+                  <span>profit {formaterUsdt(v.profit)}</span>
+                  <strong className="hausse">+{formaterUsdt(v.montant)} versés</strong>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
       {compte && (
         <p className="muet petit pc-compte">
           Compte challenge n° {compte.login} ({compte.serveur}) : règles fixées à l'ouverture.{' '}
@@ -201,8 +254,14 @@ export function PanneauChallenge({ etat, capital, marges, maj, compte, ouvrirPha
         <div className="pc-succes">
           <span>🏆</span>
           <div>
-            <strong>{suivante ? 'Phase validée !' : 'Félicitations, vous êtes trader financé !'}</strong>
-            <span className="muet">{suivante ? `Prochaine étape : ${suivante.nom} (${suivante.description.split('.')[0]}).` : 'Téléchargez votre certificat et partagez-le.'}</span>
+            <strong>{suivante && suivante.id !== 'finance' ? 'Phase validée !' : 'Félicitations, vous êtes trader financé !'}</strong>
+            <span className="muet">
+              {suivante?.id === 'finance'
+                ? `Ouvrez votre compte financé de ${formaterUsdt(r.capital)} : ${suivante.description}`
+                : suivante
+                  ? `Prochaine étape : ${suivante.nom} (${suivante.description.split('.')[0]}).`
+                  : 'Téléchargez votre certificat et partagez-le.'}
+            </span>
           </div>
           <div className="espace" />
           <button className="bouton-secondaire" onClick={() => setCertificat(ch)}>
@@ -210,7 +269,7 @@ export function PanneauChallenge({ etat, capital, marges, maj, compte, ouvrirPha
           </button>
           {suivante && (
             <button className="bouton-principal" onClick={passerPhaseSuivante}>
-              Passer à la {suivante.nom.toLowerCase()}
+              {suivante.id === 'finance' ? 'Ouvrir mon compte financé' : `Passer à la ${suivante.nom.toLowerCase()}`}
             </button>
           )}
         </div>
@@ -241,7 +300,7 @@ export function PanneauChallenge({ etat, capital, marges, maj, compte, ouvrirPha
         <div className="pc-relance">
           <span className="muet">Formule</span>
           <select className="selecteur" value={formule} onChange={(e) => setFormule(e.target.value)}>
-            {FORMULES.map((f) => (
+            {FORMULES_OUVERTES.map((f) => (
               <option key={f.id} value={f.id}>
                 {f.nom}
               </option>

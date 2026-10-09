@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { CompteDistant, TypeCompte } from '../compteLocal';
-import { CAPITAUX, FORMULES } from '../challenge';
+import { CAPITAUX, FORMULES, FORMULES_OUVERTES } from '../challenge';
 import { CAPITAUX_DEMO, fermerCompteDistant, listerComptes, ouvrirCompte, regenererMotsDePasse, renommerCompte, SERVEURS, type Acces, type GestionCompte } from '../comptes';
 import { lienLiaison } from '../synchro';
 import { IconeCroix } from './Icones';
@@ -355,7 +355,7 @@ export function FenetreComptes({
         </div>
         {type === 'challenge' && (
           <div className="pc-formules">
-            {FORMULES.map((f) => (
+            {FORMULES_OUVERTES.map((f) => (
               <button key={f.id} className={`pc-formule ${formule === f.id ? 'actif' : ''}`} onClick={() => setFormule(f.id)}>
                 <strong>{f.nom}</strong>
                 <span className="muet">{f.description}</span>

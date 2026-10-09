@@ -1,8 +1,8 @@
-import type { Challenge, Operation, ReglesChallenge } from './types';
+import type { Challenge, Operation, Portefeuille, ReglesChallenge } from './types';
 
 type ReglesFormule = Omit<ReglesChallenge, 'capital' | 'formule'>;
 
-export const FORMULES: { id: string; nom: string; description: string; regles: ReglesFormule; suivante?: string }[] = [
+export const FORMULES: { id: string; nom: string; description: string; regles: ReglesFormule; suivante?: string; cachee?: boolean }[] = [
   {
     id: 'evaluation',
     nom: 'Évaluation (phase 1)',
@@ -15,20 +15,37 @@ export const FORMULES: { id: string; nom: string; description: string; regles: R
     nom: 'Vérification (phase 2)',
     description: 'Objectif +5 %, perte jour 5 %, perte max 10 %, 4 jours min. Réussie : trader financé.',
     regles: { objectifPct: 5, perteJourPct: 5, perteMaxPct: 10, joursMin: 4 },
+    suivante: 'finance',
   },
   {
     id: 'express',
     nom: 'Express',
     description: 'Objectif +8 %, perte jour 4 %, perte max 8 % suiveuse, sans minimum de jours.',
     regles: { objectifPct: 8, perteJourPct: 4, perteMaxPct: 8, joursMin: 0, suiveuse: true },
+    suivante: 'finance',
   },
   {
     id: 'instantane',
     nom: 'Instantané (1 phase)',
     description: 'Objectif +10 %, perte jour 3 %, perte max 6 % suiveuse, meilleur jour ≤ 40 % du profit, pas de trade 2 min autour des news, 3 jours min.',
     regles: { objectifPct: 10, perteJourPct: 3, perteMaxPct: 6, joursMin: 3, suiveuse: true, regularitePct: 40, newsMinutes: 2 },
+    suivante: 'finance',
+  },
+  {
+    id: 'finance',
+    nom: 'Compte financé',
+    description: "Plus d'objectif : perte jour 5 %, perte max 10 %, 80 % des profits versés tous les 7 jours.",
+    // objectifPct n'est qu'une valeur technique (le serveur l'exige) : un compte financé ne « réussit » jamais.
+    regles: { objectifPct: 100, perteJourPct: 5, perteMaxPct: 10, joursMin: 0, finance: true, partage: 80 },
+    cachee: true,
   },
 ];
+
+/** Formules proposées au départ (le compte financé s'obtient en réussissant un challenge). */
+export const FORMULES_OUVERTES = FORMULES.filter((f) => !f.cachee);
+
+/** Délai entre deux versements d'un compte financé. */
+export const DELAI_VERSEMENT_MS = 7 * 24 * 60 * 60 * 1000;
 
 export const CAPITAUX = [10000, 25000, 50000, 100000, 200000];
 
@@ -162,6 +179,7 @@ export function evaluerChallenge(
       fermerTout: true,
     };
   }
+  if (r.finance) return { challenge: suivant };
   const regulier = !r.regularitePct || (m.meilleurJourPct !== null && m.meilleurJourPct <= r.regularitePct);
   if (m.gainRealise >= m.objectif && m.jours >= r.joursMin && positionsOuvertes === 0 && regulier) {
     return {
@@ -189,4 +207,45 @@ export function annonceBloquante<T extends { date: number; importance: number; d
 ): T | undefined {
   const fenetre = minutes * 60000;
   return evenements.find((e) => e.importance >= 1 && devises.includes(e.devise) && Math.abs(e.date - maintenant) <= fenetre);
+}
+
+/** Date à partir de laquelle un versement peut être demandé. */
+export function prochainVersement(ch: Challenge): number {
+  const dernier = ch.versements?.[ch.versements.length - 1]?.date ?? ch.debutLe;
+  return dernier + DELAI_VERSEMENT_MS;
+}
+
+/**
+ * Versement d'un compte financé : le profit réalisé (solde + marges au-dessus du capital) est retiré du compte,
+ * le trader en reçoit sa part. Possible tous les 7 jours, sans position ouverte. Renvoie un message d'erreur ou le nouvel état.
+ */
+export function demanderVersement(
+  ch: Challenge,
+  p: Portefeuille,
+  maintenant = Date.now(),
+): string | { challenge: Challenge; portefeuille: Portefeuille; versement: { profit: number; montant: number } } {
+  const r = reglesCompletes(ch.regles);
+  if (!r.finance) return "Les versements concernent les comptes financés.";
+  if (ch.statut !== 'en-cours') return 'Compte financé clôturé : plus de versement possible.';
+  if (p.positions.length > 0) return 'Fermez vos positions avant de demander un versement.';
+  const possible = prochainVersement(ch);
+  if (maintenant < possible) return `Prochain versement possible le ${new Date(possible).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}.`;
+  const profit = Math.round((p.solde - r.capital) * 100) / 100;
+  if (!(profit > 0)) return 'Pas de profit à verser pour le moment.';
+  const montant = Math.round(profit * ((r.partage ?? 80) / 100) * 100) / 100;
+  return {
+    versement: { profit, montant },
+    portefeuille: {
+      ...p,
+      solde: p.solde - profit,
+      historiqueCapital: [...p.historiqueCapital, { t: maintenant, v: Math.round((p.solde - profit) * 100) / 100 }].slice(-2000),
+    },
+    challenge: {
+      ...ch,
+      // Le retrait n'est pas une perte : les références de perte journalière et de plus haut baissent d'autant.
+      jour: { ...ch.jour, capitalDebut: ch.jour.capitalDebut - profit },
+      plusHaut: Math.max(r.capital, ch.plusHaut - profit),
+      versements: [...(ch.versements ?? []), { date: maintenant, profit, montant }],
+    },
+  };
 }

@@ -87,6 +87,18 @@ export interface ReglesChallenge {
   regularitePct?: number;
   /** Règle des news : pas d'ouverture de position N minutes avant et après une annonce à fort impact. */
   newsMinutes?: number;
+  /** Compte financé : plus d'objectif, les profits se retirent par versements. */
+  finance?: boolean;
+  /** Part des profits versée au trader (en %), sur un compte financé. */
+  partage?: number;
+}
+
+export interface Versement {
+  date: number;
+  /** Profit retiré du compte. */
+  profit: number;
+  /** Part versée au trader. */
+  montant: number;
 }
 
 export interface Challenge {
@@ -101,6 +113,8 @@ export interface Challenge {
   plusBas: number;
   plusHaut: number;
   capitalFin?: number;
+  /** Versements demandés sur un compte financé. */
+  versements?: Versement[];
 }
 
 export interface Rappel {

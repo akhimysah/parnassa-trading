@@ -29,7 +29,9 @@ export function numeroCertificat(ch: Challenge): string {
 
 function dessiner(ctx: CanvasRenderingContext2D, ch: Challenge, nom: string, login?: string) {
   const r = reglesCompletes(ch.regles);
-  const finance = !formuleSuivante(r.formule);
+  const suite = formuleSuivante(r.formule);
+  // Réussir la dernière phase (avant le compte financé) fait du trader un trader financé.
+  const finance = !suite || suite.id === 'finance';
   const gain = (ch.capitalFin ?? r.capital) - r.capital;
   const or = ctx.createLinearGradient(0, 0, L, H);
   or.addColorStop(0, '#f6e27a');
@@ -91,7 +93,7 @@ function dessiner(ctx: CanvasRenderingContext2D, ch: Challenge, nom: string, log
   ctx.font = '400 30px Georgia, serif';
   ctx.fillText(`pour avoir réussi le challenge « ${r.formule} »`, L / 2, 495, L - 260);
   ctx.fillText(
-    finance ? 'et obtenu le statut de trader financé Parnassa.' : `en respectant toutes les règles de gestion du risque${formuleSuivante(r.formule) ? ' : accès à la phase suivante.' : '.'}`,
+    finance ? 'et obtenu le statut de trader financé Parnassa.' : 'en respectant toutes les règles de gestion du risque : accès à la phase suivante.',
     L / 2,
     540,
     L - 260,
