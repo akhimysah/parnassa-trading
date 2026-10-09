@@ -6,6 +6,8 @@ import { formaterLots, formaterUsdt } from '../trading';
 interface Props {
   operations: Operation[];
   ouvrirSymbole: (id: string) => void;
+  /** Ouvre la carte image d'une journée à partager. */
+  partagerJour?: (date: Date, operations: Operation[]) => void;
 }
 
 interface Jour {
@@ -31,7 +33,7 @@ function montantCourt(v: number): string {
  * Calendrier des trades : résultat net de chaque jour (clôtures, frais inclus), nombre de trades,
  * totaux par semaine et par mois ; un clic sur un jour affiche ses opérations.
  */
-export function CalendrierTrades({ operations, ouvrirSymbole }: Props) {
+export function CalendrierTrades({ operations, ouvrirSymbole, partagerJour }: Props) {
   const [decalage, setDecalage] = useState(0);
   const [jourChoisi, setJourChoisi] = useState<string | null>(null);
 
@@ -183,6 +185,11 @@ export function CalendrierTrades({ operations, ouvrirSymbole }: Props) {
           <h4>
             {dateDetail.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })} ·{' '}
             <span className={detail.net > 0 ? 'hausse' : detail.net < 0 ? 'baisse' : ''}>{formaterUsdt(detail.net, true)}</span>
+            {partagerJour && detail.trades > 0 && (
+              <button className="lien discret bouton-partage" onClick={() => partagerJour(dateDetail, detail.operations)}>
+                ↗ Partager la journée
+              </button>
+            )}
           </h4>
           <ul>
             {[...detail.operations]

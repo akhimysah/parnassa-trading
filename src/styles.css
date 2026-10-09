@@ -4302,3 +4302,7 @@ th.trie {
 .pd-reglage .petit {
   flex-basis: 100%;
 }
+.bouton-partage {
+  margin-left: 8px;
+  font-size: 12px;
+}

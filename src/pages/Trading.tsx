@@ -25,6 +25,7 @@ import { CalendrierTrades } from '../composants/CalendrierTrades';
 import { ClassementTraders } from '../composants/ClassementTraders';
 import { AnalyseAvancee } from '../composants/AnalyseAvancee';
 import { EditeurProtections } from '../composants/EditeurProtections';
+import { CartePartage, type SujetPartage } from '../composants/CartePartage';
 import { BarreCompte, capitalDemande, FenetreComptes } from '../composants/ComptesTrading';
 import type { GestionCompte } from '../comptes';
 import { PanneauChallenge } from '../composants/PanneauChallenge';
@@ -346,6 +347,7 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
   };
 
   const [editionProtections, setEditionProtections] = useState<string | null>(null);
+  const [partage, setPartage] = useState<SujetPartage | null>(null);
   const editerProtections = (positionId: string) => setEditionProtections((x) => (x === positionId ? null : positionId));
   const enregistrerProtections = (positionId: string, prot: { stopLoss?: number; takeProfit?: number; suiveur?: number }) => {
     const pos = p.positions.find((x) => x.id === positionId);
@@ -1052,6 +1054,19 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
                           <td className="num muet">{formaterUsdt(o.frais)}</td>
                           <td className={`num ${o.resultat === undefined ? 'muet' : o.resultat >= 0 ? 'hausse' : 'baisse'}`}>
                             {o.resultat === undefined ? '—' : formaterUsdt(o.resultat, true)}
+                            {o.type === 'cloture' && (
+                              <button
+                                className="lien discret bouton-partage"
+                                title="Partager ce trade en image"
+                                aria-label="Partager ce trade"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setPartage({ type: 'trade', operation: o });
+                                }}
+                              >
+                                ↗
+                              </button>
+                            )}
                           </td>
                           <td className="muet note-cellule" title={o.note}>{o.note ?? ''}</td>
                         </tr>
@@ -1065,7 +1080,8 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
         </div>
       </div>
 
-      <CalendrierTrades operations={p.operations} ouvrirSymbole={ouvrirSymbole} />
+      <CalendrierTrades operations={p.operations} ouvrirSymbole={ouvrirSymbole} partagerJour={(date, operations) => setPartage({ type: 'jour', date, operations })} />
+      {partage && <CartePartage sujet={partage} fermer={() => setPartage(null)} />}
       <ClassementTraders gestion={compte} ouvrirComptes={() => setComptesOuverts(true)} signaler={signaler} />
     </div>
   );
