@@ -24,6 +24,7 @@ import { PrixAnime } from '../composants/PrixAnime';
 import { CalendrierTrades } from '../composants/CalendrierTrades';
 import { ClassementTraders } from '../composants/ClassementTraders';
 import { AnalyseAvancee } from '../composants/AnalyseAvancee';
+import { EditeurProtections } from '../composants/EditeurProtections';
 import { BarreCompte, capitalDemande, FenetreComptes } from '../composants/ComptesTrading';
 import type { GestionCompte } from '../comptes';
 import { PanneauChallenge } from '../composants/PanneauChallenge';
@@ -40,6 +41,7 @@ import {
   formaterQuantite,
   formaterUsdt,
   modifierProtections,
+  breakEven,
   ouvrir,
   placerOrdre,
   pnlLatent,
@@ -336,14 +338,25 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
     signaler(`${r.fermees} position${r.fermees > 1 ? 's' : ''} fermée${r.fermees > 1 ? 's' : ''} : ${formaterUsdt(r.resultat, true)}`);
   };
 
-  const editerProtections = (positionId: string) => {
-    const position = p.positions.find((x) => x.id === positionId);
-    if (!position) return;
-    const sl = window.prompt('Stop-loss (vide pour aucun) :', position.stopLoss ? String(position.stopLoss) : '');
-    if (sl === null) return;
-    const tp = window.prompt('Take-profit (vide pour aucun) :', position.takeProfit ? String(position.takeProfit) : '');
-    if (tp === null) return;
-    appliquer(modifierProtections(p, positionId, { stopLoss: nombre(sl), takeProfit: nombre(tp) }));
+  const [editionProtections, setEditionProtections] = useState<string | null>(null);
+  const editerProtections = (positionId: string) => setEditionProtections((x) => (x === positionId ? null : positionId));
+  const enregistrerProtections = (positionId: string, prot: { stopLoss?: number; takeProfit?: number; suiveur?: number }) => {
+    const pos = p.positions.find((x) => x.id === positionId);
+    const r = modifierProtections(p, positionId, prot, pos ? ticks[paireBinance(pos.symbole)]?.prix : undefined);
+    if (typeof r === 'string') return setErreur(r);
+    setErreur(null);
+    maj({ portefeuille: r });
+    setEditionProtections(null);
+  };
+  const mettreBreakEven = (positionId: string) => {
+    const pos = p.positions.find((x) => x.id === positionId);
+    const prixActuel = pos ? ticks[paireBinance(pos.symbole)]?.prix : undefined;
+    if (!pos || !prixActuel) return;
+    const r = breakEven(p, positionId, prixActuel);
+    if (typeof r === 'string') return setErreur(r);
+    setErreur(null);
+    maj({ portefeuille: r });
+    setEditionProtections(null);
   };
 
   const remettreAZero = () => {
@@ -722,6 +735,7 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
                             <td className="num">
                               <button className="lien discret" onClick={() => editerProtections(pos.id)} title="Modifier stop-loss et take-profit">
                                 {pos.stopLoss ? formaterCotation(pos.symbole, pos.stopLoss) : '—'} / {pos.takeProfit ? formaterCotation(pos.symbole, pos.takeProfit) : '—'}
+                                {pos.suiveur ? <span className="badge-suiveur" title="Stop suiveur actif">↗ suiveur</span> : null}
                               </button>
                             </td>
                             <td>
@@ -741,6 +755,20 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
                               </button>
                             </td>
                           </tr>
+                          {editionProtections === pos.id && (
+                            <tr className="ligne-cloture">
+                              <td colSpan={9}>
+                                <EditeurProtections
+                                  position={pos}
+                                  prixActuel={actuel}
+                                  ticks={ticks}
+                                  enregistrer={(prot) => enregistrerProtections(pos.id, prot)}
+                                  breakEven={() => mettreBreakEven(pos.id)}
+                                  fermer={() => setEditionProtections(null)}
+                                />
+                              </td>
+                            </tr>
+                          )}
                           {enCloture && (
                             <tr key={`${pos.id}-cloture`} className="ligne-cloture">
                               <td colSpan={9}>

@@ -142,6 +142,8 @@ export interface Position {
   ouvertLe: number;
   stopLoss?: number;
   takeProfit?: number;
+  /** Stop suiveur : distance (en prix) que le stop-loss garde derrière le meilleur prix atteint. */
+  suiveur?: number;
   /** Note de journal : plan, raison d'entrée… */
   note?: string;
 }

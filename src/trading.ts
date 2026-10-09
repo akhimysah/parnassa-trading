@@ -243,12 +243,47 @@ export function annoterOperation(p: Portefeuille, operationId: string, note: str
   return { ...p, operations: p.operations.map((o) => (o.id === operationId ? { ...o, note: note.trim() || undefined } : o)) };
 }
 
-export function modifierProtections(p: Portefeuille, positionId: string, prot: Protections): Portefeuille | string {
+/**
+ * Protections d'une position ouverte. Elles se jugent par rapport au prix actuel (un stop remonté au-dessus de
+ * l'entrée verrouille un gain) ; sans prix connu, par rapport au prix d'entrée.
+ */
+export function modifierProtections(p: Portefeuille, positionId: string, prot: Protections & { suiveur?: number }, prixActuel?: number): Portefeuille | string {
   const position = p.positions.find((x) => x.id === positionId);
   if (!position) return 'Position introuvable.';
-  const erreur = verifierProtections(position.sens, position.prixEntree, prot);
-  if (erreur) return erreur;
-  return { ...p, positions: p.positions.map((x) => (x.id === positionId ? { ...x, stopLoss: prot.stopLoss, takeProfit: prot.takeProfit } : x)) };
+  const reference = prixActuel ?? position.prixEntree;
+  if (prot.stopLoss !== undefined) {
+    if (position.sens === 'achat' && prot.stopLoss >= reference) return "Le stop-loss d'un long doit être sous le prix actuel.";
+    if (position.sens === 'vente' && prot.stopLoss <= reference) return "Le stop-loss d'un short doit être au-dessus du prix actuel.";
+  }
+  if (prot.takeProfit !== undefined) {
+    if (position.sens === 'achat' && prot.takeProfit <= reference) return "Le take-profit d'un long doit être au-dessus du prix actuel.";
+    if (position.sens === 'vente' && prot.takeProfit >= reference) return "Le take-profit d'un short doit être sous le prix actuel.";
+  }
+  if (prot.suiveur !== undefined && !(prot.suiveur > 0)) return 'La distance du stop suiveur doit être positive.';
+  let stopLoss = prot.stopLoss;
+  // Un stop suiveur sans stop-loss démarre à sa distance du prix actuel.
+  if (prot.suiveur && stopLoss === undefined) stopLoss = position.sens === 'achat' ? reference - prot.suiveur : reference + prot.suiveur;
+  return {
+    ...p,
+    positions: p.positions.map((x) => (x.id === positionId ? { ...x, stopLoss, takeProfit: prot.takeProfit, suiveur: prot.suiveur } : x)),
+  };
+}
+
+/** Break-even : le stop-loss passe au prix d'entrée, possible seulement si la position est en gain. */
+export function breakEven(p: Portefeuille, positionId: string, prixActuel: number): Portefeuille | string {
+  const position = p.positions.find((x) => x.id === positionId);
+  if (!position) return 'Position introuvable.';
+  const enGain = position.sens === 'achat' ? prixActuel > position.prixEntree : prixActuel < position.prixEntree;
+  if (!enGain) return "Break-even possible seulement quand la position est en gain.";
+  return modifierProtections(p, positionId, { stopLoss: position.prixEntree, takeProfit: position.takeProfit, suiveur: position.suiveur }, prixActuel);
+}
+
+/** Fait suivre le stop-loss au meilleur prix : il ne recule jamais. */
+export function suivreStop(pos: Position, prix: number): Position {
+  if (!pos.suiveur) return pos;
+  const candidat = pos.sens === 'achat' ? prix - pos.suiveur : prix + pos.suiveur;
+  const meilleur = pos.stopLoss === undefined || (pos.sens === 'achat' ? candidat > pos.stopLoss : candidat < pos.stopLoss);
+  return meilleur ? { ...pos, stopLoss: candidat } : pos;
 }
 
 export function placerOrdre(
@@ -317,6 +352,15 @@ export function appliquerFlux(p: Portefeuille, ticks: Ticks, tauxCrypto = TAUX_F
     );
   }
 
+  // Stops suiveurs : ils montent (long) ou descendent (short) avec le prix, avant le contrôle des stops.
+  if (courant.positions.some((x) => x.suiveur)) {
+    const suivies = courant.positions.map((x) => {
+      const t = ticks[paireBinance(x.symbole)];
+      return t ? suivreStop(x, t.prix) : x;
+    });
+    if (suivies.some((x, i) => x !== courant.positions[i])) courant = { ...courant, positions: suivies };
+  }
+
   for (const pos of courant.positions) {
     const tick = ticks[paireBinance(pos.symbole)];
     if (!tick) continue;
@@ -329,7 +373,7 @@ export function appliquerFlux(p: Portefeuille, ticks: Ticks, tauxCrypto = TAUX_F
     if (typeof r === 'string') continue;
     courant = r;
     messages.push(
-      `${touchéSL ? 'Stop-loss' : 'Take-profit'} ${nom(pos.symbole)} : position fermée à ${prix.toLocaleString('fr-FR')} (${resultat >= 0 ? '+' : ''}${resultat.toFixed(2)} USDT)`,
+      `${touchéSL ? (pos.suiveur ? 'Stop suiveur' : 'Stop-loss') : 'Take-profit'} ${nom(pos.symbole)} : position fermée à ${prix.toLocaleString('fr-FR')} (${resultat >= 0 ? '+' : ''}${resultat.toFixed(2)} USDT)`,
     );
   }
 
