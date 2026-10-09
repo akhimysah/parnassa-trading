@@ -361,6 +361,10 @@ export function App() {
             emplacementActif={emplacementActif}
             choisirEmplacement={choisirEmplacement}
             ouvrirRecherche={ouvrirRecherche}
+            ticks={ticks}
+            maj={maj}
+            lecture={Boolean(compteTrading.session?.lecture)}
+            signaler={setToast}
           />
         )}
         {etat.page === 'marches' && <Marches theme={etat.theme} />}

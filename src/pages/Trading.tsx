@@ -28,6 +28,7 @@ import { PanneauChallenge } from '../composants/PanneauChallenge';
 import { annonceBloquante, devisesInstrument, formuleSuivante, reglesCompletes } from '../challenge';
 import { useCalendrier } from '../actualites';
 import { ouvrirCompte, type Acces } from '../comptes';
+import { cloturerPositions } from '../ordre';
 import { nomSymbole, ticker } from '../symboles';
 import {
   annoterOperation,
@@ -322,15 +323,15 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
     );
   };
 
-  const toutFermer = () => {
-    let courant = p;
-    for (const pos of p.positions) {
-      const prixActuel = ticks[paireBinance(pos.symbole)]?.prix;
-      if (!prixActuel) continue;
-      const r = cloturer(courant, pos.id, prixActuel, ticks, { tauxCrypto: TAUX_FRAIS });
-      if (typeof r !== 'string') courant = r;
+  /** Fermeture groupée : toutes les positions, seulement les gagnantes ou seulement les perdantes. */
+  const fermerGroupe = (quoi: 'tout' | 'gagnantes' | 'perdantes') => {
+    const r = cloturerPositions(p, ticks, TAUX_FRAIS, (_pos, pnl) => quoi === 'tout' || (quoi === 'gagnantes' ? pnl > 0 : pnl < 0));
+    if (r.fermees === 0) {
+      setErreur(quoi === 'tout' ? 'Aucune position à fermer (prix indisponibles).' : `Aucune position ${quoi === 'gagnantes' ? 'gagnante' : 'perdante'} en ce moment.`);
+      return;
     }
-    maj({ portefeuille: courant });
+    maj({ portefeuille: r.portefeuille });
+    signaler(`${r.fermees} position${r.fermees > 1 ? 's' : ''} fermée${r.fermees > 1 ? 's' : ''} : ${formaterUsdt(r.resultat, true)}`);
   };
 
   const editerProtections = (positionId: string) => {
@@ -647,9 +648,17 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
                 </button>
               )}
               {onglet === 'positions' && p.positions.length > 0 && (
-                <button className="bouton-secondaire" onClick={toutFermer}>
-                  Tout clôturer
-                </button>
+                <>
+                  <button className="bouton-secondaire" onClick={() => fermerGroupe('gagnantes')} title="Fermer seulement les positions en gain">
+                    Gagnantes
+                  </button>
+                  <button className="bouton-secondaire" onClick={() => fermerGroupe('perdantes')} title="Fermer seulement les positions en perte">
+                    Perdantes
+                  </button>
+                  <button className="bouton-secondaire" onClick={() => fermerGroupe('tout')}>
+                    Tout clôturer
+                  </button>
+                </>
               )}
               <button className="bouton-secondaire" onClick={remettreAZero}>
                 Réinitialiser

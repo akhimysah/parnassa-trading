@@ -67,6 +67,8 @@ export interface Parametres {
   levier: number;
   /** Volume maximal d'un ordre, en lots (500 par défaut). */
   volumeMax?: number;
+  /** Trading en un clic sur la page Graphique : affiché ou replié, et volume de chaque clic. */
+  unClic?: { actif: boolean; lots: number };
 }
 
 export interface ReglesChallenge {

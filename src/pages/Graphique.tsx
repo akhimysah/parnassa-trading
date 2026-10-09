@@ -1,4 +1,6 @@
 import type { Etat } from '../types';
+import type { Tick } from '../binance';
+import { BarreUnClic } from '../composants/BarreUnClic';
 import { nomSymbole, ticker } from '../symboles';
 import { WidgetTradingView } from '../composants/WidgetTradingView';
 import { IconeRecherche } from '../composants/Icones';
@@ -8,13 +10,18 @@ interface Props {
   emplacementActif: number;
   choisirEmplacement: (i: number) => void;
   ouvrirRecherche: () => void;
+  ticks: Record<string, Tick>;
+  maj: (p: Partial<Etat>) => void;
+  /** Accès investisseur : on regarde, sans trader. */
+  lecture: boolean;
+  signaler: (m: string) => void;
 }
 
 /**
  * Page principale : 1, 2 ou 4 graphiques avancés TradingView.
  * Le panneau de droite (liste de suivi, détails, hotlists, calendrier) est celui du widget lui-même.
  */
-export function Graphique({ etat, emplacementActif, choisirEmplacement, ouvrirRecherche }: Props) {
+export function Graphique({ etat, emplacementActif, choisirEmplacement, ouvrirRecherche, ticks, maj, lecture, signaler }: Props) {
   const symboles = etat.emplacements.slice(0, etat.disposition);
   const multi = etat.disposition > 1;
 
@@ -40,6 +47,18 @@ export function Graphique({ etat, emplacementActif, choisirEmplacement, ouvrirRe
                 </button>
               </header>
             )}
+            {(!multi || actif) && <BarreUnClic
+                etat={etat}
+                symbole={symbole}
+                ticks={ticks}
+                maj={maj}
+                lecture={lecture}
+                signaler={signaler}
+                changerSymbole={() => {
+                  choisirEmplacement(i);
+                  ouvrirRecherche();
+                }}
+              />}
             <WidgetTradingView
               widget="advanced-chart"
               config={{
