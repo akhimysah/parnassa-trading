@@ -4235,3 +4235,70 @@ th.trie {
     grid-column: 1 / -1;
   }
 }
+
+/* ---- Discipline du jour ---- */
+.panneau-discipline {
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+.panneau-discipline.repli {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  padding: 10px 14px;
+}
+.panneau-discipline.bloque {
+  border-color: rgba(239, 83, 80, 0.55);
+}
+.pd-entete {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  padding: 10px 14px 0;
+  font-variant-numeric: tabular-nums;
+}
+.pd-bloque {
+  margin: 8px 14px 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(239, 83, 80, 0.12);
+  color: var(--baisse);
+  font-weight: 600;
+}
+.pd-jauges {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px 18px;
+  padding: 10px 14px 12px;
+}
+.pd-jauges:empty {
+  display: none;
+}
+.pd-reglage {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px 14px;
+  padding: 0 14px 12px;
+}
+.pd-reglage label:not(.case) {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.pd-reglage input:not([type='checkbox']) {
+  width: 120px;
+  height: 30px;
+  padding: 0 8px;
+  border-radius: var(--rayon);
+  border: 1px solid var(--bordure-2);
+  background: var(--fond);
+  color: var(--texte);
+  font: inherit;
+}
+.pd-reglage .petit {
+  flex-basis: 100%;
+}

@@ -3,6 +3,7 @@ import type { Tick } from './binance';
 import { paireBinance } from './binance';
 import { LOT_MIN, estNegociable } from './instruments';
 import { cloturer, pnlLatent } from './trading';
+import { blocageDiscipline } from './discipline';
 
 type Ticks = Record<string, Tick>;
 
@@ -20,6 +21,8 @@ export function controleOuverture(o: {
   if (o.lecture) return 'Accès investisseur : lecture seule, aucun ordre possible.';
   if (!estNegociable(o.symbole)) return 'Cet instrument ne se trade pas ici : choisissez-en un de la liste des instruments.';
   if (!o.prix) return 'Prix en direct indisponible pour cet instrument, patientez une seconde.';
+  const discipline = blocageDiscipline(o.etat.portefeuille, o.etat.parametres.discipline);
+  if (discipline) return `Discipline du jour : ${discipline} Nouveaux ordres bloqués jusqu'à demain.`;
   if (o.etat.challenge && o.etat.challenge.statut !== 'en-cours') return 'Challenge terminé : démarrez-en un nouveau ou quittez le mode challenge (page Trading).';
   if (o.annonce) {
     const heure = new Date(o.annonce.date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });

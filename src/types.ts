@@ -67,6 +67,8 @@ export interface Parametres {
   levier: number;
   /** Volume maximal d'un ordre, en lots (500 par défaut). */
   volumeMax?: number;
+  /** Garde-fous personnels de la journée, pour tout compte. */
+  discipline?: ReglesDiscipline;
   /** Trading en un clic sur la page Graphique : affiché ou replié, et volume de chaque clic. */
   unClic?: {
     actif: boolean;
@@ -201,6 +203,8 @@ export interface Portefeuille {
   operations: Operation[];
   ordres: OrdreEnAttente[];
   historiqueCapital: PointCapital[];
+  /** Discipline du jour : fonds propres au début de la journée et blocage éventuel jusqu'au lendemain. */
+  journee?: { date: string; capitalDebut: number; bloque?: { raison: string; depuis: number } };
   /** Opérations anciennes résumées pour garder l'état léger : nombre, résultat et frais cumulés. */
   archive?: { operations: number; clotures: number; resultat: number; frais: number; jusquAu: number };
   /** Compte « cramé » : 99 % du capital de départ perdu. Positions fermées, plus aucun ordre jusqu'à la remise à zéro. */
@@ -234,4 +238,16 @@ export interface Alerte {
   prixReference?: number;
   declencheeLe?: number;
   prixDeclenchement?: number;
+}
+
+export interface ReglesDiscipline {
+  actif: boolean;
+  /** Perte du jour (en % des fonds propres du matin) qui arrête le trading jusqu'au lendemain. */
+  perteJourPct?: number;
+  /** Gain du jour (en %) qui verrouille la journée. */
+  objectifJourPct?: number;
+  /** Nombre maximal de positions ouvertes dans la journée. */
+  tradesMax?: number;
+  /** Fermer les positions quand la perte ou l'objectif du jour est atteint. */
+  fermerAuto: boolean;
 }

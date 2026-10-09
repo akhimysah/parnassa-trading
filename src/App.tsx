@@ -24,6 +24,7 @@ import { useMoteurRappels } from './rappels';
 import { useSynchroPush } from './push';
 import { useSynchro } from './synchro';
 import { useCompteTrading } from './comptes';
+import { evaluerDiscipline } from './discipline';
 import { symbolesConversion, useCotationsScanner } from './instruments';
 import { estBinance, paireBinance } from './binance';
 import { appliquerFlux, cloturer, enregistrerCapital, MESSAGE_CRAME, valeurPortefeuille } from './trading';
@@ -166,6 +167,23 @@ export function App() {
         if (verdict.message) {
           messages.push(verdict.message);
           notifier('Challenge', verdict.message, undefined, `challenge-${challenge.id}`);
+        }
+      }
+
+      // Discipline du jour : perte max, objectif et nombre de trades, pour tout compte.
+      if (e.parametres.discipline?.actif && toutesCotees) {
+        const d = evaluerDiscipline(portefeuille, capital, e.parametres.discipline);
+        portefeuille = d.portefeuille;
+        if (d.fermerTout && portefeuille.positions.length > 0) {
+          for (const pos of [...portefeuille.positions]) {
+            const r = cloturer(portefeuille, pos.id, ticks[paireBinance(pos.symbole)].prix, ticks, { tauxCrypto: e.parametres.frais });
+            if (typeof r !== 'string') portefeuille = r;
+          }
+          capital = valeurPortefeuille(portefeuille, ticks).capital;
+        }
+        if (d.message) {
+          messages.push(d.message);
+          notifier('Discipline du jour', d.message, undefined, `discipline-${portefeuille.journee?.date}`);
         }
       }
 
