@@ -58,7 +58,16 @@ export function BarreUnClic({ etat, symbole, ticks, maj, lecture, signaler, chan
       setErreur(probleme);
       return;
     }
-    const r = ouvrir(p, symbole, sens, lots, prix, tous, { levier: etat.parametres.levier, origine: 'marche', tauxCrypto: etat.parametres.frais ?? TAUX_FRAIS, volumeMax });
+    const pr = reglage.protections;
+    const avecProt = pr?.actif ? pr : undefined;
+    const prot = avecProt
+      ? {
+          stopLoss: avecProt.sl ? (sens === 'achat' ? prix - avecProt.sl : prix + avecProt.sl) : undefined,
+          takeProfit: avecProt.tp ? (sens === 'achat' ? prix + avecProt.tp : prix - avecProt.tp) : undefined,
+          suiveur: avecProt.suiveur,
+        }
+      : undefined;
+    const r = ouvrir(p, symbole, sens, lots, prix, tous, { levier: etat.parametres.levier, prot, origine: 'marche', tauxCrypto: etat.parametres.frais ?? TAUX_FRAIS, volumeMax });
     if (typeof r === 'string') {
       setErreur(r);
       return;
@@ -85,6 +94,34 @@ export function BarreUnClic({ etat, symbole, ticks, maj, lecture, signaler, chan
     window.addEventListener('keydown', touche);
     return () => window.removeEventListener('keydown', touche);
   }, [reglage.actif, negociable]);
+
+  /** Retourne la position nette : tout fermer sur l'instrument, puis ouvrir le même volume dans l'autre sens. */
+  const inverser = () => {
+    if (!prix || net === 0) return;
+    const sens: Sens = net > 0 ? 'vente' : 'achat';
+    const volume = Math.round(Math.abs(net) * 100) / 100;
+    const probleme = controleOuverture({ etat, symbole, prix, lots: volume, volumeMax: Math.max(volumeMax, volume), lecture, annonce, minutesNews });
+    if (probleme) return setErreur(probleme);
+    const fermeture = cloturerPositions(p, tous, etat.parametres.frais ?? TAUX_FRAIS, (x) => x.symbole === symbole);
+    const r = ouvrir(fermeture.portefeuille, symbole, sens, volume, prix, tous, {
+      levier: etat.parametres.levier,
+      origine: 'marche',
+      tauxCrypto: etat.parametres.frais ?? TAUX_FRAIS,
+      volumeMax: Math.max(volumeMax, volume),
+    });
+    if (typeof r === 'string') return setErreur(r);
+    setErreur(null);
+    maj({ portefeuille: r });
+    signaler(`Position inversée : ${sens === 'achat' ? 'long' : 'short'} ${formaterLots(volume)} ${info?.code ?? ''} (clôture ${formaterUsdt(fermeture.resultat, true)})`);
+  };
+
+  const majProtections = (modif: Partial<NonNullable<typeof reglage.protections>>) =>
+    maj({ parametres: { ...etat.parametres, unClic: { ...reglage, protections: { actif: true, ...reglage.protections, ...modif } } } });
+  const [editionProt, setEditionProt] = useState(false);
+  const pr = reglage.protections;
+  const resumeProt = pr?.actif
+    ? [pr.sl ? `SL ${pr.sl.toLocaleString('fr-FR')}` : null, pr.tp ? `TP ${pr.tp.toLocaleString('fr-FR')}` : null, pr.suiveur ? `↗ ${pr.suiveur.toLocaleString('fr-FR')}` : null].filter(Boolean).join(' · ') || 'aucune'
+    : 'sans protection';
 
   const fermer = () => {
     if (lecture) return setErreur('Accès investisseur : lecture seule.');
@@ -151,9 +188,44 @@ export function BarreUnClic({ etat, symbole, ticks, maj, lecture, signaler, chan
                 {formaterLots(net)} net
               </span>
               <strong className={latent >= 0 ? 'hausse' : 'baisse'}>{formaterUsdt(latent, true)}</strong>
+              <button className="bouton-secondaire petit" onClick={inverser} disabled={lecture || net === 0} title="Fermer et ouvrir le même volume dans l'autre sens">
+                Inverser
+              </button>
               <button className="bouton-secondaire petit" onClick={fermer} disabled={lecture}>
                 Fermer {positions.length > 1 ? `les ${positions.length}` : ''}
               </button>
+            </div>
+          )}
+          <button className={`uc-prot ${pr?.actif ? 'actif' : ''}`} onClick={() => setEditionProt((x) => !x)} title="Protections posées sur chaque ordre en un clic (distance en prix depuis l'entrée)">
+            🛡 {resumeProt}
+          </button>
+          {editionProt && (
+            <div className="uc-prot-edition">
+              <label className="case">
+                <input type="checkbox" checked={Boolean(pr?.actif)} onChange={(e) => majProtections({ actif: e.target.checked })} />
+                Poser sur chaque ordre
+              </label>
+              {(
+                [
+                  ['sl', 'Stop-loss à'],
+                  ['tp', 'Take-profit à'],
+                  ['suiveur', 'Stop suiveur'],
+                ] as const
+              ).map(([cle, libelle]) => (
+                <label key={cle}>
+                  <span className="muet">{libelle}</span>
+                  <input
+                    inputMode="decimal"
+                    placeholder="—"
+                    defaultValue={pr?.[cle] ?? ''}
+                    onBlur={(e) => {
+                      const v = Number(e.target.value.replace(',', '.'));
+                      majProtections({ [cle]: e.target.value.trim() && v > 0 ? v : undefined });
+                    }}
+                  />
+                </label>
+              ))}
+              <span className="muet petit">distances en prix depuis l'entrée (ex. 5 = 5 $ sur l'or)</span>
             </div>
           )}
           {annonce && <span className="uc-news">⛔ News {annonce.devise} : ouverture bloquée</span>}

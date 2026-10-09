@@ -68,7 +68,12 @@ export interface Parametres {
   /** Volume maximal d'un ordre, en lots (500 par défaut). */
   volumeMax?: number;
   /** Trading en un clic sur la page Graphique : affiché ou replié, et volume de chaque clic. */
-  unClic?: { actif: boolean; lots: number };
+  unClic?: {
+    actif: boolean;
+    lots: number;
+    /** Protections posées sur chaque ordre en un clic, en distance de prix depuis l'entrée. */
+    protections?: { actif: boolean; sl?: number; tp?: number; suiveur?: number };
+  };
 }
 
 export interface ReglesChallenge {

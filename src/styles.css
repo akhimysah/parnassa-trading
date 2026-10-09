@@ -4190,3 +4190,48 @@ th.trie {
   font-size: 10px;
   color: var(--accent);
 }
+.uc-prot {
+  height: 30px;
+  padding: 0 9px;
+  border-radius: var(--rayon);
+  border: 1px dashed var(--bordure-2);
+  background: none;
+  color: var(--texte-muet);
+  font: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.uc-prot.actif {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--bordure));
+  color: var(--texte);
+}
+.uc-prot-edition {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 12px;
+  padding: 6px 0 2px;
+}
+.uc-prot-edition label:not(.case) {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.uc-prot-edition input:not([type='checkbox']) {
+  width: 90px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: var(--rayon);
+  border: 1px solid var(--bordure-2);
+  background: var(--fond);
+  color: var(--texte);
+  font: inherit;
+}
+@media (max-width: 640px) {
+  .uc-prot,
+  .uc-prot-edition {
+    grid-column: 1 / -1;
+  }
+}

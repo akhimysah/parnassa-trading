@@ -100,6 +100,8 @@ export function ajouterOperation(p: Portefeuille, o: Operation): Portefeuille {
 export interface Protections {
   stopLoss?: number;
   takeProfit?: number;
+  /** Stop suiveur : distance en prix ; sans stop-loss, le stop démarre à cette distance du prix d'entrée. */
+  suiveur?: number;
   note?: string;
 }
 
@@ -168,8 +170,9 @@ export function ouvrir(
     prixEntree: prix,
     cout: e.marge,
     ouvertLe: Date.now(),
-    stopLoss: prot.stopLoss,
+    stopLoss: prot.stopLoss ?? (prot.suiveur && prot.suiveur > 0 ? (sens === 'achat' ? prix - prot.suiveur : prix + prot.suiveur) : undefined),
     takeProfit: prot.takeProfit,
+    suiveur: prot.suiveur && prot.suiveur > 0 ? prot.suiveur : undefined,
     note: prot.note?.trim() || undefined,
   };
   const operation: Operation = {
@@ -278,10 +281,15 @@ export function breakEven(p: Portefeuille, positionId: string, prixActuel: numbe
   return modifierProtections(p, positionId, { stopLoss: position.prixEntree, takeProfit: position.takeProfit, suiveur: position.suiveur }, prixActuel);
 }
 
-/** Fait suivre le stop-loss au meilleur prix : il ne recule jamais. */
+/**
+ * Fait suivre le stop-loss au meilleur prix, comme sur MT5 : le suivi ne commence qu'une fois la position en gain
+ * d'au moins la distance (le stop atteint alors l'entrée) ; ensuite il ne recule jamais.
+ */
 export function suivreStop(pos: Position, prix: number): Position {
   if (!pos.suiveur) return pos;
   const candidat = pos.sens === 'achat' ? prix - pos.suiveur : prix + pos.suiveur;
+  const enGainSuffisant = pos.sens === 'achat' ? candidat >= pos.prixEntree : candidat <= pos.prixEntree;
+  if (pos.stopLoss !== undefined && !enGainSuffisant) return pos;
   const meilleur = pos.stopLoss === undefined || (pos.sens === 'achat' ? candidat > pos.stopLoss : candidat < pos.stopLoss);
   return meilleur ? { ...pos, stopLoss: candidat } : pos;
 }
