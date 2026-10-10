@@ -9,6 +9,7 @@ import { Parametres } from './composants/Parametres';
 import { Aide } from './composants/Aide';
 import type { SujetPartage } from './composants/CartePartage';
 import { bilanVeille, type BilanJour } from './bilan';
+import { cleSemaine, revueSemaine, type RevueSemaine as Revue } from './semaine';
 import { WidgetTradingView } from './composants/WidgetTradingView';
 import { Graphique } from './pages/Graphique';
 // Pages chargées à la demande (l'accueil et le graphique sont dans le premier chargement), puis préchargées en
@@ -31,6 +32,7 @@ const Alertes = lazy(() => chargerPages.alertes().then((m) => ({ default: m.Aler
 const Trading = lazy(() => chargerPages.trading().then((m) => ({ default: m.Trading })));
 // Fenêtres occasionnelles, chargées seulement quand elles s'ouvrent.
 const BilanVeille = lazy(() => import('./composants/BilanVeille').then((m) => ({ default: m.BilanVeille })));
+const RevueSemaine = lazy(() => import('./composants/RevueSemaine').then((m) => ({ default: m.RevueSemaine })));
 const CartePartage = lazy(() => import('./composants/CartePartage').then((m) => ({ default: m.CartePartage })));
 import { Accueil } from './pages/Accueil';
 import { notifier, sonner, useMoteurAlertes } from './alertes';
@@ -84,29 +86,39 @@ export function App() {
   const [parametresOuverts, setParametresOuverts] = useState(false);
   const [aideOuverte, setAideOuverte] = useState(false);
   const [bilan, setBilan] = useState<BilanJour | null>(null);
+  const [revue, setRevue] = useState<Revue | null>(null);
   const [partageBilan, setPartageBilan] = useState<SujetPartage | null>(null);
   const [emplacementActif, setEmplacementActif] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
 
   const maj = useCallback((p: Partial<Etat>) => setEtat((e) => ({ ...e, ...p })), []);
 
-  // Bilan de la veille : une fois par jour, au premier lancement, s'il y a eu des trades.
+  // Au premier lancement : la revue de la semaine écoulée (une fois par semaine), sinon le bilan de la veille (une fois par jour).
   useEffect(() => {
-    const cle = 'parnassa-trading:bilan-vu';
+    const cleBilan = 'parnassa-trading:bilan-vu';
+    const cleRevue = 'parnassa-trading:revue-vue';
     const aujourdhui = new Date().toDateString();
+    const semaine = cleSemaine();
+    let bilanVu: boolean;
+    let revueVue: boolean;
     try {
-      if (localStorage.getItem(cle) === aujourdhui) return;
+      bilanVu = localStorage.getItem(cleBilan) === aujourdhui;
+      revueVue = localStorage.getItem(cleRevue) === semaine;
     } catch {
       return;
     }
+    if (bilanVu && revueVue) return;
     const t = window.setTimeout(() => {
-      const b = bilanVeille(etat.portefeuille.operations);
+      const r = revueVue ? null : revueSemaine(etat.portefeuille);
+      const b = bilanVu || r ? null : bilanVeille(etat.portefeuille.operations);
       try {
-        localStorage.setItem(cle, aujourdhui);
+        localStorage.setItem(cleRevue, semaine);
+        localStorage.setItem(cleBilan, aujourdhui);
       } catch {
         // stockage indisponible
       }
-      if (b) setBilan(b);
+      if (r) setRevue(r);
+      else if (b) setBilan(b);
     }, 1500);
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -598,6 +610,7 @@ export function App() {
           }}
         />
       )}
+      {revue && <RevueSemaine revue={revue} portefeuille={etat.portefeuille} fermer={() => setRevue(null)} />}
       {partageBilan && <CartePartage sujet={partageBilan} fermer={() => setPartageBilan(null)} />}
       </Suspense>
       <Aide ouvert={aideOuverte} fermer={() => setAideOuverte(false)} aller={(page) => maj({ page })} />

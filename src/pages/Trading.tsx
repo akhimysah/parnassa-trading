@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, lazy, Suspense, useMemo, useState } from 'react';
 import type { Etat, Sens } from '../types';
 import type { Tick } from '../binance';
 import { estBinance, paireBinance, useFluxBinance } from '../binance';
@@ -30,6 +30,7 @@ import { RisqueExposition } from '../composants/RisqueExposition';
 import { CoachTrading } from '../composants/CoachTrading';
 import { planManquant } from '../plan';
 import { PlanDuJour } from '../composants/PlanDuJour';
+import { revueSemaine, type RevueSemaine as Revue } from '../semaine';
 import { EditeurProtections } from '../composants/EditeurProtections';
 import { CartePartage, type SujetPartage } from '../composants/CartePartage';
 import { JournalTrades } from '../composants/JournalTrades';
@@ -77,6 +78,8 @@ import { horodatageFichier, telecharger, versCsv } from '../export';
 import { CourbeCapital } from '../composants/CourbeCapital';
 import { Repartition, type Part } from '../composants/Repartition';
 import { IconeCroix, IconeTelecharger } from '../composants/Icones';
+
+const RevueSemaine = lazy(() => import('../composants/RevueSemaine').then((m) => ({ default: m.RevueSemaine })));
 
 interface Props {
   etat: Etat;
@@ -416,6 +419,7 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
 
   const [editionProtections, setEditionProtections] = useState<string | null>(null);
   const [partage, setPartage] = useState<SujetPartage | null>(null);
+  const [revue, setRevue] = useState<Revue | null>(null);
   const editerProtections = (positionId: string) => setEditionProtections((x) => (x === positionId ? null : positionId));
   const enregistrerProtections = (positionId: string, prot: Parameters<typeof modifierProtections>[2]) => {
     const pos = p.positions.find((x) => x.id === positionId);
@@ -795,6 +799,19 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
               {onglet === 'journal' && journal.length > 0 && (
                 <button className="bouton-secondaire avec-icone" onClick={exporterJournal} title="Exporter le journal en CSV">
                   <IconeTelecharger width={14} height={14} /> CSV
+                </button>
+              )}
+              {onglet === 'statistiques' && stats.nbTrades > 0 && (
+                <button
+                  className="bouton-secondaire"
+                  title="Résultat, jours, instruments et plans de la semaine dernière"
+                  onClick={() => {
+                    const r = revueSemaine(p);
+                    if (r) setRevue(r);
+                    else signaler('Aucun trade clôturé la semaine dernière.');
+                  }}
+                >
+                  📅 Semaine
                 </button>
               )}
               {onglet === 'statistiques' && stats.nbTrades > 0 && (
@@ -1240,6 +1257,11 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
 
       <CalendrierTrades operations={p.operations} ouvrirSymbole={ouvrirSymbole} partagerJour={(date, operations) => setPartage({ type: 'jour', date, operations })} />
       {partage && <CartePartage sujet={partage} fermer={() => setPartage(null)} />}
+      {revue && (
+        <Suspense fallback={null}>
+          <RevueSemaine revue={revue} portefeuille={p} fermer={() => setRevue(null)} />
+        </Suspense>
+      )}
       <ClassementTraders gestion={compte} ouvrirComptes={() => setComptesOuverts(true)} signaler={signaler} />
       <VitrineTrophees trophees={etat.trophees} />
     </div>

@@ -4982,3 +4982,85 @@ kbd {
   align-items: center;
   gap: 8px;
 }
+.revue-semaine {
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+}
+.rs-jours {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+  width: 100%;
+  height: 90px;
+}
+.rs-jours > div {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.rs-colonne {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  width: 70%;
+  border-bottom: 1px solid var(--bordure-2);
+}
+.rs-colonne i {
+  display: block;
+  width: 100%;
+  min-height: 2px;
+  border-radius: 4px 4px 0 0;
+}
+.rs-colonne i.hausse {
+  background: var(--hausse);
+}
+.rs-colonne i.baisse {
+  background: var(--baisse);
+}
+.rs-jours em {
+  font-style: normal;
+  font-size: 11px;
+  color: var(--texte-muet);
+}
+.rs-instruments {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+}
+.rs-instruments li {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 12px;
+  padding: 5px 4px;
+  border-bottom: 1px solid var(--bordure);
+  font-size: 13px;
+  text-align: left;
+}
+.rs-coach {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--panneau-2);
+  border-left: 3px solid var(--bordure-2);
+  text-align: left;
+}
+.rs-coach.coach-negatif {
+  border-left-color: var(--baisse);
+}
+.rs-coach.coach-attention {
+  border-left-color: #f6a821;
+}
+.rs-coach.coach-positif {
+  border-left-color: var(--hausse);
+}
+.rs-coach p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--texte-muet);
+}
+.revue-semaine .bv-grille {
+  grid-template-columns: repeat(3, 1fr);
+}
