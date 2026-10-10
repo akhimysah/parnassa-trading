@@ -27,6 +27,7 @@ import { AnalyseAvancee } from '../composants/AnalyseAvancee';
 import { EditeurProtections } from '../composants/EditeurProtections';
 import { CartePartage, type SujetPartage } from '../composants/CartePartage';
 import { JournalTrades } from '../composants/JournalTrades';
+import { PositionsGroupees } from '../composants/PositionsGroupees';
 import { BarreCompte, capitalDemande, FenetreComptes } from '../composants/ComptesTrading';
 import type { GestionCompte } from '../comptes';
 import { PanneauChallenge } from '../composants/PanneauChallenge';
@@ -184,6 +185,22 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
   const stats = useMemo(() => statistiques(p), [p.operations, p.archive]);
   /** Lignes de positions affichées : au-delà, un bouton affiche le reste (le tableau reste fluide avec des centaines de positions). */
   const [positionsVisibles, setPositionsVisibles] = useState(100);
+  /** Vue des positions par instrument (mémorisée sur l'appareil). */
+  const [vueGroupee, setVueGroupee] = useState(() => {
+    try {
+      return localStorage.getItem('parnassa-trading:vue-positions') === 'groupee';
+    } catch {
+      return false;
+    }
+  });
+  const changerVue = (groupee: boolean) => {
+    setVueGroupee(groupee);
+    try {
+      localStorage.setItem('parnassa-trading:vue-positions', groupee ? 'groupee' : 'detail');
+    } catch {
+      // stockage indisponible
+    }
+  };
 
   // Répartition : liquidités + valeur actuelle de chaque paire (positions regroupées par symbole).
   const parts = useMemo<Part[]>(() => {
@@ -775,7 +792,30 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
           {onglet === 'positions' && (
             <>
               {p.positions.length === 0 && <p className="vide">Aucune position ouverte. Passez un ordre à gauche.</p>}
-              {p.positions.length > 0 && (
+              {p.positions.length > 1 && (
+                <div className="segmente vue-positions" role="tablist" aria-label="Affichage des positions">
+                  <button className={!vueGroupee ? 'actif neutre' : ''} onClick={() => changerVue(false)}>
+                    Détail
+                  </button>
+                  <button className={vueGroupee ? 'actif neutre' : ''} onClick={() => changerVue(true)}>
+                    Par instrument
+                  </button>
+                </div>
+              )}
+              {p.positions.length > 0 && vueGroupee && (
+                <PositionsGroupees
+                  positions={p.positions}
+                  ticks={ticks}
+                  ouvrirSymbole={ouvrirSymbole}
+                  fermerSymbole={(sym) => {
+                    const r = cloturerPositions(p, ticks, TAUX_FRAIS, (x) => x.symbole === sym);
+                    if (r.fermees === 0) return setErreur('Prix indisponible pour cet instrument.');
+                    maj({ portefeuille: r.portefeuille });
+                    signaler(`${r.fermees} position${r.fermees > 1 ? 's' : ''} ${ticker(sym)} fermée${r.fermees > 1 ? 's' : ''} : ${formaterUsdt(r.resultat, true)}`);
+                  }}
+                />
+              )}
+              {p.positions.length > 0 && !vueGroupee && (
                 <div className="defilement-x">
                   <table className="tableau-prix">
                     <thead>
@@ -908,7 +948,7 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
                   </table>
                 </div>
               )}
-              {p.positions.length > positionsVisibles && (
+              {!vueGroupee && p.positions.length > positionsVisibles && (
                 <button className="lien discret plus-positions" onClick={() => setPositionsVisibles((n) => n + 200)}>
                   Afficher {Math.min(200, p.positions.length - positionsVisibles)} positions de plus ({p.positions.length - positionsVisibles} masquées)
                 </button>

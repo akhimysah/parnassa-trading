@@ -4451,3 +4451,7 @@ th.trie {
   padding: 24px;
   color: var(--texte-muet);
 }
+.vue-positions {
+  margin: 0 0 10px;
+  max-width: 280px;
+}
