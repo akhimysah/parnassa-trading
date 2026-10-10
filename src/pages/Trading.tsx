@@ -45,6 +45,8 @@ import {
   formaterQuantite,
   formaterUsdt,
   modifierProtections,
+  placerCassure,
+  echeance,
   etiqueterOperation,
   breakEven,
   ouvrir,
@@ -76,7 +78,7 @@ interface Props {
   signaler: (m: string) => void;
 }
 
-type TypeOrdre = 'marche' | 'limite' | 'stop';
+type TypeOrdre = 'marche' | 'limite' | 'stop' | 'cassure';
 type Onglet = 'positions' | 'ordres' | 'historique' | 'journal' | 'statistiques';
 
 /** Montants très longs (milliards) : chiffres un peu plus petits pour tenir sur une ligne. */
@@ -116,6 +118,10 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
   const [quantiteCloture, setQuantiteCloture] = useState('');
   const [symbole, setSymbole] = useState(estNegociable(etat.symbole) ? etat.symbole : 'OANDA:XAUUSD');
   const [typeOrdre, setTypeOrdre] = useState<TypeOrdre>('marche');
+  const [borneHaute, setBorneHaute] = useState('');
+  const [borneBasse, setBorneBasse] = useState('');
+  const [rrCassure, setRrCassure] = useState('2');
+  const [expiration, setExpiration] = useState<'jamais' | '1h' | '4h' | 'jour'>('jamais');
   const [prixOrdre, setPrixOrdre] = useState('');
   const [lots, setLots] = useState('0.10');
   const levier = etat.parametres.levier;
@@ -162,7 +168,7 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
   const ticksSelecteur = useMemo(() => ({ ...scannerLocal, ...fluxLocal, ...ticks }), [scannerLocal, fluxLocal, ticks]);
   const lotsNum = nombre(lots.replace(',', '.')) ?? 0;
   const lotsValides = lotsNum >= LOT_MIN && lotsNum <= volumeMax;
-  const prixReference = typeOrdre === 'marche' ? prix : nombre(prixOrdre);
+  const prixReference = typeOrdre === 'marche' ? prix : typeOrdre === 'cassure' ? nombre(borneHaute) : nombre(prixOrdre);
   const calcul = prixReference && lotsValides ? engagement(symbole, lotsNum, prixReference, levier, ticksSelecteur, TAUX_FRAIS) : null;
   const quantite = calcul?.unites ?? 0;
   const pas = prixReference ? pasDePrix(symbole, prixReference) : null;
@@ -259,7 +265,15 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
       return;
     }
     let resultat;
-    if (typeOrdre === 'marche') {
+    if (typeOrdre === 'cassure') {
+      const haut = nombre(borneHaute);
+      const bas = nombre(borneBasse);
+      if (!haut || !bas) {
+        setErreur('Indiquez les deux bornes du range.');
+        return;
+      }
+      resultat = placerCassure(p, { symbole: id, haut, bas, lots: lotsNum, levier, rr: Number(rrCassure) || undefined, expireLe: echeance(expiration) }, prix, ticksSelecteur, TAUX_FRAIS, volumeMax);
+    } else if (typeOrdre === 'marche') {
       resultat = ouvrir(p, id, sens, lotsNum, prix, ticksSelecteur, { levier, prot: prot(), origine: 'marche', tauxCrypto: TAUX_FRAIS, volumeMax });
     } else {
       const prixCible = nombre(prixOrdre);
@@ -268,6 +282,8 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
         return;
       }
       resultat = placerOrdre(p, { symbole: id, sens, type: typeOrdre, prix: prixCible, lots: lotsNum, levier, ...prot() }, prix, ticksSelecteur, TAUX_FRAIS, volumeMax);
+      const expireLe = echeance(expiration);
+      if (typeof resultat !== 'string' && expireLe) resultat = { ...resultat, ordres: resultat.ordres.map((o, i) => (i === 0 ? { ...o, expireLe } : o)) };
     }
     if (typeof resultat === 'string') {
       setErreur(resultat);
@@ -476,9 +492,22 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
             </p>
           )}
           <div className="segmente trois">
-            {(['marche', 'limite', 'stop'] as TypeOrdre[]).map((t) => (
-              <button key={t} type="button" className={typeOrdre === t ? 'actif neutre' : ''} onClick={() => setTypeOrdre(t)}>
-                {t === 'marche' ? 'Marché' : t === 'limite' ? 'Limite' : 'Stop'}
+            {(['marche', 'limite', 'stop', 'cassure'] as TypeOrdre[]).map((t) => (
+              <button
+                key={t}
+                type="button"
+                className={typeOrdre === t ? 'actif neutre' : ''}
+                onClick={() => {
+                  setTypeOrdre(t);
+                  // Range de départ autour du prix (±0,15 %), à ajuster.
+                  if (t === 'cassure' && prix && !borneHaute && !borneBasse) {
+                    setBorneHaute(String(Number((prix * 1.0015).toPrecision(8))));
+                    setBorneBasse(String(Number((prix * 0.9985).toPrecision(8))));
+                  }
+                }}
+                title={t === 'cassure' ? 'Achat stop au-dessus et vente stop en dessous, liés : le premier déclenché annule l’autre (OCO)' : undefined}
+              >
+                {t === 'marche' ? 'Marché' : t === 'limite' ? 'Limite' : t === 'stop' ? 'Stop' : 'Cassure'}
               </button>
             ))}
           </div>
@@ -489,7 +518,43 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
               <span className="aide">Cotation gratuite différée d'environ {infoInstrument.differe} min : les ordres s'exécutent à ce prix.</span>
             )}
           </label>
+          {typeOrdre === 'cassure' && (
+            <div className="bloc-cassure">
+              <label>
+                Borne haute (achat stop)
+                <input inputMode="decimal" value={borneHaute} onChange={(e) => setBorneHaute(e.target.value)} />
+              </label>
+              <label>
+                Borne basse (vente stop)
+                <input inputMode="decimal" value={borneBasse} onChange={(e) => setBorneBasse(e.target.value)} />
+              </label>
+              <label>
+                Take-profit
+                <select className="selecteur" value={rrCassure} onChange={(e) => setRrCassure(e.target.value)}>
+                  <option value="0">aucun</option>
+                  <option value="1">1R</option>
+                  <option value="2">2R</option>
+                  <option value="3">3R</option>
+                </select>
+              </label>
+              <span className="aide">
+                Le premier ordre déclenché annule l'autre (OCO). Stop-loss à l'autre borne
+                {nombre(borneHaute) && nombre(borneBasse) ? ` (risque ${formaterCotation(symbole, nombre(borneHaute)! - nombre(borneBasse)!)} par unité)` : ''}.
+              </span>
+            </div>
+          )}
           {typeOrdre !== 'marche' && (
+            <label>
+              Expiration
+              <select className="selecteur" value={expiration} onChange={(e) => setExpiration(e.target.value as typeof expiration)}>
+                <option value="jamais">Jusqu'à annulation</option>
+                <option value="1h">Dans 1 heure</option>
+                <option value="4h">Dans 4 heures</option>
+                <option value="jour">Fin de journée</option>
+              </select>
+            </label>
+          )}
+          {(typeOrdre === 'limite' || typeOrdre === 'stop') && (
             <label>
               {typeOrdre === 'limite' ? 'Prix limite' : 'Prix de déclenchement (stop)'}
               <input inputMode="decimal" value={prixOrdre} onChange={(e) => setPrixOrdre(e.target.value)} placeholder={prix ? formaterCotation(symbole, prix) : ''} />
@@ -559,11 +624,13 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
               Max
             </button>
           </div>
+          {typeOrdre !== 'cassure' && (
           <label className="case">
             <input type="checkbox" checked={protections} onChange={(e) => setProtections(e.target.checked)} />
             Stop-loss / take-profit
           </label>
-          {protections && (
+          )}
+          {protections && typeOrdre !== 'cassure' && (
             <>
               <div className="champs-protection">
                 <label>
@@ -639,6 +706,13 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
             </div>
           </dl>
           {erreur && <p className="erreur">{erreur}</p>}
+          {typeOrdre === 'cassure' ? (
+            <div className="boutons-ordre">
+              <button className="bouton-principal bouton-cassure" onClick={() => passerOrdre('achat')} disabled={!prix || !lotsValides || Boolean(p.crameLe) || lecture}>
+                Placer la cassure (OCO)
+              </button>
+            </div>
+          ) : (
           <div className="boutons-ordre">
             <button className="bouton-achat" onClick={() => passerOrdre('achat')} disabled={!prix || !lotsValides || Boolean(p.crameLe) || lecture}>
               {typeOrdre === 'marche' ? 'Acheter / Long' : 'Ordre d’achat'}
@@ -647,6 +721,7 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
               {typeOrdre === 'marche' ? 'Vendre / Short' : 'Ordre de vente'}
             </button>
           </div>
+          )}
           <p className="muet petit">Compte papier avec effet de levier : aucun ordre réel n'est transmis. Stop-out automatique si le niveau de marge passe sous 50 %. Le compte crame à 99 % de perte : tout est fermé et bloqué jusqu'à la remise à zéro. Ordres en attente et protections surveillés tant que l'application est ouverte.</p>
         </div>
 
@@ -869,6 +944,12 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
                             </td>
                             <td className={o.sens === 'achat' ? 'hausse' : 'baisse'}>
                               {o.type === 'limite' ? 'Limite' : 'Stop'} · {o.sens === 'achat' ? 'achat' : 'vente'}
+                              {o.groupeOco && <span className="badge-suiveur">OCO</span>}
+                              {o.expireLe && (
+                                <span className="badge-suiveur" title={new Date(o.expireLe).toLocaleString('fr-FR')}>
+                                  expire {new Date(o.expireLe).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                              )}
                             </td>
                             <td className="num">
                               {formaterCotation(o.symbole, o.prix)}

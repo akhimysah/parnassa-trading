@@ -179,6 +179,10 @@ export interface OrdreEnAttente {
   takeProfit?: number;
   note?: string;
   creeLe: number;
+  /** Ordres liés (OCO) : le premier déclenché annule les autres du même groupe. */
+  groupeOco?: string;
+  /** Date d'expiration : l'ordre est annulé s'il n'est pas déclenché avant. */
+  expireLe?: number;
 }
 
 export interface PointCapital {

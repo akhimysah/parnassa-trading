@@ -4426,3 +4426,24 @@ th.trie {
   margin: 10px 0 0;
   font-size: 12px;
 }
+.bloc-cassure {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 8px 10px;
+  align-items: end;
+}
+.bloc-cassure .aide {
+  grid-column: 1 / -1;
+}
+.bloc-cassure input {
+  width: 100%;
+}
+.bouton-cassure {
+  flex: 1;
+  height: 40px;
+}
+@media (max-width: 520px) {
+  .bloc-cassure {
+    grid-template-columns: 1fr 1fr;
+  }
+}

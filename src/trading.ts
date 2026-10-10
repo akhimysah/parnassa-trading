@@ -377,7 +377,17 @@ export function appliquerFlux(p: Portefeuille, ticks: Ticks, tauxCrypto = TAUX_F
   const messages: string[] = [];
   const nom = (s: string) => instrument(s)?.code ?? s.split(':').pop();
 
-  for (const o of p.ordres) {
+  // Ordres expirés : annulés avant tout déclenchement.
+  const maintenant = Date.now();
+  const expires = courant.ordres.filter((o) => o.expireLe !== undefined && o.expireLe <= maintenant);
+  if (expires.length) {
+    courant = { ...courant, ordres: courant.ordres.filter((o) => !expires.includes(o)) };
+    for (const o of expires) messages.push(`Ordre ${o.type} ${nom(o.symbole)} expiré et annulé.`);
+  }
+
+  for (const o of [...courant.ordres]) {
+    // Un ordre OCO peut avoir été annulé par son jumeau déclenché juste avant.
+    if (!courant.ordres.some((x) => x.id === o.id)) continue;
     const tick = ticks[paireBinance(o.symbole)];
     if (!tick || !ordreDeclenchable(o, tick.prix)) continue;
     // Une limite s'exécute à son prix ; un stop au prix du marché qui l'a franchi.
@@ -385,6 +395,13 @@ export function appliquerFlux(p: Portefeuille, ticks: Ticks, tauxCrypto = TAUX_F
     const { lots, levier } = lotsOrdre(o, prixExecution);
     const r = ouvrir(courant, o.symbole, o.sens, lots, prixExecution, ticks, { levier, prot: o, origine: o.type, tauxCrypto, volumeMax: Math.max(LOT_MAX, lots) });
     courant = annulerOrdre(typeof r === 'string' ? courant : r, o.id);
+    if (o.groupeOco && typeof r !== 'string') {
+      const jumeaux = courant.ordres.filter((x) => x.groupeOco === o.groupeOco);
+      if (jumeaux.length) {
+        courant = { ...courant, ordres: courant.ordres.filter((x) => x.groupeOco !== o.groupeOco) };
+        messages.push(`OCO : ${jumeaux.length > 1 ? `${jumeaux.length} ordres liés annulés` : 'ordre lié annulé'} (${nom(o.symbole)}).`);
+      }
+    }
     messages.push(
       typeof r === 'string'
         ? `Ordre ${o.type} ${nom(o.symbole)} annulé : ${r}`
@@ -583,4 +600,53 @@ export function formaterQuantite(q: number): string {
 
 export function formaterLots(lots: number): string {
   return `${lots.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} lot${lots >= 2 ? 's' : ''}`;
+}
+
+/**
+ * Ordre de cassure : achat stop au-dessus du range et vente stop en dessous, liés (OCO). Le stop-loss de chacun est à
+ * l'autre borne ; le take-profit, s'il est demandé, à `rr` fois le risque.
+ */
+export function placerCassure(
+  p: Portefeuille,
+  o: { symbole: string; haut: number; bas: number; lots: number; levier: number; rr?: number; expireLe?: number },
+  prixActuel: number,
+  ticks: Ticks,
+  tauxCrypto = TAUX_FRAIS,
+  volumeMax = LOT_MAX,
+): Portefeuille | string {
+  if (!(o.haut > prixActuel && o.bas < prixActuel)) return 'Cassure : la borne haute doit être au-dessus du prix actuel et la borne basse en dessous.';
+  const range = o.haut - o.bas;
+  const groupeOco = identifiant();
+  const achat = placerOrdre(
+    p,
+    { symbole: o.symbole, sens: 'achat', type: 'stop', prix: o.haut, lots: o.lots, levier: o.levier, stopLoss: o.bas, takeProfit: o.rr ? o.haut + o.rr * range : undefined },
+    prixActuel,
+    ticks,
+    tauxCrypto,
+    volumeMax,
+  );
+  if (typeof achat === 'string') return achat;
+  const vente = placerOrdre(
+    achat,
+    { symbole: o.symbole, sens: 'vente', type: 'stop', prix: o.bas, lots: o.lots, levier: o.levier, stopLoss: o.haut, takeProfit: o.rr ? o.bas - o.rr * range : undefined },
+    prixActuel,
+    ticks,
+    tauxCrypto,
+    volumeMax,
+  );
+  if (typeof vente === 'string') return vente;
+  const ids = new Set([achat.ordres[0]!.id, vente.ordres[0]!.id]);
+  return { ...vente, ordres: vente.ordres.map((x) => (ids.has(x.id) ? { ...x, groupeOco, expireLe: o.expireLe } : x)) };
+}
+
+/** Échéances proposées pour les ordres en attente. */
+export function echeance(choix: 'jamais' | '1h' | '4h' | 'jour', maintenant = Date.now()): number | undefined {
+  if (choix === '1h') return maintenant + 3_600_000;
+  if (choix === '4h') return maintenant + 4 * 3_600_000;
+  if (choix === 'jour') {
+    const fin = new Date(maintenant);
+    fin.setHours(23, 59, 59, 999);
+    return fin.getTime();
+  }
+  return undefined;
 }
