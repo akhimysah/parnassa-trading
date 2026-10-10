@@ -26,6 +26,7 @@ import { ClassementTraders } from '../composants/ClassementTraders';
 import { VitrineTrophees } from '../composants/VitrineTrophees';
 import { AnalyseAvancee } from '../composants/AnalyseAvancee';
 import { ProjectionMonteCarlo } from '../composants/ProjectionMonteCarlo';
+import { RisqueExposition } from '../composants/RisqueExposition';
 import { EditeurProtections } from '../composants/EditeurProtections';
 import { CartePartage, type SujetPartage } from '../composants/CartePartage';
 import { JournalTrades } from '../composants/JournalTrades';
@@ -813,6 +814,7 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
           {onglet === 'positions' && (
             <>
               {p.positions.length === 0 && <p className="vide">Aucune position ouverte. Passez un ordre à gauche.</p>}
+              <RisqueExposition positions={p.positions} ticks={ticks} capital={capital} />
               {p.positions.length > 1 && (
                 <div className="segmente vue-positions" role="tablist" aria-label="Affichage des positions">
                   <button className={!vueGroupee ? 'actif neutre' : ''} onClick={() => changerVue(false)}>
