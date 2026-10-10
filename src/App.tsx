@@ -6,6 +6,7 @@ import { RailGauche } from './composants/RailGauche';
 import { RechercheSymbole } from './composants/RechercheSymbole';
 import { GestionListeSuivi } from './composants/GestionListeSuivi';
 import { Parametres } from './composants/Parametres';
+import { Aide } from './composants/Aide';
 import { WidgetTradingView } from './composants/WidgetTradingView';
 import { Graphique } from './pages/Graphique';
 // Pages chargées à la demande (l'accueil et le graphique sont dans le premier chargement), puis préchargées en
@@ -74,6 +75,7 @@ export function App() {
   const [recherche, setRecherche] = useState<Recherche>({ ouvert: false, mode: 'symbole' });
   const [gestionSuivi, setGestionSuivi] = useState(false);
   const [parametresOuverts, setParametresOuverts] = useState(false);
+  const [aideOuverte, setAideOuverte] = useState(false);
   const [emplacementActif, setEmplacementActif] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -348,9 +350,16 @@ export function App() {
   // Raccourcis façon TradingView : une lettre ouvre la recherche, 1-7 changent l'intervalle, « / » cherche.
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
-      if (recherche.ouvert || gestionSuivi || parametresOuverts || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (recherche.ouvert || gestionSuivi || parametresOuverts || aideOuverte || e.metaKey || e.ctrlKey || e.altKey) return;
       const cible = e.target as HTMLElement | null;
       if (cible && ['INPUT', 'TEXTAREA', 'SELECT'].includes(cible.tagName)) return;
+      if (e.key === '?') {
+        e.preventDefault();
+        setAideOuverte(true);
+        return;
+      }
+      // Maj + B/S/X/R : trading en un clic (géré par la barre), pas la recherche de symbole.
+      if (e.shiftKey && etat.page === 'graphique' && ['b', 's', 'x', 'r'].includes(e.key.toLowerCase())) return;
       if (/^[1-7]$/.test(e.key) && etat.page === 'graphique') {
         maj({ intervalle: INTERVALLES[Number(e.key) - 1].valeur });
         return;
@@ -363,7 +372,7 @@ export function App() {
     };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
-  }, [recherche.ouvert, gestionSuivi, parametresOuverts, etat.page, maj]);
+  }, [recherche.ouvert, gestionSuivi, parametresOuverts, aideOuverte, etat.page, maj]);
 
   const ouvrirRecherche = useCallback(() => setRecherche({ ouvert: true, mode: 'symbole' }), []);
   const ouvrirComparaison = useCallback(() => setRecherche({ ouvert: true, mode: 'comparer' }), []);
@@ -379,6 +388,7 @@ export function App() {
         ouvrirListeSuivi={() => setGestionSuivi(true)}
         partager={() => void partager()}
         ouvrirParametres={() => setParametresOuverts(true)}
+        ouvrirAide={() => setAideOuverte(true)}
         sauverDisposition={sauverDisposition}
         chargerDisposition={chargerDisposition}
         nbAlertes={etat.alertes.filter((a) => !a.declencheeLe).length}
@@ -476,6 +486,7 @@ export function App() {
           maj({ page: 'graphique' });
         }}
       />
+      <Aide ouvert={aideOuverte} fermer={() => setAideOuverte(false)} aller={(page) => maj({ page })} />
       <Parametres
         ouvert={parametresOuverts}
         fermer={() => setParametresOuverts(false)}

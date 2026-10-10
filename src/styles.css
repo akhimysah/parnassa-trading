@@ -4455,3 +4455,57 @@ th.trie {
   margin: 0 0 10px;
   max-width: 280px;
 }
+
+/* ---- Aide ---- */
+.aide-bouton {
+  font-weight: 700;
+  font-size: 15px;
+}
+.aide-raccourcis {
+  margin: 0;
+  display: grid;
+  gap: 6px;
+}
+.aide-raccourcis > div {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 10px;
+  align-items: center;
+  font-size: 13px;
+}
+.aide-raccourcis dd {
+  margin: 0;
+}
+kbd {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 5px;
+  border: 1px solid var(--bordure-2);
+  border-bottom-width: 2px;
+  background: var(--panneau-2);
+  font: 600 12px/1.4 -apple-system, 'Segoe UI', Roboto, sans-serif;
+  white-space: nowrap;
+}
+.aide-fonctions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.aide-fonctions li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--bordure);
+  border-radius: 8px;
+}
+.aide-fonctions li > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  font-size: 13px;
+}

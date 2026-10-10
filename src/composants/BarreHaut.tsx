@@ -28,6 +28,7 @@ interface Props {
   ouvrirListeSuivi: () => void;
   partager: () => void;
   ouvrirParametres: () => void;
+  ouvrirAide: () => void;
   sauverDisposition: (nom: string) => void;
   chargerDisposition: (d: DispositionSauvee) => void;
   nbAlertes: number;
@@ -97,6 +98,7 @@ export function BarreHaut({
   ouvrirListeSuivi,
   partager,
   ouvrirParametres,
+  ouvrirAide,
   sauverDisposition,
   chargerDisposition,
   nbAlertes,
@@ -348,6 +350,9 @@ export function BarreHaut({
       </button>
       <button className="icone plein-ecran" title="Plein écran" onClick={pleinEcran}>
         <IconePleinEcran />
+      </button>
+      <button className="icone aide-bouton" title="Aide et raccourcis (?)" aria-label="Aide et raccourcis" onClick={ouvrirAide}>
+        ?
       </button>
       <button className="icone" title="Paramètres" onClick={ouvrirParametres}>
         <IconeEngrenage />
