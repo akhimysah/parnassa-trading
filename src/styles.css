@@ -4537,3 +4537,54 @@ kbd {
     flex: 1 1 130px;
   }
 }
+
+/* ---- Trophées ---- */
+.vitrine-trophees .ct-entete {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.vt-barre {
+  height: 6px;
+  margin: 8px 0 4px;
+  border-radius: 999px;
+  background: var(--panneau-2);
+  overflow: hidden;
+}
+.vt-barre i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #d4a72c, #f6e27a);
+}
+.vt-grille {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+}
+.vt-grille li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 10px 8px;
+  border: 1px solid var(--bordure);
+  border-radius: 10px;
+  text-align: center;
+  font-size: 12px;
+}
+.vt-grille li.obtenu {
+  border-color: rgba(212, 167, 44, 0.6);
+  background: linear-gradient(160deg, rgba(246, 226, 122, 0.12), transparent);
+}
+.vt-grille li.verrouille {
+  opacity: 0.5;
+}
+.vt-grille li.verrouille .vt-icone {
+  filter: grayscale(1);
+}
+.vt-icone {
+  font-size: 26px;
+}

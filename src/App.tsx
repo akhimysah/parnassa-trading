@@ -37,6 +37,7 @@ import { useSynchroPush } from './push';
 import { useSynchro } from './synchro';
 import { useCompteTrading } from './comptes';
 import { evaluerDiscipline } from './discipline';
+import { nouveauxTrophees } from './trophees';
 import { estCrypto, estWeekendMarche, regleWeekendActive } from './weekend';
 import { symbolesConversion, useCotationsScanner } from './instruments';
 import { estBinance, paireBinance } from './binance';
@@ -80,6 +81,18 @@ export function App() {
   const [toast, setToast] = useState<string | null>(null);
 
   const maj = useCallback((p: Partial<Etat>) => setEtat((e) => ({ ...e, ...p })), []);
+
+  // Trophées : vérifiés quand les opérations ou les challenges changent.
+  useEffect(() => {
+    const nouveaux = nouveauxTrophees(etat);
+    if (nouveaux.length === 0) return;
+    const maintenant = Date.now();
+    setEtat((e) => ({ ...e, trophees: { ...(e.trophees ?? {}), ...Object.fromEntries(nouveaux.map((t) => [t.id, maintenant])) } }));
+    const texte = nouveaux.length === 1 ? `${nouveaux[0]!.icone} Trophée débloqué : ${nouveaux[0]!.nom}` : `🏆 ${nouveaux.length} trophées débloqués : ${nouveaux.map((t) => t.icone).join(' ')}`;
+    setToast(texte);
+    notifier('Trophée', texte, undefined, `trophee-${nouveaux.map((t) => t.id).join('-')}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [etat.portefeuille.operations, etat.portefeuille.crameLe, etat.challenge, etat.challengesPasses]);
 
   // Préchargement des autres pages quand le navigateur est libre (et mise en cache hors ligne par le service worker).
   useEffect(() => {

@@ -44,6 +44,8 @@ export interface Etat {
   /** Événements du calendrier pour lesquels l'utilisateur a demandé un rappel. */
   rappels: Rappel[];
   parametres: Parametres;
+  /** Trophées débloqués : identifiant → date du déblocage. */
+  trophees?: Record<string, number>;
 }
 
 export interface Parametres {
