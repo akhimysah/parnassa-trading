@@ -2732,6 +2732,46 @@ th.trie {
   padding: 4px 14px 12px;
   font-size: 12px;
 }
+.accueil-compte {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  font-size: 12px;
+}
+.pastille-lecture {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--panneau-2);
+  font-size: 11px;
+}
+.accueil-etat {
+  margin: 6px 14px 0;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--panneau-2);
+  font-size: 12px;
+}
+.accueil-etat.attention {
+  color: #f6a821;
+}
+.accueil-etat.danger {
+  color: var(--baisse);
+}
+.accueil-jauges {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 14px 4px;
+}
+.accueil-actions {
+  display: flex;
+  gap: 8px;
+  padding: 0 14px 14px;
+}
+.accueil-actions button {
+  flex: 1;
+}
 .liste-banques li {
   display: flex;
   align-items: center;

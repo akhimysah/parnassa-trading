@@ -4,6 +4,7 @@ import type { CompteDistant } from '../compteLocal';
 import { CAPITAUX, demanderVersement, FORMULES, FORMULES_OUVERTES, formuleSuivante, mesurer, nouveauChallenge, prochainVersement, reglesCompletes } from '../challenge';
 import { Certificat } from './Certificat';
 import { formaterUsdt, reinitialiser } from '../trading';
+import { Jauge } from './Jauge';
 
 interface Props {
   etat: Etat;
@@ -14,23 +15,6 @@ interface Props {
   compte?: CompteDistant | null;
   /** Compte challenge réussi en phase 1 : ouvre le compte de la phase suivante. */
   ouvrirPhaseSuivante?: () => void;
-}
-
-function Jauge({ libelle, valeur, max, texte, sens }: { libelle: string; valeur: number; max: number; texte: string; sens: 'objectif' | 'limite' }) {
-  const ratio = max > 0 ? Math.min(1, Math.max(0, valeur / max)) : 0;
-  // Objectif : plus c'est plein, mieux c'est. Limite de perte : orange à 50 %, rouge à 80 %.
-  const classe = sens === 'objectif' ? (ratio >= 1 ? 'ok' : 'progres') : ratio >= 0.8 ? 'danger' : ratio >= 0.5 ? 'attention' : 'calme';
-  return (
-    <div className="jauge-challenge">
-      <div className="jc-entete">
-        <span>{libelle}</span>
-        <strong>{texte}</strong>
-      </div>
-      <div className={`jc-barre ${classe}`}>
-        <i style={{ width: `${ratio * 100}%` }} />
-      </div>
-    </div>
-  );
 }
 
 const STATUTS: Record<Challenge['statut'], string> = { 'en-cours': 'En cours', reussi: 'Réussi 🏆', echoue: 'Échoué' };

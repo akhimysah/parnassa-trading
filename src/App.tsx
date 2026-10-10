@@ -513,6 +513,8 @@ export function App() {
             fil={fil}
             ticks={ticks}
             maj={maj}
+            compte={compteTrading.session?.compte ?? null}
+            lecture={compteTrading.session?.lecture ?? false}
             aller={(page) => maj({ page })}
             ouvrirSymbole={(id) => {
               choisirSymbole(id);

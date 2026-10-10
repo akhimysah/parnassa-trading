@@ -18,7 +18,11 @@ import {
   type FilActualites,
 } from '../actualites';
 import { nomSymbole, ticker } from '../symboles';
-import { formaterUsdt, pnlLatent, valeurPortefeuille } from '../trading';
+import { formaterUsdt, PERTE_CRAME, pnlLatent, valeurPortefeuille } from '../trading';
+import { mesurer, reglesCompletes } from '../challenge';
+import { blocageDiscipline, mesurerJournee } from '../discipline';
+import type { CompteDistant } from '../compteLocal';
+import { Jauge } from '../composants/Jauge';
 import { MiniCourbe } from '../composants/MiniCourbe';
 import { PrixAnime } from '../composants/PrixAnime';
 import { Sessions } from '../composants/Sessions';
@@ -30,6 +34,9 @@ interface Props {
   fil: FilActualites;
   ticks: Record<string, Tick>;
   maj: (p: Partial<Etat>) => void;
+  /** Compte de trading connecté (null : portefeuille de l'appareil). */
+  compte: CompteDistant | null;
+  lecture: boolean;
   aller: (p: Page) => void;
   ouvrirSymbole: (id: string) => void;
 }
@@ -48,7 +55,7 @@ function EnteteCarte({ titre, lien, aller }: { titre: string; lien?: Page; aller
 }
 
 /** Tableau de bord : l'essentiel de chaque section sur un seul écran. */
-export function Accueil({ etat, fil, ticks, maj, aller, ouvrirSymbole }: Props) {
+export function Accueil({ etat, fil, ticks, maj, compte, lecture, aller, ouvrirSymbole }: Props) {
   const langue = etat.parametres.langueActualites;
   const l = LIBELLES_DONNEE[langue];
   const { evenements } = useCalendrier(true);
@@ -76,8 +83,16 @@ export function Accueil({ etat, fil, ticks, maj, aller, ouvrirSymbole }: Props) 
   const suivis = new Set(etat.rappels.map((r) => r.id));
 
   const p = etat.portefeuille;
-  const { capital, latent } = valeurPortefeuille(p, ticks);
+  const { capital, latent, immobilise } = valeurPortefeuille(p, ticks);
   const perf = ((capital - p.capitalInitial) / p.capitalInitial) * 100;
+  const journee = mesurerJournee(p, capital);
+  const regles = etat.parametres.discipline;
+  const blocage = blocageDiscipline(p, regles);
+  const ch = etat.challenge?.statut === 'en-cours' ? etat.challenge : null;
+  const mesures = ch ? mesurer(ch, capital, p.solde, immobilise, p.operations) : null;
+  // Règle des 99 % : part de la perte maximale déjà consommée, affichée dès la moitié du capital perdue.
+  const perteCrame = Math.max(0, p.capitalInitial - capital);
+  const limiteCrame = p.capitalInitial * PERTE_CRAME;
   const alertesActives = etat.alertes.filter((a) => !a.declencheeLe);
 
   const heure = new Date().getHours();
@@ -207,7 +222,13 @@ export function Accueil({ etat, fil, ticks, maj, aller, ouvrirSymbole }: Props) 
         </div>
 
         <div className="carte">
-          <EnteteCarte titre="Portefeuille papier" lien="trading" aller={aller} />
+          <EnteteCarte titre={compte ? `Compte ${compte.login}` : 'Portefeuille papier'} lien="trading" aller={aller} />
+          {compte && (
+            <div className="accueil-compte muet">
+              {compte.nom} · {compte.serveur}
+              {lecture && <span className="pastille-lecture">Lecture seule</span>}
+            </div>
+          )}
           <div className="resume-portefeuille">
             <strong>{formaterUsdt(capital)}</strong>
             <span className={perf >= 0 ? 'hausse' : 'baisse'}>
@@ -215,10 +236,48 @@ export function Accueil({ etat, fil, ticks, maj, aller, ouvrirSymbole }: Props) 
               {perf.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} % depuis le départ
             </span>
             <span className="muet">
+              Aujourd'hui{' '}
+              <span className={journee.variation >= 0 ? 'hausse' : 'baisse'}>
+                {formaterUsdt(journee.variation, true)} ({journee.pct >= 0 ? '+' : ''}
+                {journee.pct.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} %)
+              </span>{' '}
+              · {journee.trades} trade{journee.trades > 1 ? 's' : ''}
+            </span>
+            <span className="muet">
               P&amp;L latent <span className={latent >= 0 ? 'hausse' : 'baisse'}>{formaterUsdt(latent, true)}</span> · {p.positions.length} position
               {p.positions.length > 1 ? 's' : ''} · {p.ordres.length} ordre{p.ordres.length > 1 ? 's' : ''}
             </span>
           </div>
+          {p.crameLe ? (
+            <p className="accueil-etat danger">🔥 Compte cramé : 99 % du capital perdu, trading arrêté.</p>
+          ) : blocage ? (
+            <p className="accueil-etat attention">🧘 {blocage}</p>
+          ) : regles?.actif ? (
+            <p className="accueil-etat muet">
+              🧘 Discipline active{regles.perteJourPct ? ` · perte max ${regles.perteJourPct} %/jour` : ''}
+              {regles.tradesMax ? ` · ${journee.trades}/${regles.tradesMax} trades` : ''}
+            </p>
+          ) : null}
+          {(ch && mesures) || (!p.crameLe && perteCrame >= limiteCrame / 2) ? (
+            <div className="accueil-jauges">
+              {ch && mesures && (
+                <>
+                  <Jauge
+                    libelle={`Objectif ${reglesCompletes(ch.regles).objectifPct} %`}
+                    valeur={mesures.gainRealise}
+                    max={mesures.objectif}
+                    texte={`${formaterUsdt(Math.max(0, mesures.gainRealise))} / ${formaterUsdt(mesures.objectif)}`}
+                    sens="objectif"
+                  />
+                  <Jauge libelle="Perte du jour" valeur={mesures.perteJour} max={mesures.limiteJour} texte={`${formaterUsdt(mesures.perteJour)} / ${formaterUsdt(mesures.limiteJour)}`} sens="limite" />
+                  <Jauge libelle="Perte maximale" valeur={mesures.perteTotale} max={mesures.limiteTotale} texte={`${formaterUsdt(mesures.perteTotale)} / ${formaterUsdt(mesures.limiteTotale)}`} sens="limite" />
+                </>
+              )}
+              {!p.crameLe && perteCrame >= limiteCrame / 2 && (
+                <Jauge libelle="Règle des 99 %" valeur={perteCrame} max={limiteCrame} texte={`${formaterUsdt(perteCrame)} / ${formaterUsdt(limiteCrame)}`} sens="limite" />
+              )}
+            </div>
+          ) : null}
           <ul className="liste-positions">
             {p.positions.slice(0, 4).map((pos) => {
               const prix = ticks[paireBinance(pos.symbole)]?.prix;
@@ -236,6 +295,14 @@ export function Accueil({ etat, fil, ticks, maj, aller, ouvrirSymbole }: Props) 
           <div className="ligne-alertes muet">
             🔔 {alertesActives.length} alerte{alertesActives.length > 1 ? 's' : ''} de prix active{alertesActives.length > 1 ? 's' : ''} · {etat.rappels.length} rappel
             {etat.rappels.length > 1 ? 's' : ''} d'événement
+          </div>
+          <div className="accueil-actions">
+            <button className="bouton-principal" onClick={() => aller('trading')}>
+              Trader
+            </button>
+            <button className="bouton-secondaire" onClick={() => aller('graphique')}>
+              Graphique
+            </button>
           </div>
         </div>
 
