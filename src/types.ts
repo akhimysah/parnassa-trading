@@ -168,6 +168,8 @@ export interface Position {
   note?: string;
   /** Swap cumulé en USD (négatif = coût), réalisé à la clôture. */
   swap?: number;
+  /** Clôture programmée : la position est fermée au marché à cette date (ou à la réouverture). */
+  fermerLe?: number;
   /** Dernier passage de nuit (rollover) compté dans le swap. */
   swapCompteAu?: number;
 }
@@ -176,9 +178,14 @@ export interface OrdreEnAttente {
   id: string;
   symbole: string;
   sens: Sens;
-  /** Limite : s'exécute à un prix plus favorable ; stop : s'exécute au franchissement. */
-  type: 'limite' | 'stop';
+  /**
+   * Limite : s'exécute à un prix plus favorable ; stop : s'exécute au marché au franchissement ;
+   * stop-limite : au franchissement de `prix`, devient un ordre limite à `prixLimite` (pas de glissement au-delà).
+   */
+  type: 'limite' | 'stop' | 'stop-limite';
   prix: number;
+  /** Stop-limite : prix limite de l'ordre posé au déclenchement (au plus à l'achat, au moins à la vente). */
+  prixLimite?: number;
   /** Ancien format (montant en USDT) ; les nouveaux ordres utilisent `lots` et `levier`. */
   montant?: number;
   lots?: number;
@@ -204,7 +211,7 @@ export interface Operation {
   sens: Sens;
   type: 'ouverture' | 'cloture';
   /** Origine : marché, limite, stop, stop-loss, take-profit. */
-  origine?: 'marche' | 'limite' | 'stop' | 'stop-loss' | 'take-profit' | 'stop-out' | 'crame' | 'weekend';
+  origine?: 'marche' | 'limite' | 'stop' | 'stop-loss' | 'take-profit' | 'stop-out' | 'crame' | 'weekend' | 'programmee';
   quantite: number;
   lots?: number;
   prix: number;

@@ -373,10 +373,22 @@ export function placerOrdre(
     if (ordre.sens === 'achat' && ordre.prix >= prixActuel) return 'Une limite d\'achat doit être sous le prix actuel (sinon passez un ordre au marché).';
     if (ordre.sens === 'vente' && ordre.prix <= prixActuel) return 'Une limite de vente doit être au-dessus du prix actuel.';
   } else {
+    if (ordre.type === 'stop-limite') {
+      if (!(ordre.prixLimite && ordre.prixLimite > 0)) return 'Indiquez le prix limite du stop-limite.';
+      if (ordre.sens === 'achat' && ordre.prixLimite < ordre.prix) return "Stop-limite d'achat : le prix limite (le plus haut accepté) doit être au niveau du stop ou au-dessus.";
+      if (ordre.sens === 'vente' && ordre.prixLimite > ordre.prix) return 'Stop-limite de vente : le prix limite (le plus bas accepté) doit être au niveau du stop ou en dessous.';
+    }
     if (ordre.sens === 'achat' && ordre.prix <= prixActuel) return 'Un stop d\'achat doit être au-dessus du prix actuel.';
     if (ordre.sens === 'vente' && ordre.prix >= prixActuel) return 'Un stop de vente doit être sous le prix actuel.';
   }
   return { ...p, ordres: [{ ...ordre, lots: normaliserLots(ordre.lots, volumeMax), id: identifiant(), creeLe: Date.now() }, ...p.ordres] };
+}
+
+/** Programme (ou annule, sans date) la clôture d'une position à une date future. */
+export function programmerCloture(p: Portefeuille, positionId: string, fermerLe: number | undefined, maintenant = Date.now()): Portefeuille | string {
+  if (!p.positions.some((x) => x.id === positionId)) return 'Position introuvable.';
+  if (fermerLe !== undefined && !(fermerLe > maintenant)) return 'Choisissez une heure à venir.';
+  return { ...p, positions: p.positions.map((x) => (x.id === positionId ? { ...x, fermerLe } : x)) };
 }
 
 export function annulerOrdre(p: Portefeuille, ordreId: string): Portefeuille {
@@ -385,6 +397,7 @@ export function annulerOrdre(p: Portefeuille, ordreId: string): Portefeuille {
 
 function ordreDeclenchable(o: OrdreEnAttente, prix: number): boolean {
   if (o.type === 'limite') return o.sens === 'achat' ? prix <= o.prix : prix >= o.prix;
+  // Stop et stop-limite se déclenchent au franchissement du stop.
   return o.sens === 'achat' ? prix >= o.prix : prix <= o.prix;
 }
 
@@ -431,12 +444,21 @@ export function appliquerFlux(
   let courant = expiration.portefeuille;
   const messages: string[] = [...expiration.messages];
 
-  for (const o of [...courant.ordres]) {
+  for (const depart of [...courant.ordres]) {
     // Un ordre OCO peut avoir été annulé par son jumeau déclenché juste avant.
-    if (!courant.ordres.some((x) => x.id === o.id)) continue;
+    if (!courant.ordres.some((x) => x.id === depart.id)) continue;
+    let o = depart;
     const tick = ticks[paireBinance(o.symbole)];
     // Un achat se déclenche sur l'ask, une vente sur le bid.
     if (!tick || !ouvert(o.symbole) || !ordreDeclenchable(o, coteEntree(o.symbole, o.sens, tick.prix))) continue;
+    // Stop-limite déclenché : il devient un ordre limite, qui ne s'exécute que si le prix le permet.
+    if (o.type === 'stop-limite') {
+      const limite: OrdreEnAttente = { ...o, type: 'limite', prix: o.prixLimite ?? o.prix, prixLimite: undefined };
+      courant = { ...courant, ordres: courant.ordres.map((x) => (x.id === o.id ? limite : x)) };
+      messages.push(`Stop-limite ${nom(o.symbole)} déclenché à ${o.prix.toLocaleString('fr-FR')} : ordre limite posé à ${limite.prix.toLocaleString('fr-FR')}.`);
+      o = limite;
+      if (!ordreDeclenchable(o, coteEntree(o.symbole, o.sens, tick.prix))) continue;
+    }
     // Les règles qui bloquent les nouvelles positions valent aussi pour les ordres en attente.
     const bloque = blocage?.(o.symbole);
     if (bloque) {
@@ -446,10 +468,11 @@ export function appliquerFlux(
       }
       continue;
     }
-    // Une limite s'exécute à son prix ; un stop au prix du marché qui l'a franchi (spread compris).
-    const prixExecution = o.type === 'limite' ? o.prix : coteEntree(o.symbole, o.sens, tick.prix);
+    // Une limite s'exécute à son prix, ou mieux si le marché a sauté au-delà ; un stop au prix du marché (spread compris).
+    const cote = coteEntree(o.symbole, o.sens, tick.prix);
+    const prixExecution = o.type === 'limite' ? (o.sens === 'achat' ? Math.min(o.prix, cote) : Math.max(o.prix, cote)) : cote;
     const { lots, levier } = lotsOrdre(o, prixExecution);
-    const r = ouvrir(courant, o.symbole, o.sens, lots, prixExecution, ticks, { levier, prot: o, origine: o.type, tauxCrypto, volumeMax: Math.max(LOT_MAX, lots), prixExact: true });
+    const r = ouvrir(courant, o.symbole, o.sens, lots, prixExecution, ticks, { levier, prot: o, origine: o.type === 'stop' ? 'stop' : 'limite', tauxCrypto, volumeMax: Math.max(LOT_MAX, lots), prixExact: true });
     courant = annulerOrdre(typeof r === 'string' ? courant : r, o.id);
     if (o.groupeOco && typeof r !== 'string') {
       const jumeaux = courant.ordres.filter((x) => x.groupeOco === o.groupeOco);
@@ -529,6 +552,18 @@ export function appliquerFlux(
     messages.push(
       `${touchéSL ? (pos.suiveur ? 'Stop suiveur' : 'Stop-loss') : 'Take-profit'} ${nom(pos.symbole)} : position fermée à ${prix.toLocaleString('fr-FR')} (${resultat >= 0 ? '+' : ''}${resultat.toFixed(2)} USDT)`,
     );
+  }
+
+  // Clôtures programmées : à l'heure dite (ou à la réouverture du marché), fermeture au marché.
+  const maintenant = Date.now();
+  for (const pos of courant.positions.filter((x) => x.fermerLe !== undefined && x.fermerLe <= maintenant)) {
+    const tick = ticks[paireBinance(pos.symbole)];
+    if (!tick || !ouvert(pos.symbole)) continue;
+    const resultat = pnlMarche(pos, tick.prix, ticks);
+    const r = cloturer(courant, pos.id, tick.prix, ticks, { origine: 'programmee', tauxCrypto });
+    if (typeof r === 'string') continue;
+    courant = r;
+    messages.push(`Clôture programmée ${nom(pos.symbole)} : position fermée (${resultat >= 0 ? '+' : ''}${resultat.toFixed(2)} USDT)`);
   }
 
   const toutesCotees = courant.positions.every((pos) => ticks[paireBinance(pos.symbole)]);

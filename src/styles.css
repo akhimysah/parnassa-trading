@@ -5150,3 +5150,23 @@ kbd {
   gap: 8px;
   margin-top: 6px;
 }
+.ep-programme {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-top: 8px;
+  font-size: 12.5px;
+}
+.ep-programme input[type='time'] {
+  height: 28px;
+  padding: 0 6px;
+  border-radius: var(--rayon);
+  border: 1px solid var(--bordure-2);
+  background: var(--fond);
+  color: var(--texte);
+  font: inherit;
+}
+.ep-programme .petit {
+  flex-basis: 100%;
+}

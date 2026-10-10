@@ -38,7 +38,8 @@ test('Spread : achat à l’ask, vente au bid, stops et cibles côté sortie', (
   if (typeof lim === 'string') return ok(false, lim);
   ok(appliquerFlux(lim, { EURUSD: tick(1.099) }, 0).portefeuille.positions.length === 0, 'milieu au prix limite mais ask au-dessus : pas encore');
   const execute = appliquerFlux(lim, { EURUSD: tick(1.09895) }, 0).portefeuille;
-  ok(execute.positions.length === 1 && execute.positions[0]!.prixEntree === 1.099, 'ask sous la limite : exécuté au prix limite');
+  const askActuel = coteEntree('FX:EURUSD', 'achat', 1.09895);
+  ok(execute.positions.length === 1 && proche(execute.positions[0]!.prixEntree, Math.min(1.099, askActuel)), 'ask sous la limite : exécuté au prix limite, ou mieux si le marché a sauté au-delà');
 
   // Taille au risque : avec une entrée prévue à l'ask, la perte au stop vaut exactement le risque.
   const lots = lotsParRisque(1000, f.ask, 1.09, 'FX:EURUSD', ticks)!;

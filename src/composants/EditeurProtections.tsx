@@ -11,7 +11,21 @@ interface Props {
   enregistrer: (prot: { stopLoss?: number; takeProfit?: number; suiveur?: number; paliers?: Palier[]; beApresPalier?: boolean }) => void;
   breakEven: () => void;
   fermer: () => void;
+  /** Programme la clôture au marché à cette date, ou l'annule (undefined). */
+  programmer: (fermerLe: number | undefined) => void;
 }
+
+/** Prochaine occurrence de HH:MM (aujourd'hui si elle est à venir, sinon demain), heure locale. */
+export function prochaineHeure(hhmm: string, maintenant = Date.now()): number | undefined {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm);
+  if (!m) return undefined;
+  const d = new Date(maintenant);
+  d.setHours(Number(m[1]), Number(m[2]), 0, 0);
+  if (d.getTime() <= maintenant) d.setDate(d.getDate() + 1);
+  return d.getTime();
+}
+
+const hhmm = (ms: number) => new Date(ms).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
 
 const lire = (texte: string): number | undefined => {
   const v = Number(texte.replace(/\s/g, '').replace(',', '.'));
@@ -19,7 +33,8 @@ const lire = (texte: string): number | undefined => {
 };
 
 /** Stop-loss, take-profit et stop suiveur d'une position ouverte, avec ce que chaque niveau rapporte ou coûte. */
-export function EditeurProtections({ position, prixActuel, ticks, enregistrer, breakEven, fermer }: Props) {
+export function EditeurProtections({ position, prixActuel, ticks, enregistrer, breakEven, fermer, programmer }: Props) {
+  const [heureFermeture, setHeureFermeture] = useState(position.fermerLe ? hhmm(position.fermerLe) : '');
   const [sl, setSl] = useState(position.stopLoss ? String(position.stopLoss) : '');
   const [tp, setTp] = useState(position.takeProfit ? String(position.takeProfit) : '');
   const [suiveur, setSuiveur] = useState(position.suiveur ? String(position.suiveur) : '');
@@ -105,6 +120,22 @@ export function EditeurProtections({ position, prixActuel, ticks, enregistrer, b
           <input type="checkbox" checked={beApresPalier} onChange={(e) => setBeApresPalier(e.target.checked)} />
           Stop au prix d'entrée dès le 1er palier atteint
         </label>
+      </div>
+      <div className="ep-programme">
+        <span>⏰ Fermer à</span>
+        <input type="time" value={heureFermeture} onChange={(e) => setHeureFermeture(e.target.value)} aria-label="Heure de clôture programmée" />
+        <button className="bouton-secondaire" disabled={!prochaineHeure(heureFermeture)} onClick={() => programmer(prochaineHeure(heureFermeture))}>
+          Programmer
+        </button>
+        <button className="lien discret" onClick={() => programmer(Date.now() + 3600000)}>
+          dans 1 h
+        </button>
+        {position.fermerLe && (
+          <button className="lien discret danger" onClick={() => programmer(undefined)}>
+            Annuler ({new Date(position.fermerLe).toLocaleString('fr-FR', { weekday: 'short', hour: '2-digit', minute: '2-digit' })})
+          </button>
+        )}
+        <span className="muet petit">Fermeture au marché à l'heure dite, ou à la réouverture si le marché est fermé.</span>
       </div>
       <div className="ep-boutons">
         <button className="bouton-secondaire" onClick={breakEven} disabled={!enGain} title={enGain ? 'Stop-loss au prix d’entrée' : 'Possible quand la position est en gain'}>

@@ -266,6 +266,37 @@ try {
     verifier('exposition par devise affichée', (await page.locator('.re-exposition li').count()) >= 3);
     await c.close();
   }
+
+  // 7. Stop-limite posé, clôture programmée d'une position.
+  {
+    const c = await contexte(navigateur, ETAT_BASE);
+    const page = await c.newPage();
+    const erreurs = surveillerErreurs(page);
+    await page.goto(`${APP}/#trading/BINANCE:BTCUSDT/60`);
+    await prixBtc(page);
+    const prix = await page.evaluate(() => Number((document.querySelector('.selecteur-instrument, .selecteur')?.textContent ?? '').replace(/[^\d,]/g, '').replace(',', '.')));
+    await page.getByRole('button', { name: 'Stop lim.' }).click();
+    await page.getByLabel('Prix de déclenchement (stop)').fill(String(Math.round(prix * 1.02)));
+    await page.getByLabel('Prix limite').fill(String(Math.round(prix * 1.025)));
+    await page.getByRole('button', { name: 'Ordre d’achat' }).click();
+    await page.waitForTimeout(500);
+    const ordre = page.locator('tr', { hasText: 'Stop-limite' }).first();
+    verifier('stop-limite posé : visible avec sa limite', (await ordre.isVisible().catch(() => false)) && (await ordre.innerText()).includes('lim.'));
+
+    await page.getByRole('button', { name: 'Marché', exact: true }).click();
+    await page.getByRole('button', { name: /^Acheter/ }).first().click();
+    await page.getByRole('button', { name: /^Positions \(1\)/ }).click();
+    await page.waitForTimeout(400);
+    await page.locator('tr', { hasText: 'BTCUSDT' }).first().getByTitle('Modifier stop-loss et take-profit').click();
+    await page.getByRole('button', { name: 'dans 1 h' }).click();
+    await page.waitForTimeout(400);
+    verifier('clôture programmée : badge ⏰ sur la position', (await page.locator('tr', { hasText: 'BTCUSDT' }).first().innerText()).includes('⏰'));
+    verifier('ordres avancés sans erreur', erreurs.length === 0, erreurs.join(' | '));
+    await c.close();
+  }
+} catch (e) {
+  // Un parcours qui plante compte comme un échec, et le bilan s'affiche quand même.
+  verifier('parcours terminé sans exception', false, (e as Error).message.split('\n')[0]);
 } finally {
   await navigateur.close();
   serveur.kill();

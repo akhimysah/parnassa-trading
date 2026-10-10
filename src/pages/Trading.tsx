@@ -53,7 +53,7 @@ import { blocageDiscipline, controleRisqueTrade, finDuBlocage, pauseApresPerte }
 import { fermeAuWeekend, regleWeekendActive, reouverture } from '../weekend';
 import { PanneauDiscipline } from '../composants/PanneauDiscipline';
 import { nomSymbole, ticker } from '../symboles';
-import { annoterOperation, annoterPosition, annulerOrdre, breakEven, cloturer, echeance, engagement, etiqueterOperation, formaterLots, formaterQuantite, formaterUsdt, lotsMax, lotsParRisque, modifierProtections, ouvrir, PERTE_CRAME, placerCassure, placerOrdre, pnlMarche, realiseTotal, reinitialiser, statistiques, tauxFrais, valeurPortefeuille } from '../trading';
+import { annoterOperation, annoterPosition, annulerOrdre, breakEven, cloturer, echeance, engagement, etiqueterOperation, formaterLots, formaterQuantite, formaterUsdt, lotsMax, lotsParRisque, modifierProtections, ouvrir, PERTE_CRAME, placerCassure, placerOrdre, pnlMarche, programmerCloture, realiseTotal, reinitialiser, statistiques, tauxFrais, valeurPortefeuille } from '../trading';
 import { horodatageFichier, telecharger, versCsv } from '../export';
 import { CourbeCapital } from '../composants/CourbeCapital';
 import { Repartition, type Part } from '../composants/Repartition';
@@ -71,13 +71,13 @@ interface Props {
   signaler: (m: string) => void;
 }
 
-type TypeOrdre = 'marche' | 'limite' | 'stop' | 'cassure';
+type TypeOrdre = 'marche' | 'limite' | 'stop' | 'stop-limite' | 'cassure';
 type Onglet = 'positions' | 'ordres' | 'historique' | 'journal' | 'statistiques';
 
 /** Montants très longs (milliards) : chiffres un peu plus petits pour tenir sur une ligne. */
 const classeKpi = (texte: string) => (texte.length > 22 ? 'tres-long' : texte.length > 17 ? 'long' : '');
 
-const ORIGINES: Record<string, string> = { marche: 'marché', limite: 'limite', stop: 'stop', 'stop-loss': 'stop-loss', 'take-profit': 'take-profit', 'stop-out': 'stop-out', crame: 'compte cramé', weekend: 'fermeture du week-end' };
+const ORIGINES: Record<string, string> = { programmee: 'clôture programmée', marche: 'marché', limite: 'limite', stop: 'stop', 'stop-loss': 'stop-loss', 'take-profit': 'take-profit', 'stop-out': 'stop-out', crame: 'compte cramé', weekend: 'fermeture du week-end' };
 
 function dateCourte(ms: number): string {
   return new Date(ms).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
@@ -111,6 +111,7 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
   const [quantiteCloture, setQuantiteCloture] = useState('');
   const [symbole, setSymbole] = useState(estNegociable(etat.symbole) ? etat.symbole : 'OANDA:XAUUSD');
   const [typeOrdre, setTypeOrdre] = useState<TypeOrdre>('marche');
+  const [prixLimite, setPrixLimite] = useState('');
   const [borneHaute, setBorneHaute] = useState('');
   const [borneBasse, setBorneBasse] = useState('');
   const [rrCassure, setRrCassure] = useState('2');
@@ -312,7 +313,14 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
         setErreur('Indiquez le prix de déclenchement.');
         return;
       }
-      resultat = placerOrdre(p, { symbole: id, sens, type: typeOrdre, prix: prixCible, lots: lotsNum, levier, ...prot() }, prix, ticksSelecteur, TAUX_FRAIS, volumeMax);
+      resultat = placerOrdre(
+        p,
+        { symbole: id, sens, type: typeOrdre, prix: prixCible, prixLimite: typeOrdre === 'stop-limite' ? nombre(prixLimite) : undefined, lots: lotsNum, levier, ...prot() },
+        prix,
+        ticksSelecteur,
+        TAUX_FRAIS,
+        volumeMax,
+      );
       const expireLe = echeance(expiration);
       if (typeof resultat !== 'string' && expireLe) resultat = { ...resultat, ordres: resultat.ordres.map((o, i) => (i === 0 ? { ...o, expireLe } : o)) };
     }
@@ -547,7 +555,7 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
             </p>
           )}
           <div className="segmente trois">
-            {(['marche', 'limite', 'stop', 'cassure'] as TypeOrdre[]).map((t) => (
+            {(['marche', 'limite', 'stop', 'stop-limite', 'cassure'] as TypeOrdre[]).map((t) => (
               <button
                 key={t}
                 type="button"
@@ -560,9 +568,15 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
                     setBorneBasse(String(Number((prix * 0.9985).toPrecision(8))));
                   }
                 }}
-                title={t === 'cassure' ? 'Achat stop au-dessus et vente stop en dessous, liés : le premier déclenché annule l’autre (OCO)' : undefined}
+                title={
+                  t === 'cassure'
+                    ? 'Achat stop au-dessus et vente stop en dessous, liés : le premier déclenché annule l’autre (OCO)'
+                    : t === 'stop-limite'
+                      ? 'Au franchissement du stop, un ordre limite est posé : pas d’exécution au-delà de votre prix limite'
+                      : undefined
+                }
               >
-                {t === 'marche' ? 'Marché' : t === 'limite' ? 'Limite' : t === 'stop' ? 'Stop' : 'Cassure'}
+                {t === 'marche' ? 'Marché' : t === 'limite' ? 'Limite' : t === 'stop' ? 'Stop' : t === 'stop-limite' ? 'Stop lim.' : 'Cassure'}
               </button>
             ))}
           </div>
@@ -610,15 +624,24 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
               </select>
             </label>
           )}
-          {(typeOrdre === 'limite' || typeOrdre === 'stop') && (
+          {(typeOrdre === 'limite' || typeOrdre === 'stop' || typeOrdre === 'stop-limite') && (
             <label>
               {typeOrdre === 'limite' ? 'Prix limite' : 'Prix de déclenchement (stop)'}
               <input inputMode="decimal" value={prixOrdre} onChange={(e) => setPrixOrdre(e.target.value)} placeholder={prix ? formaterCotation(symbole, prix) : ''} />
               <span className="aide">
                 {typeOrdre === 'limite'
                   ? 'Achat sous le prix actuel, vente au-dessus : exécuté au prix limite.'
-                  : 'Achat au-dessus du prix actuel, vente en dessous : exécuté au marché au franchissement.'}
+                  : typeOrdre === 'stop'
+                    ? 'Achat au-dessus du prix actuel, vente en dessous : exécuté au marché au franchissement.'
+                    : 'Achat au-dessus du prix actuel, vente en dessous : au franchissement, un ordre limite est posé.'}
               </span>
+            </label>
+          )}
+          {typeOrdre === 'stop-limite' && (
+            <label>
+              Prix limite
+              <input inputMode="decimal" value={prixLimite} onChange={(e) => setPrixLimite(e.target.value)} placeholder={prixOrdre || (prix ? formaterCotation(symbole, prix) : '')} />
+              <span className="aide">Le plus haut accepté à l'achat (au moins le stop), le plus bas à la vente : si le marché saute au-delà, l'ordre attend au lieu de glisser.</span>
             </label>
           )}
           <div className="ligne-volume">
@@ -931,6 +954,11 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
                           <tr className={enCloture ? 'selectionnee' : ''}>
                             <td onClick={() => ouvrirSymbole(pos.symbole)}>
                               <strong>{ticker(pos.symbole)}</strong> <span className="muet">{nomSymbole(pos.symbole)}</span>
+                              {pos.fermerLe && (
+                                <span className="badge-suiveur" title={`Clôture programmée : ${new Date(pos.fermerLe).toLocaleString('fr-FR')}`}>
+                                  ⏰ {new Date(pos.fermerLe).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                              )}
                               {marcheFerme(pos.symbole) && (
                                 <>
                                   {' '}
@@ -996,6 +1024,13 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
                                   enregistrer={(prot) => enregistrerProtections(pos.id, prot)}
                                   breakEven={() => mettreBreakEven(pos.id)}
                                   fermer={() => setEditionProtections(null)}
+                                  programmer={(fermerLe) => {
+                                    const r = programmerCloture(p, pos.id, fermerLe);
+                                    if (typeof r === 'string') return setErreur(r);
+                                    setErreur(null);
+                                    maj({ portefeuille: r });
+                                    signaler(fermerLe ? `⏰ ${ticker(pos.symbole)} sera fermée ${new Date(fermerLe).toLocaleString('fr-FR', { weekday: 'long', hour: '2-digit', minute: '2-digit' })}` : 'Clôture programmée annulée');
+                                  }}
                                 />
                               </td>
                             </tr>
@@ -1078,7 +1113,7 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
                               <strong>{ticker(o.symbole)}</strong>
                             </td>
                             <td className={o.sens === 'achat' ? 'hausse' : 'baisse'}>
-                              {o.type === 'limite' ? 'Limite' : 'Stop'} · {o.sens === 'achat' ? 'achat' : 'vente'}
+                              {o.type === 'limite' ? 'Limite' : o.type === 'stop' ? 'Stop' : 'Stop-limite'} · {o.sens === 'achat' ? 'achat' : 'vente'}
                               {o.groupeOco && <span className="badge-suiveur">OCO</span>}
                               {o.expireLe && (
                                 <span className="badge-suiveur" title={new Date(o.expireLe).toLocaleString('fr-FR')}>
@@ -1088,6 +1123,7 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
                             </td>
                             <td className="num">
                               {formaterCotation(o.symbole, o.prix)}
+                              {o.type === 'stop-limite' && o.prixLimite !== undefined && <span className="muet"> → lim. {formaterCotation(o.symbole, o.prixLimite)}</span>}
                               {distance !== null && (
                                 <span className="muet"> ({distance > 0 ? '+' : ''}{distance.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} %)</span>
                               )}
