@@ -27,16 +27,16 @@ export const FORMULES: { id: string; nom: string; description: string; regles: R
   {
     id: 'instantane',
     nom: 'Instantané (1 phase)',
-    description: 'Objectif +10 %, perte jour 3 %, perte max 6 % suiveuse, meilleur jour ≤ 40 % du profit, pas de trade 2 min autour des news, 3 jours min.',
-    regles: { objectifPct: 10, perteJourPct: 3, perteMaxPct: 6, joursMin: 3, suiveuse: true, regularitePct: 40, newsMinutes: 2 },
+    description: 'Objectif +10 %, perte jour 3 %, perte max 6 % suiveuse, meilleur jour ≤ 40 % du profit, pas de trade 2 min autour des news, fermeture le week-end, 3 jours min.',
+    regles: { objectifPct: 10, perteJourPct: 3, perteMaxPct: 6, joursMin: 3, suiveuse: true, regularitePct: 40, newsMinutes: 2, fermetureWeekend: true },
     suivante: 'finance',
   },
   {
     id: 'finance',
     nom: 'Compte financé',
-    description: "Plus d'objectif : perte jour 5 %, perte max 10 %, 80 % des profits versés tous les 7 jours.",
+    description: "Plus d'objectif : perte jour 5 %, perte max 10 %, fermeture le week-end, 80 % des profits versés tous les 7 jours.",
     // objectifPct n'est qu'une valeur technique (le serveur l'exige) : un compte financé ne « réussit » jamais.
-    regles: { objectifPct: 100, perteJourPct: 5, perteMaxPct: 10, joursMin: 0, finance: true, partage: 80 },
+    regles: { objectifPct: 100, perteJourPct: 5, perteMaxPct: 10, joursMin: 0, finance: true, partage: 80, fermetureWeekend: true },
     cachee: true,
   },
 ];

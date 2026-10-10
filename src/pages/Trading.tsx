@@ -36,6 +36,7 @@ import { useCalendrier } from '../actualites';
 import { ouvrirCompte, type Acces } from '../comptes';
 import { cloturerPositions } from '../ordre';
 import { blocageDiscipline } from '../discipline';
+import { fermeAuWeekend, regleWeekendActive, reouverture } from '../weekend';
 import { PanneauDiscipline } from '../composants/PanneauDiscipline';
 import { nomSymbole, ticker } from '../symboles';
 import {
@@ -262,6 +263,10 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
     }
     if (!prix) {
       setErreur('Prix en direct indisponible pour cette paire, patientez une seconde.');
+      return;
+    }
+    if (regleWeekendActive(etat) && fermeAuWeekend(id)) {
+      setErreur(`Marché fermé le week-end : réouverture ${reouverture()} (la crypto reste ouverte).`);
       return;
     }
     const discipline = blocageDiscipline(p, etat.parametres.discipline);

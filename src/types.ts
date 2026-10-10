@@ -101,6 +101,8 @@ export interface ReglesChallenge {
   finance?: boolean;
   /** Part des profits versée au trader (en %), sur un compte financé. */
   partage?: number;
+  /** Positions hors crypto fermées le vendredi soir, ouvertures bloquées jusqu'au dimanche soir. */
+  fermetureWeekend?: boolean;
 }
 
 export interface Versement {
@@ -265,6 +267,8 @@ export interface ReglesDiscipline {
   tradesMax?: number;
   /** Fermer les positions quand la perte ou l'objectif du jour est atteint. */
   fermerAuto: boolean;
+  /** Fermer les positions hors crypto avant le week-end et bloquer les ouvertures jusqu'au dimanche soir. */
+  fermetureWeekend?: boolean;
 }
 
 export interface Palier {

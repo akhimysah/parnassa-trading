@@ -36,6 +36,7 @@ import { useSynchroPush } from './push';
 import { useSynchro } from './synchro';
 import { useCompteTrading } from './comptes';
 import { evaluerDiscipline } from './discipline';
+import { estCrypto, estWeekendMarche, regleWeekendActive } from './weekend';
 import { symbolesConversion, useCotationsScanner } from './instruments';
 import { estBinance, paireBinance } from './binance';
 import { appliquerFlux, cloturer, enregistrerCapital, MESSAGE_CRAME, valeurPortefeuille } from './trading';
@@ -188,6 +189,23 @@ export function App() {
         if (verdict.message) {
           messages.push(verdict.message);
           notifier('Challenge', verdict.message, undefined, `challenge-${challenge.id}`);
+        }
+      }
+
+      // Fermeture du week-end : positions et ordres hors crypto fermés du vendredi soir au dimanche soir.
+      if (regleWeekendActive({ ...e, challenge }) && estWeekendMarche()) {
+        const aFermer = portefeuille.positions.filter((x) => !estCrypto(x.symbole) && ticks[paireBinance(x.symbole)]);
+        const ordresHors = portefeuille.ordres.filter((o) => !estCrypto(o.symbole));
+        if (aFermer.length || ordresHors.length) {
+          for (const pos of aFermer) {
+            const r = cloturer(portefeuille, pos.id, ticks[paireBinance(pos.symbole)].prix, ticks, { tauxCrypto: e.parametres.frais });
+            if (typeof r !== 'string') portefeuille = r;
+          }
+          portefeuille = { ...portefeuille, ordres: portefeuille.ordres.filter((o) => estCrypto(o.symbole)) };
+          capital = valeurPortefeuille(portefeuille, ticks).capital;
+          const m = `📅 Fermeture du week-end : ${aFermer.length} position${aFermer.length > 1 ? 's' : ''} et ${ordresHors.length} ordre${ordresHors.length > 1 ? 's' : ''} hors crypto fermés.`;
+          messages.push(m);
+          notifier('Fermeture du week-end', m, undefined, `weekend-${new Date().toISOString().slice(0, 10)}`);
         }
       }
 

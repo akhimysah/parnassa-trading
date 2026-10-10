@@ -247,6 +247,9 @@ export function PanneauChallenge({ etat, capital, marges, maj, compte, ouvrirPha
           {ch.statut !== 'en-cours' ? 'Pour retenter, ouvrez un nouveau compte challenge dans « Comptes et accès ».' : ''}
         </p>
       )}
+      {r.fermetureWeekend ? (
+        <p className="pc-regle-news">📅 Fermeture du week-end : positions hors crypto fermées le vendredi à 21 h 50 UTC, aucune ouverture avant le dimanche 22 h UTC.</p>
+      ) : null}
       {r.newsMinutes ? (
         <p className="pc-regle-news">📰 Règle des news : aucune ouverture de position {r.newsMinutes} min avant et après une annonce à fort impact sur la devise de l'instrument.</p>
       ) : null}

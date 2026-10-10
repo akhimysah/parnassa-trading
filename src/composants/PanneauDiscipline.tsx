@@ -112,6 +112,10 @@ export function PanneauDiscipline({ etat, capital, maj }: Props) {
             <input type="checkbox" checked={regles.fermerAuto} onChange={(e) => changer({ fermerAuto: e.target.checked })} />
             Fermer les positions quand la perte max ou l'objectif est atteint
           </label>
+          <label className="case">
+            <input type="checkbox" checked={Boolean(regles.fermetureWeekend)} onChange={(e) => changer({ fermetureWeekend: e.target.checked })} />
+            Fermer avant le week-end (hors crypto, vendredi 21 h 50 UTC) et ne pas rouvrir avant dimanche soir
+          </label>
           <button
             className="lien discret danger"
             onClick={() => {

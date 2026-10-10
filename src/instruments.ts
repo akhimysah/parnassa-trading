@@ -245,7 +245,11 @@ export function useCotationsScanner(ids: string[], _intervalleMs = 1000): Record
       return { id, cle: cleCotation(id), yahoo: i.yahoo, pilote: i.pilote };
     });
     refSources.current = sources;
-    return abonner(sources, () => setVersion((v) => v + 1));
+    const desabonner = abonner(sources, () => setVersion((v) => v + 1));
+    // Recalcul immédiat : les prix déjà connus du hub (autre page, cache) doivent apparaître sans attendre le
+    // prochain mouvement du marché (sinon une position ouverte le week-end ou onglet caché resterait sans prix).
+    setVersion((v) => v + 1);
+    return desabonner;
   }, [cle]);
 
   return useMemo(() => {
