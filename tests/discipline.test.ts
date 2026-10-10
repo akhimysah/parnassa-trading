@@ -1,0 +1,34 @@
+import { test } from 'node:test';
+import { ok } from './outils';
+import { evaluerDiscipline, blocageDiscipline, tradesDuJour } from '../src/discipline';
+import { dateDuJour } from '../src/challenge';
+import { reinitialiser } from '../src/trading';
+import { controleOuverture } from '../src/ordre';
+
+test('Discipline du jour', () => {
+  const regles = { actif: true, perteJourPct: 3, objectifJourPct: 5, tradesMax: 3, fermerAuto: true };
+  let p = reinitialiser(100000);
+  let d = evaluerDiscipline(p, 100000, regles);
+  ok(d.portefeuille.journee?.date === dateDuJour() && d.portefeuille.journee.capitalDebut === 100000 && !d.message, 'nouvelle journée : référence 100 000, rien de bloqué');
+  p = d.portefeuille;
+  d = evaluerDiscipline(p, 97500, regles);
+  ok(!d.message, 'perte de 2,5 % : pas encore');
+  d = evaluerDiscipline(p, 97000, regles);
+  ok(Boolean(d.message?.includes('Perte du jour')) && d.fermerTout === true && Boolean(d.portefeuille.journee?.bloque), 'perte de 3 % : blocage et fermeture');
+  const bloque = d.portefeuille;
+  ok(blocageDiscipline(bloque, regles)?.includes('Perte du jour') === true, 'blocage visible pour les ordres');
+  ok(!evaluerDiscipline(bloque, 99000, regles).message, 'le blocage tient même si le compte remonte');
+  ok(blocageDiscipline(bloque, { ...regles, actif: false }) === null, 'discipline désactivée : plus de blocage');
+  const hier = { ...bloque, journee: { ...bloque.journee!, date: '2000-01-01' } };
+  const lendemain = evaluerDiscipline(hier, 97000, regles);
+  ok(!lendemain.portefeuille.journee?.bloque && lendemain.portefeuille.journee?.capitalDebut === 97000, 'le lendemain : débloqué, nouvelle référence');
+  d = evaluerDiscipline(p, 105000, { ...regles, fermerAuto: false });
+  ok(Boolean(d.message?.includes('Objectif du jour')) && d.fermerTout === false, 'objectif +5 % : journée verrouillée, sans fermeture si non demandé');
+  const ops = [0, 1, 2].map((i) => ({ id: 'o' + i, date: Date.now() - i * 1000, type: 'ouverture', symbole: 'X', sens: 'achat', quantite: 1, prix: 1, frais: 0 } as any));
+  const avecTrades = { ...p, operations: ops };
+  ok(tradesDuJour(avecTrades) === 3, '3 trades aujourd’hui');
+  d = evaluerDiscipline(avecTrades, 100000, regles);
+  ok(Boolean(d.message?.includes('3 trades')) && d.fermerTout === false, '3 trades sur 3 : nouvelles positions bloquées, sans fermer');
+  const etat = { portefeuille: bloque, challenge: null, parametres: { discipline: regles } } as any;
+  ok(controleOuverture({ etat, symbole: 'OANDA:XAUUSD', prix: 4100, lots: 1, volumeMax: 500, lecture: false })?.startsWith('Discipline du jour') === true, 'le trading en un clic refuse aussi');
+});

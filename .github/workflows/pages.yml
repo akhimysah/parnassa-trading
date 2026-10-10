@@ -25,6 +25,8 @@ jobs:
       - run: corepack enable
       - run: corepack pnpm install --frozen-lockfile
       - run: corepack pnpm exec tsc --noEmit
+      # Scénarios du moteur de trading (règles, protections, comptes) : un échec bloque la publication.
+      - run: corepack pnpm test
       - run: corepack pnpm exec vite build --mode pages
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
