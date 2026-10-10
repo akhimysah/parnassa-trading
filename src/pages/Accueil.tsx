@@ -265,6 +265,7 @@ export function Accueil({ etat, fil, ticks, maj, compte, lecture, aller, ouvrirS
             <p className="accueil-etat muet">
               🧘 Discipline active{regles.perteJourPct ? ` · perte max ${regles.perteJourPct} %/jour` : ''}
               {regles.perteMoisPct ? ` · ${regles.perteMoisPct} %/mois` : ''}
+              {regles.risqueTradePct ? ` · risque ${regles.risqueTradePct} %/trade` : regles.stopObligatoire ? ' · SL obligatoire' : ''}
               {regles.tradesMax ? ` · ${journee.trades}/${regles.tradesMax} trades` : ''}
             </p>
           ) : null}

@@ -40,7 +40,7 @@ import { annonceBloquante, devisesInstrument, formuleSuivante, reglesCompletes }
 import { useCalendrier } from '../actualites';
 import { ouvrirCompte, type Acces } from '../comptes';
 import { cloturerPositions } from '../ordre';
-import { blocageDiscipline, finDuBlocage } from '../discipline';
+import { blocageDiscipline, controleRisqueTrade, finDuBlocage } from '../discipline';
 import { fermeAuWeekend, regleWeekendActive, reouverture } from '../weekend';
 import { PanneauDiscipline } from '../composants/PanneauDiscipline';
 import { nomSymbole, ticker } from '../symboles';
@@ -316,6 +316,11 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
       setErreur(resultat);
       return;
     }
+    const risque = controleRisqueTrade(p, resultat, etat.parametres.discipline, capital, ticksSelecteur);
+    if (risque) {
+      setErreur(risque);
+      return;
+    }
     setErreur(null);
     maj({ portefeuille: resultat });
     if (etat.parametres.son && typeOrdre === 'marche') jouer(sens === 'achat' ? 'achat' : 'vente');
@@ -403,6 +408,8 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
     const pos = p.positions.find((x) => x.id === positionId);
     const r = modifierProtections(p, positionId, prot, pos ? ticks[paireBinance(pos.symbole)]?.prix : undefined);
     if (typeof r === 'string') return setErreur(r);
+    const risque = controleRisqueTrade(p, r, etat.parametres.discipline, capital, ticks);
+    if (risque) return setErreur(risque);
     setErreur(null);
     maj({ portefeuille: r });
     setEditionProtections(null);

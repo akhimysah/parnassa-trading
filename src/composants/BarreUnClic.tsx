@@ -6,6 +6,7 @@ import type { Tick } from '../binance';
 import { estBinance, useFluxBinance } from '../binance';
 import { cleCotation, estNegociable, formaterCotation, instrument, LOT_MAX, normaliserLots, symbolesConversion, useCotationsScanner } from '../instruments';
 import { formaterLots, formaterUsdt, lotsParRisque, ouvrir, pnlLatent, TAUX_FRAIS, valeurPortefeuille } from '../trading';
+import { controleRisqueTrade } from '../discipline';
 import { annonceBloquante, devisesInstrument, reglesCompletes } from '../challenge';
 import { useCalendrier } from '../actualites';
 import { cloturerPositions, controleOuverture } from '../ordre';
@@ -87,6 +88,11 @@ export function BarreUnClic({ etat, symbole, ticks, maj, lecture, signaler, chan
       setErreur(r);
       return;
     }
+    const risque = controleRisqueTrade(p, r, etat.parametres.discipline, fondsPropres, tous);
+    if (risque) {
+      setErreur(risque);
+      return;
+    }
     setErreur(null);
     maj({ portefeuille: r });
     if (etat.parametres.son) jouer(sens === 'achat' ? 'achat' : 'vente');
@@ -129,6 +135,8 @@ export function BarreUnClic({ etat, symbole, ticks, maj, lecture, signaler, chan
       volumeMax: Math.max(volumeMax, volume),
     });
     if (typeof r === 'string') return setErreur(r);
+    const risque = controleRisqueTrade(fermeture.portefeuille, r, etat.parametres.discipline, fondsPropres, tous);
+    if (risque) return setErreur(risque);
     setErreur(null);
     maj({ portefeuille: r });
     signaler(`Position inversée : ${sens === 'achat' ? 'long' : 'short'} ${formaterLots(volume)} ${info?.code ?? ''} (clôture ${formaterUsdt(fermeture.resultat, true)})`);

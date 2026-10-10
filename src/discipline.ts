@@ -1,4 +1,6 @@
-import type { Portefeuille, ReglesDiscipline } from './types';
+import type { Portefeuille, ReglesDiscipline, Sens } from './types';
+import type { Tick } from './binance';
+import { conversionUsd, tailleContrat } from './instruments';
 import { dateDuJour } from './challenge';
 
 export const DISCIPLINE_DEFAUT: ReglesDiscipline = { actif: false, perteJourPct: 3, objectifJourPct: undefined, tradesMax: undefined, fermerAuto: true };
@@ -111,4 +113,64 @@ export function evaluerDiscipline(
   if (regles.objectifJourPct && m.pct >= regles.objectifJourPct) return bloquer(`Objectif du jour atteint (+${pct(m.pct)}) : profits verrouillés.`, regles.fermerAuto);
   if (regles.tradesMax && m.trades >= regles.tradesMax) return bloquer(`${m.trades} trades ouverts aujourd'hui : limite de ${regles.tradesMax} atteinte.`, false);
   return { portefeuille: courant };
+}
+
+interface Exposee {
+  symbole: string;
+  sens: Sens;
+  /** Unités de l'actif (lots × taille du contrat). */
+  unites: number;
+  entree: number;
+  stopLoss?: number;
+  /** Libellé pour le message : « Position », « Ordre limite »… */
+  quoi: string;
+}
+
+/** Perte (≥ 0, en USD, hors frais) si le stop-loss est touché ; 0 si le stop protège déjà un gain. */
+export function perteAuStop(e: { symbole: string; sens: Sens; unites: number; entree: number; stopLoss: number }, ticks: Record<string, Tick>): number {
+  const ecart = e.sens === 'achat' ? e.entree - e.stopLoss : e.stopLoss - e.entree;
+  return Math.max(0, ecart * e.unites * conversionUsd(e.symbole, ticks));
+}
+
+/**
+ * Règles de risque par trade sur ce qu'une action vient de créer ou de changer (positions ouvertes, ordres posés,
+ * stops déplacés ou retirés) : stop-loss obligatoire, et perte au stop plafonnée à un % des fonds propres.
+ */
+export function controleRisqueTrade(
+  avant: Portefeuille,
+  apres: Portefeuille,
+  regles: ReglesDiscipline | undefined,
+  capital: number,
+  ticks: Record<string, Tick>,
+): string | null {
+  if (!regles?.actif || (!regles.stopObligatoire && !regles.risqueTradePct)) return null;
+  const anciennes = new Map(avant.positions.map((x) => [x.id, x]));
+  const anciensOrdres = new Set(avant.ordres.map((o) => o.id));
+  const aVerifier: Exposee[] = [];
+  for (const pos of apres.positions) {
+    const ancienne = anciennes.get(pos.id);
+    if (ancienne && ancienne.stopLoss === pos.stopLoss) continue;
+    aVerifier.push({ symbole: pos.symbole, sens: pos.sens, unites: pos.quantite, entree: pos.prixEntree, stopLoss: pos.stopLoss, quoi: ancienne ? 'Stop-loss modifié' : 'Position' });
+  }
+  for (const o of apres.ordres) {
+    if (anciensOrdres.has(o.id) || !o.lots) continue;
+    aVerifier.push({ symbole: o.symbole, sens: o.sens, unites: o.lots * tailleContrat(o.symbole), entree: o.prix, stopLoss: o.stopLoss, quoi: `Ordre ${o.type}` });
+  }
+  const pct = (v: number) => `${v.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} %`;
+  for (const e of aVerifier) {
+    if (e.stopLoss === undefined) {
+      if (regles.stopObligatoire) return `Discipline : stop-loss obligatoire. ${e.quoi === 'Stop-loss modifié' ? 'Le stop-loss ne peut pas être retiré.' : 'Posez un stop-loss avant de passer l’ordre.'}`;
+      if (regles.risqueTradePct) return `Discipline : risque max de ${pct(regles.risqueTradePct)} par trade. Posez un stop-loss pour borner la perte.`;
+      continue;
+    }
+    if (!regles.risqueTradePct) continue;
+    const limite = (capital * regles.risqueTradePct) / 100;
+    const perte = perteAuStop({ ...e, stopLoss: e.stopLoss }, ticks);
+    if (perte > limite * 1.0001) {
+      const lotsMax = Math.floor((e.unites / tailleContrat(e.symbole)) * (limite / perte) * 100 + 1e-6) / 100;
+      const conseil = e.quoi === 'Stop-loss modifié' ? 'Rapprochez le stop.' : lotsMax >= 0.01 ? `Volume max à ce stop : ${lotsMax.toLocaleString('fr-FR')} lot${lotsMax > 1 ? 's' : ''}.` : 'Rapprochez le stop.';
+      return `Discipline : ${e.quoi.toLowerCase()} risquant ${Math.round(perte).toLocaleString('fr-FR')} $ (${pct((perte / capital) * 100)}) au stop, pour un max de ${pct(regles.risqueTradePct)} par trade. ${conseil}`;
+    }
+  }
+  return null;
 }

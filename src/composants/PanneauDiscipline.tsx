@@ -65,6 +65,14 @@ export function PanneauDiscipline({ etat, capital, balance, maj }: Props) {
         </button>
       </div>
 
+      {(regles.stopObligatoire || regles.risqueTradePct) && !bloque ? (
+        <p className="pd-regles muet">
+          🛡 {regles.stopObligatoire ? 'Stop-loss obligatoire' : ''}
+          {regles.stopObligatoire && regles.risqueTradePct ? ' · ' : ''}
+          {regles.risqueTradePct ? `risque max ${pct(regles.risqueTradePct)} par trade (${formaterUsdt((capital * regles.risqueTradePct) / 100)} au stop)` : ''}
+        </p>
+      ) : null}
+
       {bloque && (
         <p className="pd-bloque" role="alert">
           ⛔ {bloque} Nouveaux ordres bloqués {finDuBlocage(p)}.
@@ -145,6 +153,14 @@ export function PanneauDiscipline({ etat, capital, balance, maj }: Props) {
           <label>
             <span className="muet">Objectif / mois (%)</span>
             <input inputMode="decimal" defaultValue={regles.objectifMoisPct ?? ''} placeholder="aucun" onBlur={(e) => changer({ objectifMoisPct: nombre(e.target.value) })} />
+          </label>
+          <label>
+            <span className="muet">Risque max / trade (%)</span>
+            <input inputMode="decimal" defaultValue={regles.risqueTradePct ?? ''} placeholder="libre" onBlur={(e) => changer({ risqueTradePct: nombre(e.target.value) })} />
+          </label>
+          <label className="case">
+            <input type="checkbox" checked={Boolean(regles.stopObligatoire)} onChange={(e) => changer({ stopObligatoire: e.target.checked })} />
+            Stop-loss obligatoire sur chaque ordre (et impossible à retirer)
           </label>
           <label className="case">
             <input type="checkbox" checked={regles.fermerAuto} onChange={(e) => changer({ fermerAuto: e.target.checked })} />
