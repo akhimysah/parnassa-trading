@@ -5064,3 +5064,25 @@ kbd {
 .revue-semaine .bv-grille {
   grid-template-columns: repeat(3, 1fr);
 }
+.bandeau-news-positions {
+  list-style: none;
+  margin: 8px 14px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.bandeau-news-positions li {
+  display: flex;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(246, 168, 33, 0.1);
+  border: 1px solid rgba(246, 168, 33, 0.3);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+.bandeau-news-positions li.imminente {
+  background: rgba(239, 83, 80, 0.12);
+  border-color: rgba(239, 83, 80, 0.4);
+}

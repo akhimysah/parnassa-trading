@@ -27,6 +27,8 @@ import { VitrineTrophees } from '../composants/VitrineTrophees';
 import { AnalyseAvancee } from '../composants/AnalyseAvancee';
 import { ProjectionMonteCarlo } from '../composants/ProjectionMonteCarlo';
 import { RisqueExposition } from '../composants/RisqueExposition';
+import { BandeauNewsPositions } from '../composants/BandeauNewsPositions';
+import { annoncesSurPositions } from '../newsPositions';
 import { CoachTrading } from '../composants/CoachTrading';
 import { planManquant } from '../plan';
 import { PlanDuJour } from '../composants/PlanDuJour';
@@ -155,7 +157,9 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
 
   // Règle des news du challenge : pas d'ouverture autour des annonces à fort impact sur les devises de l'instrument.
   const minutesNews = etat.challenge?.statut === 'en-cours' ? (reglesCompletes(etat.challenge.regles).newsMinutes ?? 0) : 0;
-  const { evenements } = useCalendrier(minutesNews > 0);
+  // Le calendrier sert aussi à prévenir des annonces qui touchent les positions ouvertes.
+  const { evenements } = useCalendrier(minutesNews > 0 || p.positions.length > 0);
+  const annoncesPositions = annoncesSurPositions(p.positions, evenements);
   const devisesOrdre = devisesInstrument(infoInstrument?.code ?? symbole.split(':').pop() ?? '', infoInstrument?.devise);
   const annonceEnCours = minutesNews > 0 ? annonceBloquante(evenements, devisesOrdre, minutesNews) : undefined;
   const annonceProche =
@@ -852,6 +856,7 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
           {onglet === 'positions' && (
             <>
               {p.positions.length === 0 && <p className="vide">Aucune position ouverte. Passez un ordre à gauche.</p>}
+              <BandeauNewsPositions annonces={annoncesPositions} />
               <RisqueExposition positions={p.positions} ticks={ticks} capital={capital} />
               {p.positions.length > 1 && (
                 <div className="segmente vue-positions" role="tablist" aria-label="Affichage des positions">

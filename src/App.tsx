@@ -9,6 +9,7 @@ import { Parametres } from './composants/Parametres';
 import { Aide } from './composants/Aide';
 import type { SujetPartage } from './composants/CartePartage';
 import { bilanVeille, type BilanJour } from './bilan';
+import { annoncesSurPositions } from './newsPositions';
 import { cleSemaine, revueSemaine, type RevueSemaine as Revue } from './semaine';
 import { WidgetTradingView } from './composants/WidgetTradingView';
 import { Graphique } from './pages/Graphique';
@@ -51,7 +52,7 @@ import { instrument, symbolesConversion, useCotationsScanner } from './instrumen
 import { estBinance, paireBinance } from './binance';
 import { appliquerFlux, cloturer, enregistrerCapital, expirerOrdres, MESSAGE_CRAME, valeurPortefeuille, type BlocageOrdre } from './trading';
 import { annonceBloquante, devisesInstrument, evaluerChallenge, reglesCompletes } from './challenge';
-import { nomSymbole } from './symboles';
+import { nomSymbole, ticker } from './symboles';
 import { symboleDepuisUrl } from './site';
 import { ecrireHash, lienPartage, lireHash } from './url';
 
@@ -222,7 +223,8 @@ export function App() {
 
   // Règles qui bloquent aussi les ordres en attente : discipline (annule), week-end (annule), news du challenge (reporte).
   const minutesNews = etat.challenge?.statut === 'en-cours' ? (reglesCompletes(etat.challenge.regles).newsMinutes ?? 0) : 0;
-  const { evenements: evenementsNews } = useCalendrier(minutesNews > 0);
+  const avecPositions = etat.portefeuille.positions.length > 0;
+  const { evenements: evenementsNews } = useCalendrier(minutesNews > 0 || avecPositions);
   const refNews = useRef({ evenements: evenementsNews, minutes: minutesNews });
   refNews.current = { evenements: evenementsNews, minutes: minutesNews };
   const blocageOrdres = (e: Etat): BlocageOrdre => (symbole) => {
@@ -238,6 +240,28 @@ export function App() {
     }
     return null;
   };
+
+  // Annonce à fort impact dans 15 min sur une devise des positions ouvertes : une notification par annonce.
+  const annoncesPrevenues = useRef(new Set<string>());
+  const refEtat = useRef(etat);
+  refEtat.current = etat;
+  useEffect(() => {
+    if (!avecPositions) return;
+    const verifier = () => {
+      for (const a of annoncesSurPositions(refEtat.current.portefeuille.positions, refNews.current.evenements, Date.now(), 15)) {
+        if (annoncesPrevenues.current.has(a.evenement.id)) continue;
+        annoncesPrevenues.current.add(a.evenement.id);
+        const symboles = [...new Set(a.positions.map((x) => ticker(x.symbole)))].join(', ');
+        const titre = a.evenement.titreFr ?? a.evenement.titre;
+        const quand = a.minutes > 0 ? `dans ${a.minutes} min` : 'maintenant';
+        setToast(`⚠️ ${titre} (${a.evenement.devise}) ${quand} : ${symboles} exposé${a.positions.length > 1 ? 's' : ''}`);
+        notifier(`Annonce ${quand} : ${titre}`, `Positions exposées (${a.evenement.devise}) : ${symboles}. Vérifiez vos stops.`, undefined, `news-${a.evenement.id}`);
+      }
+    };
+    verifier();
+    const t = window.setInterval(verifier, 30000);
+    return () => window.clearInterval(t);
+  }, [avecPositions, evenementsNews]);
 
   // Échéance des ordres même sans mouvement de prix (marché fermé, onglet caché, cotation figée).
   useEffect(() => {

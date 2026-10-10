@@ -24,6 +24,8 @@ import { blocageDiscipline, mesurerJournee, mesurerMois, pauseApresPerte } from 
 import type { CompteDistant } from '../compteLocal';
 import { Jauge } from '../composants/Jauge';
 import { PlanDuJour } from '../composants/PlanDuJour';
+import { BandeauNewsPositions } from '../composants/BandeauNewsPositions';
+import { annoncesSurPositions } from '../newsPositions';
 import { MiniCourbe } from '../composants/MiniCourbe';
 import { PrixAnime } from '../composants/PrixAnime';
 import { Sessions } from '../composants/Sessions';
@@ -262,6 +264,7 @@ export function Accueil({ etat, fil, ticks, maj, compte, lecture, aller, ouvrirS
               {p.positions.length > 1 ? 's' : ''} · {p.ordres.length} ordre{p.ordres.length > 1 ? 's' : ''}
             </span>
           </div>
+          <BandeauNewsPositions annonces={annoncesSurPositions(p.positions, evenements)} max={2} />
           {p.crameLe ? (
             <p className="accueil-etat danger">🔥 Compte cramé : 99 % du capital perdu, trading arrêté.</p>
           ) : blocage ? (
