@@ -32,4 +32,12 @@ test('Projection Monte-Carlo', () => {
   ok(mixte.final.p5 <= mixte.final.p50 && mixte.final.p50 <= mixte.final.p95, 'centiles ordonnés');
   const b50 = mixte.bandes[30]!;
   ok(b50.p5 <= b50.p25 && b50.p25 <= b50.p50 && b50.p50 <= b50.p75 && b50.p75 <= b50.p95, 'bandes ordonnées');
+
+  const opts = { trades: 200, objectifPct: 10, perteMaxPct: 6, simulations: 1000, graine: 3 };
+  const fixe = monteCarlo([0.03, -0.03, 0.01], opts);
+  const suiveuse = monteCarlo([0.03, -0.03, 0.01], { ...opts, suiveuse: true });
+  ok(suiveuse.probaRuine >= fixe.probaRuine && suiveuse.probaRuine > 0, 'perte suiveuse : plus de ruines qu’avec un plancher fixe (mêmes tirages)');
+  const jour = monteCarlo([0.03, -0.03, 0.01], { ...opts, perteJourPct: 2, tradesParJour: 3 });
+  ok(jour.probaRuine >= fixe.probaRuine && jour.probaRuine > 0.3, 'perte du jour de 2 % avec 3 trades par jour : beaucoup plus de ruines');
+  ok(monteCarlo([0.01], { ...opts, suiveuse: true, perteJourPct: 2, tradesParJour: 5 }).probaRuine === 0, 'toujours gagnant : jamais de ruine, même avec les limites');
 });

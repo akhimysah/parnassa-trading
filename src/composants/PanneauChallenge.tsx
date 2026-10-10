@@ -1,10 +1,11 @@
-import { useState } from 'react';
-import type { Challenge, Etat } from '../types';
+import { useMemo, useState } from 'react';
+import type { Challenge, Etat, Portefeuille } from '../types';
 import type { CompteDistant } from '../compteLocal';
-import { CAPITAUX, demanderVersement, FORMULES, FORMULES_OUVERTES, formuleSuivante, mesurer, nouveauChallenge, prochainVersement, reglesCompletes } from '../challenge';
+import { CAPITAUX, dateDuJour, demanderVersement, FORMULES, FORMULES_OUVERTES, formuleSuivante, mesurer, nouveauChallenge, prochainVersement, reglesCompletes } from '../challenge';
 import { Certificat } from './Certificat';
 import { formaterUsdt, reinitialiser } from '../trading';
 import { Jauge } from './Jauge';
+import { monteCarlo, rendementsTrades } from '../montecarlo';
 
 interface Props {
   etat: Etat;
@@ -16,6 +17,53 @@ interface Props {
   /** Compte challenge réussi en phase 1 : ouvre le compte de la phase suivante. */
   ouvrirPhaseSuivante?: () => void;
 }
+
+/**
+ * Formules ouvertes, chacune avec la probabilité de la réussir estimée en rejouant vos trades
+ * (Monte-Carlo : objectif avant la perte max, perte du jour et limite suiveuse comprises).
+ */
+function ChoixFormule({ formule, choisir, portefeuille }: { formule: string; choisir: (id: string) => void; portefeuille: Portefeuille }) {
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const chances = useMemo(() => {
+    const rendements = rendementsTrades(portefeuille);
+    if (rendements.length < MIN_TRADES_CHANCES) return null;
+    const jours = new Set(portefeuille.operations.filter((o) => o.type === 'cloture').map((o) => dateDuJour(o.date))).size;
+    const tradesParJour = jours ? rendements.length / jours : 1;
+    return new Map(
+      FORMULES_OUVERTES.map((f) => {
+        const r = monteCarlo(rendements, { trades: 200, simulations: 600, objectifPct: f.regles.objectifPct, perteMaxPct: f.regles.perteMaxPct, perteJourPct: f.regles.perteJourPct, suiveuse: f.regles.suiveuse, tradesParJour });
+        return [f.id, r.probaObjectif ?? 0];
+      }),
+    );
+  }, [portefeuille.operations, portefeuille.capitalInitial]);
+  const nb = useMemo(() => portefeuille.operations.filter((o) => o.type === 'cloture').length, [portefeuille.operations]);
+
+  return (
+    <>
+      <div className="pc-formules">
+        {FORMULES_OUVERTES.map((f) => {
+          const p = chances?.get(f.id);
+          return (
+            <button key={f.id} className={`pc-formule ${formule === f.id ? 'actif' : ''}`} onClick={() => choisir(f.id)}>
+              <strong>{f.nom}</strong>
+              <span className="muet">{f.description}</span>
+              {p !== undefined && (
+                <span className={`pc-chances ${p >= 0.6 ? 'hausse' : p < 0.3 ? 'baisse' : ''}`}>🎯 {Math.round(p * 100)} % de chances</span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+      <p className="muet petit pc-chances-note">
+        {chances
+          ? `Chances estimées en rejouant vos ${nb} trades clôturés 600 fois (objectif avant la perte max, perte du jour et limite suiveuse comprises). Une estimation, pas une promesse.`
+          : `Après ${MIN_TRADES_CHANCES} trades clôturés, chaque formule affichera vos chances de la réussir d'après votre historique.`}
+      </p>
+    </>
+  );
+}
+
+const MIN_TRADES_CHANCES = 10;
 
 const STATUTS: Record<Challenge['statut'], string> = { 'en-cours': 'En cours', reussi: 'Réussi 🏆', echoue: 'Échoué' };
 
@@ -92,14 +140,7 @@ export function PanneauChallenge({ etat, capital, marges, maj, compte, ouvrirPha
               Passez un challenge comme chez FTMO : atteignez l'objectif de profit sans dépasser la perte journalière ni la perte maximale. Une règle
               franchie fait échouer le challenge et ferme les positions.
             </p>
-            <div className="pc-formules">
-              {FORMULES_OUVERTES.map((f) => (
-                <button key={f.id} className={`pc-formule ${formule === f.id ? 'actif' : ''}`} onClick={() => setFormule(f.id)}>
-                  <strong>{f.nom}</strong>
-                  <span className="muet">{f.description}</span>
-                </button>
-              ))}
-            </div>
+            <ChoixFormule formule={formule} choisir={setFormule} portefeuille={etat.portefeuille} />
             <div className="pc-capital">
               <span className="muet">Capital</span>
               {CAPITAUX.map((c) => (

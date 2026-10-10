@@ -38,6 +38,22 @@ test('Risque max par trade et stop obligatoire', () => {
   if (typeof tpSeul === 'string') return ok(false, tpSeul);
   ok(controleRisqueTrade(juste, tpSeul, regles, 100000, ticks) === null, 'ajout d’un TP sans toucher au stop : accepté');
 
+  // Position ouverte avant la règle avec un stop à 3 % : on peut le rapprocher, pas l'éloigner.
+  const ancienne = ouvrir(p, 'FX:EURUSD', 'achat', 3, 1.1, ticks, { levier: 100, prot: { stopLoss: 1.09 } });
+  if (typeof ancienne === 'string') return ok(false, ancienne);
+  const idA = ancienne.positions[0]!.id;
+  const rapproche = modifierProtections(ancienne, idA, { stopLoss: 1.095 }, 1.1);
+  if (typeof rapproche === 'string') return ok(false, rapproche);
+  ok(controleRisqueTrade(ancienne, rapproche, regles, 100000, ticks) === null, 'stop rapproché de 3 % à 1,5 % : permis même au-dessus de la limite');
+  const eloigne = modifierProtections(ancienne, idA, { stopLoss: 1.085 }, 1.1);
+  if (typeof eloigne === 'string') return ok(false, eloigne);
+  ok(controleRisqueTrade(ancienne, eloigne, regles, 100000, ticks) !== null, 'stop éloigné : refusé');
+  const sansStopAvant = ouvrir(p, 'FX:EURUSD', 'achat', 3, 1.1, ticks, { levier: 100 });
+  if (typeof sansStopAvant === 'string') return ok(false, sansStopAvant);
+  const premierStop = modifierProtections(sansStopAvant, sansStopAvant.positions[0]!.id, { stopLoss: 1.09 }, 1.1);
+  if (typeof premierStop === 'string') return ok(false, premierStop);
+  ok(controleRisqueTrade(sansStopAvant, premierStop, regles, 100000, ticks) === null, 'poser un premier stop sur une position qui n’en avait pas : permis');
+
   const ordre = placerOrdre(p, { symbole: 'FX:EURUSD', sens: 'achat', type: 'limite', prix: 1.09, lots: 3, levier: 100, stopLoss: 1.085 }, 1.1, ticks);
   if (typeof ordre === 'string') return ok(false, ordre);
   ok(controleRisqueTrade(p, ordre, regles, 100000, ticks)?.includes('ordre limite') === true, 'ordre limite : 3 lots à 50 pips = 1 500 $, refusé');

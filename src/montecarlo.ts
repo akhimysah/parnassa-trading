@@ -36,6 +36,11 @@ export interface OptionsMonteCarlo {
   objectifPct?: number;
   /** Perte en % du départ qui arrête la simulation (ruine). */
   perteMaxPct: number;
+  /** Perte max suiveuse (prop firm) : le plancher monte avec le plus haut, sans dépasser le départ. */
+  suiveuse?: boolean;
+  /** Perte du jour (en % du départ) qui arrête aussi la simulation, avec `tradesParJour` trades par jour. */
+  perteJourPct?: number;
+  tradesParJour?: number;
   graine?: number;
 }
 
@@ -77,7 +82,9 @@ function centile(trie: Float64Array | number[], q: number): number {
 export function monteCarlo(rendements: number[], o: OptionsMonteCarlo): ResultatMonteCarlo {
   const simulations = o.simulations ?? 1000;
   const aleatoire = generateur(o.graine ?? 42);
-  const plancher = 1 - o.perteMaxPct / 100;
+  const perteMax = o.perteMaxPct / 100;
+  const perteJour = o.perteJourPct !== undefined ? o.perteJourPct / 100 : null;
+  const parJour = Math.max(1, Math.round(o.tradesParJour ?? 1));
   const cible = o.objectifPct !== undefined ? 1 + o.objectifPct / 100 : null;
   // Colonnes par trade : valeurs de toutes les simulations après le trade n.
   const colonnes = Array.from({ length: o.trades + 1 }, () => new Float64Array(simulations));
@@ -92,14 +99,19 @@ export function monteCarlo(rendements: number[], o: OptionsMonteCarlo): Resultat
     let pireDd = 0;
     let fini = false;
     let atteint = false;
+    let debutJour = 1;
     colonnes[0]![s] = 1;
     for (let n = 1; n <= o.trades; n++) {
       if (!fini && rendements.length > 0) {
+        if ((n - 1) % parJour === 0) debutJour = v;
         v *= 1 + rendements[Math.floor(aleatoire() * rendements.length)]!;
+        // Plancher : fixe, ou suiveur (plus haut − perte max, plafonné au départ) jugé sur le plus haut déjà atteint.
+        const plancher = o.suiveuse ? Math.min(1, sommet - perteMax) : 1 - perteMax;
         if (v > sommet) sommet = v;
         pireDd = Math.max(pireDd, (sommet - v) / sommet);
-        if (cible !== null && !atteint && v >= cible) atteint = true;
-        if (v <= plancher) {
+        const jourPerdu = perteJour !== null && debutJour - v >= perteJour;
+        if (cible !== null && !atteint && v >= cible && v > plancher && !jourPerdu) atteint = true;
+        if (v <= plancher || jourPerdu) {
           v = Math.max(0, v);
           fini = true;
           ruines++;

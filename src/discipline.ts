@@ -163,6 +163,8 @@ interface Exposee {
   stopLoss?: number;
   /** Libellé pour le message : « Position », « Ordre limite »… */
   quoi: string;
+  /** Stop déplacé : perte au stop d'avant (Infinity s'il n'y en avait pas), pour toujours permettre de réduire le risque. */
+  perteAvant?: number;
 }
 
 /** Perte (≥ 0, en USD, hors frais) si le stop-loss est touché ; 0 si le stop protège déjà un gain. */
@@ -189,7 +191,8 @@ export function controleRisqueTrade(
   for (const pos of apres.positions) {
     const ancienne = anciennes.get(pos.id);
     if (ancienne && ancienne.stopLoss === pos.stopLoss) continue;
-    aVerifier.push({ symbole: pos.symbole, sens: pos.sens, unites: pos.quantite, entree: pos.prixEntree, stopLoss: pos.stopLoss, quoi: ancienne ? 'Stop-loss modifié' : 'Position' });
+    const perteAvant = ancienne ? (ancienne.stopLoss === undefined ? Infinity : perteAuStop({ symbole: ancienne.symbole, sens: ancienne.sens, unites: ancienne.quantite, entree: ancienne.prixEntree, stopLoss: ancienne.stopLoss }, ticks)) : undefined;
+    aVerifier.push({ symbole: pos.symbole, sens: pos.sens, unites: pos.quantite, entree: pos.prixEntree, stopLoss: pos.stopLoss, quoi: ancienne ? 'Stop-loss modifié' : 'Position', perteAvant });
   }
   for (const o of apres.ordres) {
     if (anciensOrdres.has(o.id) || !o.lots) continue;
@@ -205,6 +208,8 @@ export function controleRisqueTrade(
     if (!regles.risqueTradePct) continue;
     const limite = (capital * regles.risqueTradePct) / 100;
     const perte = perteAuStop({ ...e, stopLoss: e.stopLoss }, ticks);
+    // Un stop rapproché reste permis même au-dessus de la limite (position ouverte avant la règle) : le risque baisse.
+    if (e.perteAvant !== undefined && perte <= e.perteAvant) continue;
     if (perte > limite * 1.0001) {
       const lotsMax = Math.floor((e.unites / tailleContrat(e.symbole)) * (limite / perte) * 100 + 1e-6) / 100;
       const conseil = e.quoi === 'Stop-loss modifié' ? 'Rapprochez le stop.' : lotsMax >= 0.01 ? `Volume max à ce stop : ${lotsMax.toLocaleString('fr-FR')} lot${lotsMax > 1 ? 's' : ''}.` : 'Rapprochez le stop.';
