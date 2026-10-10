@@ -4848,3 +4848,47 @@ kbd {
     display: none;
   }
 }
+
+.coach {
+  padding: 12px 14px 4px;
+}
+.coach h4 {
+  margin: 0 0 8px;
+}
+.coach ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 8px;
+}
+.coach li {
+  display: flex;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--panneau-2);
+  border-left: 3px solid var(--bordure-2);
+}
+.coach li.coach-negatif {
+  border-left-color: var(--baisse);
+}
+.coach li.coach-attention {
+  border-left-color: #f6a821;
+}
+.coach li.coach-positif {
+  border-left-color: var(--hausse);
+}
+.coach li strong {
+  font-size: 13px;
+}
+.coach li p {
+  margin: 3px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--texte-muet);
+}
+.coach .lien {
+  margin-top: 6px;
+}

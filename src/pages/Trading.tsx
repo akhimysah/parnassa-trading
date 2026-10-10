@@ -27,6 +27,7 @@ import { VitrineTrophees } from '../composants/VitrineTrophees';
 import { AnalyseAvancee } from '../composants/AnalyseAvancee';
 import { ProjectionMonteCarlo } from '../composants/ProjectionMonteCarlo';
 import { RisqueExposition } from '../composants/RisqueExposition';
+import { CoachTrading } from '../composants/CoachTrading';
 import { EditeurProtections } from '../composants/EditeurProtections';
 import { CartePartage, type SujetPartage } from '../composants/CartePartage';
 import { JournalTrades } from '../composants/JournalTrades';
@@ -1065,6 +1066,7 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
               {stats.nbTrades === 0 && <p className="vide">Les statistiques apparaîtront après votre première clôture.</p>}
               {stats.nbTrades > 0 && (
                 <>
+                  <CoachTrading portefeuille={p} />
                   <div className="grille-stats">
                     <div>
                       <span>Trades clôturés</span>

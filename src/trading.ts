@@ -544,6 +544,36 @@ export interface Statistiques {
   dureeMoyenneMs: number | null;
 }
 
+/**
+ * Date d'ouverture d'une clôture : l'ouverture la plus récente du même symbole qui la précède
+ * (dates triées par symbole, recherche dichotomique : rapide même avec des milliers d'opérations).
+ */
+export function ouvertureDe(operations: Operation[]): (cloture: Operation) => number | null {
+  const parSymbole = new Map<string, number[]>();
+  for (const o of operations) {
+    if (o.type !== 'ouverture') continue;
+    const l = parSymbole.get(o.symbole) ?? [];
+    l.push(o.date);
+    parSymbole.set(o.symbole, l);
+  }
+  for (const l of parSymbole.values()) l.sort((a, b) => a - b);
+  return (c) => {
+    const l = parSymbole.get(c.symbole);
+    if (!l?.length) return null;
+    let bas = 0;
+    let haut = l.length - 1;
+    let trouve = -1;
+    while (bas <= haut) {
+      const milieu = (bas + haut) >> 1;
+      if (l[milieu]! <= c.date) {
+        trouve = milieu;
+        bas = milieu + 1;
+      } else haut = milieu - 1;
+    }
+    return trouve >= 0 ? l[trouve]! : null;
+  };
+}
+
 /** Statistiques des trades clôturés (résultat brut par trade, frais comptés séparément). */
 export function statistiques(p: Portefeuille): Statistiques {
   const clotures = p.operations.filter((o) => o.type === 'cloture' && o.resultat !== undefined);
@@ -559,31 +589,11 @@ export function statistiques(p: Portefeuille): Statistiques {
     e.net += o.resultat ?? 0;
     parPaireMap.set(o.symbole, e);
   }
-  // Durée : on apparie chaque clôture à l'ouverture la plus récente du même symbole qui la précède
-  // (dates d'ouverture triées par symbole, recherche dichotomique : rapide même avec des milliers d'opérations).
-  const ouverturesParSymbole = new Map<string, number[]>();
-  for (const o of p.operations) {
-    if (o.type !== 'ouverture') continue;
-    const l = ouverturesParSymbole.get(o.symbole) ?? [];
-    l.push(o.date);
-    ouverturesParSymbole.set(o.symbole, l);
-  }
-  for (const l of ouverturesParSymbole.values()) l.sort((a, b) => a - b);
+  const ouverture = ouvertureDe(p.operations);
   const durees: number[] = [];
   for (const c of clotures) {
-    const l = ouverturesParSymbole.get(c.symbole);
-    if (!l?.length) continue;
-    let bas = 0;
-    let haut = l.length - 1;
-    let trouve = -1;
-    while (bas <= haut) {
-      const milieu = (bas + haut) >> 1;
-      if (l[milieu]! <= c.date) {
-        trouve = milieu;
-        bas = milieu + 1;
-      } else haut = milieu - 1;
-    }
-    if (trouve >= 0) durees.push(c.date - l[trouve]!);
+    const debut = ouverture(c);
+    if (debut !== null) durees.push(c.date - debut);
   }
   return {
     nbTrades: clotures.length,
