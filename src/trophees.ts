@@ -15,6 +15,9 @@ interface Contexte {
   nets: number[];
   challenges: Challenge[];
   etat: Etat;
+  /** Calculés une fois pour toutes les règles. */
+  serie: number;
+  meilleurJour: number;
 }
 
 const serieMax = (nets: number[]) => {
@@ -28,7 +31,7 @@ const serieMax = (nets: number[]) => {
 };
 
 /** Résultat réalisé de chaque jour, en % du capital de départ. */
-const meilleurJourPct = (c: Contexte) => {
+const meilleurJourPct = (c: Omit<Contexte, 'serie' | 'meilleurJour'>) => {
   const parJour = new Map<string, number>();
   c.clotures.forEach((o, i) => {
     const j = new Date(o.date).toDateString();
@@ -47,13 +50,13 @@ const profitFactor = (nets: number[]) => {
 const REGLES: (Trophee & { condition: (c: Contexte) => boolean })[] = [
   { id: 'premier-trade', icone: '🎯', nom: 'Premier trade', description: 'Clôturer un premier trade.', rang: 1, condition: (c) => c.clotures.length >= 1 },
   { id: 'premier-gain', icone: '💚', nom: 'Première victoire', description: 'Clôturer un trade gagnant.', rang: 2, condition: (c) => c.nets.some((n) => n > 0) },
-  { id: 'serie-5', icone: '🔥', nom: 'En feu', description: '5 trades gagnants d’affilée.', rang: 3, condition: (c) => serieMax(c.nets) >= 5 },
+  { id: 'serie-5', icone: '🔥', nom: 'En feu', description: '5 trades gagnants d’affilée.', rang: 3, condition: (c) => c.serie >= 5 },
   { id: 'cent-trades', icone: '💯', nom: 'Centurion', description: '100 trades clôturés.', rang: 4, condition: (c) => c.clotures.length >= 100 },
-  { id: 'journee-1', icone: '☀️', nom: 'Belle journée', description: 'Finir une journée à +1 % du capital.', rang: 5, condition: (c) => meilleurJourPct(c) >= 1 },
+  { id: 'journee-1', icone: '☀️', nom: 'Belle journée', description: 'Finir une journée à +1 % du capital.', rang: 5, condition: (c) => c.meilleurJour >= 1 },
   { id: 'journaliste', icone: '📝', nom: 'Journal tenu', description: 'Étiqueter 10 trades dans le journal.', rang: 6, condition: (c) => c.clotures.filter((o) => o.etiquettes?.length).length >= 10 },
   { id: 'gros-calibre', icone: '🐘', nom: 'Gros calibre', description: 'Ouvrir une position de 100 lots ou plus.', rang: 7, condition: (c) => c.etat.portefeuille.operations.some((o) => o.type === 'ouverture' && (o.lots ?? 0) >= 100) },
-  { id: 'serie-10', icone: '⚡', nom: 'Intouchable', description: '10 trades gagnants d’affilée.', rang: 8, condition: (c) => serieMax(c.nets) >= 10 },
-  { id: 'journee-5', icone: '🚀', nom: 'Journée de rêve', description: 'Finir une journée à +5 % du capital.', rang: 9, condition: (c) => meilleurJourPct(c) >= 5 },
+  { id: 'serie-10', icone: '⚡', nom: 'Intouchable', description: '10 trades gagnants d’affilée.', rang: 8, condition: (c) => c.serie >= 10 },
+  { id: 'journee-5', icone: '🚀', nom: 'Journée de rêve', description: 'Finir une journée à +5 % du capital.', rang: 9, condition: (c) => c.meilleurJour >= 5 },
   { id: 'profit-factor', icone: '⚖️', nom: 'Rentable', description: 'Profit factor au-dessus de 2 sur au moins 20 trades.', rang: 10, condition: (c) => c.nets.length >= 20 && (profitFactor(c.nets) ?? 0) > 2 },
   { id: 'challenge-reussi', icone: '🏆', nom: 'Challenger', description: 'Réussir un challenge prop firm.', rang: 11, condition: (c) => c.challenges.some((x) => x.statut === 'reussi') },
   { id: 'finance', icone: '💼', nom: 'Trader financé', description: 'Ouvrir un compte financé.', rang: 12, condition: (c) => c.challenges.some((x) => reglesCompletes(x.regles).finance) },
@@ -69,11 +72,12 @@ export const TROPHEES: Trophee[] = REGLES.map(({ condition: _c, ...t }) => t);
 export function nouveauxTrophees(etat: Etat): Trophee[] {
   const deja = etat.trophees ?? {};
   const clotures = etat.portefeuille.operations.filter((o) => o.type === 'cloture' && o.resultat !== undefined).sort((a, b) => a.date - b.date);
-  const contexte: Contexte = {
+  const base = {
     clotures,
     nets: clotures.map((o) => (o.resultat ?? 0) - o.frais),
     challenges: [...(etat.challenge ? [etat.challenge] : []), ...(etat.challengesPasses ?? [])],
     etat,
   };
+  const contexte: Contexte = { ...base, serie: serieMax(base.nets), meilleurJour: meilleurJourPct(base) };
   return REGLES.filter((r) => !deja[r.id] && r.condition(contexte)).map(({ condition: _c, ...t }) => t);
 }

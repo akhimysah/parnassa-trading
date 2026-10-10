@@ -372,24 +372,50 @@ function lotsOrdre(o: OrdreEnAttente, prix: number): { lots: number; levier: num
  * Applique le flux de prix : exécute les ordres en attente déclenchés, puis les stop-loss / take-profit,
  * puis le stop-out si le niveau de marge passe sous 50 %. Retourne le portefeuille et les messages.
  */
-export function appliquerFlux(p: Portefeuille, ticks: Ticks, tauxCrypto = TAUX_FRAIS): { portefeuille: Portefeuille; messages: string[] } {
-  let courant = p;
-  const messages: string[] = [];
+/** Ordres dont l'échéance est passée : retirés, avec un message pour chacun. */
+export function expirerOrdres(p: Portefeuille, maintenant = Date.now()): { portefeuille: Portefeuille; messages: string[] } {
+  const expires = p.ordres.filter((o) => o.expireLe !== undefined && o.expireLe <= maintenant);
+  if (!expires.length) return { portefeuille: p, messages: [] };
+  const nom = (s: string) => instrument(s)?.code ?? s.split(':').pop();
+  return {
+    portefeuille: { ...p, ordres: p.ordres.filter((o) => !expires.includes(o)) },
+    messages: expires.map((o) => `Ordre ${o.type} ${nom(o.symbole)} expiré et annulé.`),
+  };
+}
+
+/**
+ * Règle qui empêche un ordre en attente de s'exécuter maintenant : `annuler` le retire (discipline, week-end),
+ * sinon il est simplement reporté (fenêtre des news du challenge).
+ */
+export type BlocageOrdre = (symbole: string) => { raison: string; annuler: boolean } | null;
+
+export function appliquerFlux(
+  p: Portefeuille,
+  ticks: Ticks,
+  tauxCrypto = TAUX_FRAIS,
+  blocage?: BlocageOrdre,
+): { portefeuille: Portefeuille; messages: string[] } {
   const nom = (s: string) => instrument(s)?.code ?? s.split(':').pop();
 
   // Ordres expirés : annulés avant tout déclenchement.
-  const maintenant = Date.now();
-  const expires = courant.ordres.filter((o) => o.expireLe !== undefined && o.expireLe <= maintenant);
-  if (expires.length) {
-    courant = { ...courant, ordres: courant.ordres.filter((o) => !expires.includes(o)) };
-    for (const o of expires) messages.push(`Ordre ${o.type} ${nom(o.symbole)} expiré et annulé.`);
-  }
+  const expiration = expirerOrdres(p);
+  let courant = expiration.portefeuille;
+  const messages: string[] = [...expiration.messages];
 
   for (const o of [...courant.ordres]) {
     // Un ordre OCO peut avoir été annulé par son jumeau déclenché juste avant.
     if (!courant.ordres.some((x) => x.id === o.id)) continue;
     const tick = ticks[paireBinance(o.symbole)];
     if (!tick || !ordreDeclenchable(o, tick.prix)) continue;
+    // Les règles qui bloquent les nouvelles positions valent aussi pour les ordres en attente.
+    const bloque = blocage?.(o.symbole);
+    if (bloque) {
+      if (bloque.annuler) {
+        courant = annulerOrdre(courant, o.id);
+        messages.push(`Ordre ${o.type} ${nom(o.symbole)} annulé : ${bloque.raison}`);
+      }
+      continue;
+    }
     // Une limite s'exécute à son prix ; un stop au prix du marché qui l'a franchi.
     const prixExecution = o.type === 'limite' ? o.prix : tick.prix;
     const { lots, levier } = lotsOrdre(o, prixExecution);

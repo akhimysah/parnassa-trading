@@ -7,8 +7,7 @@ import { RechercheSymbole } from './composants/RechercheSymbole';
 import { GestionListeSuivi } from './composants/GestionListeSuivi';
 import { Parametres } from './composants/Parametres';
 import { Aide } from './composants/Aide';
-import { BilanVeille } from './composants/BilanVeille';
-import { CartePartage, type SujetPartage } from './composants/CartePartage';
+import type { SujetPartage } from './composants/CartePartage';
 import { bilanVeille, type BilanJour } from './bilan';
 import { WidgetTradingView } from './composants/WidgetTradingView';
 import { Graphique } from './pages/Graphique';
@@ -30,23 +29,26 @@ const Actualites = lazy(() => chargerPages.actualites().then((m) => ({ default: 
 const Calendrier = lazy(() => chargerPages.calendrier().then((m) => ({ default: m.Calendrier })));
 const Alertes = lazy(() => chargerPages.alertes().then((m) => ({ default: m.Alertes })));
 const Trading = lazy(() => chargerPages.trading().then((m) => ({ default: m.Trading })));
+// Fenêtres occasionnelles, chargées seulement quand elles s'ouvrent.
+const BilanVeille = lazy(() => import('./composants/BilanVeille').then((m) => ({ default: m.BilanVeille })));
+const CartePartage = lazy(() => import('./composants/CartePartage').then((m) => ({ default: m.CartePartage })));
 import { Accueil } from './pages/Accueil';
 import { notifier, sonner, useMoteurAlertes } from './alertes';
 import { useFluxBinance } from './binance';
-import { motsClesTrouves, texteRecherche, titrePrincipal, useFilActualites } from './actualites';
+import { motsClesTrouves, texteRecherche, titrePrincipal, useCalendrier, useFilActualites } from './actualites';
 import { annoncer, couperSquawk, doitEtreLue, langueParlee, texteParle } from './squawk';
 import { useMoteurRappels } from './rappels';
 import { useSynchroPush } from './push';
 import { useSynchro } from './synchro';
 import { useCompteTrading } from './comptes';
-import { evaluerDiscipline } from './discipline';
+import { blocageDiscipline, evaluerDiscipline } from './discipline';
 import { nouveauxTrophees } from './trophees';
 import { jouer, sonDesOperations } from './sons';
-import { estCrypto, estWeekendMarche, regleWeekendActive } from './weekend';
-import { symbolesConversion, useCotationsScanner } from './instruments';
+import { estCrypto, estWeekendMarche, fermeAuWeekend, regleWeekendActive } from './weekend';
+import { instrument, symbolesConversion, useCotationsScanner } from './instruments';
 import { estBinance, paireBinance } from './binance';
-import { appliquerFlux, cloturer, enregistrerCapital, MESSAGE_CRAME, valeurPortefeuille } from './trading';
-import { evaluerChallenge } from './challenge';
+import { appliquerFlux, cloturer, enregistrerCapital, expirerOrdres, MESSAGE_CRAME, valeurPortefeuille, type BlocageOrdre } from './trading';
+import { annonceBloquante, devisesInstrument, evaluerChallenge, reglesCompletes } from './challenge';
 import { nomSymbole } from './symboles';
 import { symboleDepuisUrl } from './site';
 import { ecrireHash, lienPartage, lireHash } from './url';
@@ -112,6 +114,8 @@ export function App() {
 
   // Trophées : vérifiés quand les opérations ou les challenges changent.
   useEffect(() => {
+    // Accès investisseur : on regarde le compte d'un autre, ses trophées ne sont pas les nôtres.
+    if (compteTrading.session?.lecture) return;
     const nouveaux = nouveauxTrophees(etat);
     if (nouveaux.length === 0) return;
     const maintenant = Date.now();
@@ -204,12 +208,44 @@ export function App() {
   const lectureSeule = useRef(false);
   lectureSeule.current = Boolean(compteTrading.session?.lecture);
 
+  // Règles qui bloquent aussi les ordres en attente : discipline (annule), week-end (annule), news du challenge (reporte).
+  const minutesNews = etat.challenge?.statut === 'en-cours' ? (reglesCompletes(etat.challenge.regles).newsMinutes ?? 0) : 0;
+  const { evenements: evenementsNews } = useCalendrier(minutesNews > 0);
+  const refNews = useRef({ evenements: evenementsNews, minutes: minutesNews });
+  refNews.current = { evenements: evenementsNews, minutes: minutesNews };
+  const blocageOrdres = (e: Etat): BlocageOrdre => (symbole) => {
+    const discipline = blocageDiscipline(e.portefeuille, e.parametres.discipline);
+    if (discipline) return { raison: `discipline du jour (${discipline})`, annuler: true };
+    if (regleWeekendActive(e) && fermeAuWeekend(symbole)) return { raison: 'marché fermé le week-end.', annuler: true };
+    const { evenements, minutes } = refNews.current;
+    if (minutes > 0) {
+      const i = instrument(symbole);
+      const annonce = annonceBloquante(evenements, devisesInstrument(i?.code ?? symbole.split(':').pop() ?? '', i?.devise), minutes);
+      if (annonce) return { raison: `règle des news (${annonce.devise})`, annuler: false };
+    }
+    return null;
+  };
+
+  // Échéance des ordres même sans mouvement de prix (marché fermé, onglet caché, cotation figée).
+  useEffect(() => {
+    const t = window.setInterval(() => {
+      if (lectureSeule.current) return;
+      setEtat((e) => {
+        const r = expirerOrdres(e.portefeuille);
+        if (!r.messages.length) return e;
+        setTimeout(() => setToast(r.messages.join(' · ')), 0);
+        return { ...e, portefeuille: r.portefeuille };
+      });
+    }, 30000);
+    return () => window.clearInterval(t);
+  }, []);
+
   // Moteur de trading papier : ordres en attente, stop-loss / take-profit, courbe de capital.
   useEffect(() => {
     // Accès investisseur : le moteur tourne sur l'appareil du titulaire, ici on ne fait que regarder.
     if (Object.keys(ticks).length === 0 || lectureSeule.current) return;
     setEtat((e) => {
-      const resultat = appliquerFlux(e.portefeuille, ticks, e.parametres.frais);
+      const resultat = appliquerFlux(e.portefeuille, ticks, e.parametres.frais, blocageOrdres(e));
       let portefeuille = resultat.portefeuille;
       const messages = [...resultat.messages];
       if (portefeuille.crameLe && !e.portefeuille.crameLe) notifier('Compte cramé 🔥', MESSAGE_CRAME, undefined, `crame-${portefeuille.crameLe}`);
@@ -239,10 +275,20 @@ export function App() {
       // Fermeture du week-end : positions et ordres hors crypto fermés du vendredi soir au dimanche soir.
       if (regleWeekendActive({ ...e, challenge }) && estWeekendMarche()) {
         const aFermer = portefeuille.positions.filter((x) => !estCrypto(x.symbole) && ticks[paireBinance(x.symbole)]);
+        const sansPrix = portefeuille.positions.filter((x) => !estCrypto(x.symbole) && !ticks[paireBinance(x.symbole)]);
+        if (sansPrix.length) {
+          // Pas de prix pour les fermer : on prévient (une fois par week-end) au lieu de les laisser ouvertes en silence.
+          notifier(
+            'Fermeture du week-end',
+            `${sansPrix.length} position${sansPrix.length > 1 ? 's' : ''} hors crypto sans cotation, laissée${sansPrix.length > 1 ? 's' : ''} ouverte${sansPrix.length > 1 ? 's' : ''} : fermez-les à la main.`,
+            undefined,
+            `weekend-sans-prix-${new Date().toISOString().slice(0, 10)}`,
+          );
+        }
         const ordresHors = portefeuille.ordres.filter((o) => !estCrypto(o.symbole));
         if (aFermer.length || ordresHors.length) {
           for (const pos of aFermer) {
-            const r = cloturer(portefeuille, pos.id, ticks[paireBinance(pos.symbole)].prix, ticks, { tauxCrypto: e.parametres.frais });
+            const r = cloturer(portefeuille, pos.id, ticks[paireBinance(pos.symbole)].prix, ticks, { tauxCrypto: e.parametres.frais, origine: 'weekend' });
             if (typeof r !== 'string') portefeuille = r;
           }
           portefeuille = { ...portefeuille, ordres: portefeuille.ordres.filter((o) => estCrypto(o.symbole)) };
@@ -257,6 +303,8 @@ export function App() {
       if (e.parametres.discipline?.actif && toutesCotees) {
         const d = evaluerDiscipline(portefeuille, capital, e.parametres.discipline);
         portefeuille = d.portefeuille;
+        // Journée bloquée : les ordres en attente sont annulés (aucune nouvelle position jusqu'à demain).
+        if (d.message && portefeuille.ordres.length) portefeuille = { ...portefeuille, ordres: [] };
         if (d.fermerTout && portefeuille.positions.length > 0) {
           for (const pos of [...portefeuille.positions]) {
             const r = cloturer(portefeuille, pos.id, ticks[paireBinance(pos.symbole)].prix, ticks, { tauxCrypto: e.parametres.frais });
@@ -275,7 +323,8 @@ export function App() {
         setTimeout(() => setToast(messages.join(' · ')), 0);
         if (e.parametres.son) {
           // Son selon ce qui s'est passé : stops et objectifs (gain ou perte), ordres déclenchés (achat ou vente).
-          const nouvelles = portefeuille.operations.filter((o) => !e.portefeuille.operations.includes(o));
+          const anciennes = new Set(e.portefeuille.operations.map((o) => o.id));
+          const nouvelles = portefeuille.operations.filter((o) => !anciennes.has(o.id));
           const evenement = sonDesOperations(nouvelles);
           if (evenement) jouer(evenement);
           else sonner();
@@ -534,6 +583,7 @@ export function App() {
           maj({ page: 'graphique' });
         }}
       />
+      <Suspense fallback={null}>
       {bilan && (
         <BilanVeille
           bilan={bilan}
@@ -545,6 +595,7 @@ export function App() {
         />
       )}
       {partageBilan && <CartePartage sujet={partageBilan} fermer={() => setPartageBilan(null)} />}
+      </Suspense>
       <Aide ouvert={aideOuverte} fermer={() => setAideOuverte(false)} aller={(page) => maj({ page })} />
       <Parametres
         ouvert={parametresOuverts}

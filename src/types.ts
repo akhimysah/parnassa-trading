@@ -200,7 +200,7 @@ export interface Operation {
   sens: Sens;
   type: 'ouverture' | 'cloture';
   /** Origine : marché, limite, stop, stop-loss, take-profit. */
-  origine?: 'marche' | 'limite' | 'stop' | 'stop-loss' | 'take-profit' | 'stop-out' | 'crame';
+  origine?: 'marche' | 'limite' | 'stop' | 'stop-loss' | 'take-profit' | 'stop-out' | 'crame' | 'weekend';
   quantite: number;
   lots?: number;
   prix: number;

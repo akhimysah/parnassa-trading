@@ -61,6 +61,16 @@ export function BarreUnClic({ etat, symbole, ticks, maj, lecture, signaler, chan
   const montantRisque = (fondsPropres * risquePct) / 100;
   const lotsRisque = prix && distanceSl ? lotsParRisque(montantRisque, prix, prix - distanceSl, symbole, tous) : null;
   const lotsRisqueBornes = lotsRisque ? Math.min(volumeMax, Math.max(0.01, Math.floor(lotsRisque * 100) / 100)) : null;
+  /** Protections automatiques (distances réglées dans 🛡) converties en prix pour un ordre au marché. */
+  const protectionsPour = (sens: Sens, prixEntree: number) => {
+    const pr = reglage.protections;
+    if (!pr?.actif) return undefined;
+    return {
+      stopLoss: pr.sl ? (sens === 'achat' ? prixEntree - pr.sl : prixEntree + pr.sl) : undefined,
+      takeProfit: pr.tp ? (sens === 'achat' ? prixEntree + pr.tp : prixEntree - pr.tp) : undefined,
+      suiveur: pr.suiveur,
+    };
+  };
   const passer = (sens: Sens) => {
     if (modeRisque && !lotsRisqueBornes) {
       setErreur('Mode risque : réglez une distance de stop-loss dans 🛡 (et cochez « Poser sur chaque ordre »).');
@@ -72,16 +82,7 @@ export function BarreUnClic({ etat, symbole, ticks, maj, lecture, signaler, chan
       setErreur(probleme);
       return;
     }
-    const pr = reglage.protections;
-    const avecProt = pr?.actif ? pr : undefined;
-    const prot = avecProt
-      ? {
-          stopLoss: avecProt.sl ? (sens === 'achat' ? prix - avecProt.sl : prix + avecProt.sl) : undefined,
-          takeProfit: avecProt.tp ? (sens === 'achat' ? prix + avecProt.tp : prix - avecProt.tp) : undefined,
-          suiveur: avecProt.suiveur,
-        }
-      : undefined;
-    const r = ouvrir(p, symbole, sens, lots, prix, tous, { levier: etat.parametres.levier, prot, origine: 'marche', tauxCrypto: etat.parametres.frais ?? TAUX_FRAIS, volumeMax });
+    const r = ouvrir(p, symbole, sens, lots, prix, tous, { levier: etat.parametres.levier, prot: protectionsPour(sens, prix), origine: 'marche', tauxCrypto: etat.parametres.frais ?? TAUX_FRAIS, volumeMax });
     if (typeof r === 'string') {
       setErreur(r);
       return;
@@ -122,6 +123,7 @@ export function BarreUnClic({ etat, symbole, ticks, maj, lecture, signaler, chan
     const fermeture = cloturerPositions(p, tous, etat.parametres.frais ?? TAUX_FRAIS, (x) => x.symbole === symbole);
     const r = ouvrir(fermeture.portefeuille, symbole, sens, volume, prix, tous, {
       levier: etat.parametres.levier,
+      prot: protectionsPour(sens, prix),
       origine: 'marche',
       tauxCrypto: etat.parametres.frais ?? TAUX_FRAIS,
       volumeMax: Math.max(volumeMax, volume),

@@ -89,7 +89,7 @@ type Onglet = 'positions' | 'ordres' | 'historique' | 'journal' | 'statistiques'
 /** Montants très longs (milliards) : chiffres un peu plus petits pour tenir sur une ligne. */
 const classeKpi = (texte: string) => (texte.length > 22 ? 'tres-long' : texte.length > 17 ? 'long' : '');
 
-const ORIGINES: Record<string, string> = { marche: 'marché', limite: 'limite', stop: 'stop', 'stop-loss': 'stop-loss', 'take-profit': 'take-profit', 'stop-out': 'stop-out', crame: 'compte cramé' };
+const ORIGINES: Record<string, string> = { marche: 'marché', limite: 'limite', stop: 'stop', 'stop-loss': 'stop-loss', 'take-profit': 'take-profit', 'stop-out': 'stop-out', crame: 'compte cramé', weekend: 'fermeture du week-end' };
 
 function dateCourte(ms: number): string {
   return new Date(ms).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
