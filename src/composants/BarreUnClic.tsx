@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { Etat, Sens } from '../types';
+import type { Alerte, Etat, Sens } from '../types';
+import { demanderNotifications } from '../alertes';
 import type { Tick } from '../binance';
 import { estBinance, useFluxBinance } from '../binance';
 import { cleCotation, estNegociable, formaterCotation, instrument, LOT_MAX, normaliserLots, symbolesConversion, useCotationsScanner } from '../instruments';
@@ -145,6 +146,27 @@ export function BarreUnClic({ etat, symbole, ticks, maj, lecture, signaler, chan
     signaler(`${r.fermees} position${r.fermees > 1 ? 's' : ''} ${info?.code ?? ''} fermée${r.fermees > 1 ? 's' : ''} : ${formaterUsdt(r.resultat, true)}`);
   };
 
+  // Alertes de prix posées depuis la barre (même moteur et même relais push que la page Alertes).
+  const [alerteOuverte, setAlerteOuverte] = useState(false);
+  const [seuil, setSeuil] = useState('');
+  const alertesSymbole = etat.alertes.filter((a) => a.symbole === symbole && !a.declencheeLe);
+  const creerAlerte = (valeur: number) => {
+    if (!prix || !(valeur > 0) || valeur === prix) return setErreur('Indiquez un prix différent du prix actuel.');
+    demanderNotifications();
+    const alerte: Alerte = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      symbole,
+      condition: valeur > prix ? 'au-dessus' : 'en-dessous',
+      seuil: valeur,
+      creeLe: Date.now(),
+      prixReference: prix,
+    };
+    maj({ alertes: [...etat.alertes, alerte] });
+    setErreur(null);
+    setSeuil('');
+    signaler(`🔔 Alerte ${info?.code ?? ''} ${alerte.condition === 'au-dessus' ? 'au-dessus de' : 'sous'} ${formaterCotation(symbole, valeur)}`);
+  };
+
   const refFermer = useRef(fermer);
   refFermer.current = fermer;
   const refInverser = useRef(inverser);
@@ -237,6 +259,42 @@ export function BarreUnClic({ etat, symbole, ticks, maj, lecture, signaler, chan
               <button className="bouton-secondaire petit" onClick={fermer} disabled={lecture}>
                 Fermer {positions.length > 1 ? `les ${positions.length}` : ''}
               </button>
+            </div>
+          )}
+          <button
+            className={`uc-prot ${alertesSymbole.length ? 'actif' : ''}`}
+            onClick={() => {
+              setAlerteOuverte((x) => !x);
+              if (prix && !seuil) setSeuil(String(Number(prix.toPrecision(8))));
+            }}
+            title="Alerte de prix sur cet instrument (notification, même application fermée si le push est activé)"
+          >
+            🔔{alertesSymbole.length ? ` ${alertesSymbole.length}` : ''}
+          </button>
+          {alerteOuverte && (
+            <div className="uc-prot-edition">
+              <label>
+                <span className="muet">Prévenir à</span>
+                <input inputMode="decimal" value={seuil} onChange={(e) => setSeuil(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && creerAlerte(Number(seuil.replace(',', '.')))} />
+              </label>
+              {prix &&
+                [-1, -0.5, 0.5, 1].map((pc) => (
+                  <button key={pc} type="button" className="puce-bascule" onClick={() => setSeuil(String(Number((prix * (1 + pc / 100)).toPrecision(8))))}>
+                    {pc > 0 ? '+' : ''}
+                    {pc.toLocaleString('fr-FR')} %
+                  </button>
+                ))}
+              <button type="button" className="bouton-principal" onClick={() => creerAlerte(Number(seuil.replace(',', '.')))}>
+                Créer l'alerte
+              </button>
+              {alertesSymbole.map((a) => (
+                <span key={a.id} className="etiquette">
+                  {a.condition === 'au-dessus' ? '↑' : '↓'} {formaterCotation(symbole, a.seuil)}
+                  <button aria-label="Supprimer l'alerte" onClick={() => maj({ alertes: etat.alertes.filter((x) => x.id !== a.id) })}>
+                    ×
+                  </button>
+                </span>
+              ))}
             </div>
           )}
           <button className={`uc-prot ${pr?.actif ? 'actif' : ''}`} onClick={() => setEditionProt((x) => !x)} title="Protections posées sur chaque ordre en un clic (distance en prix depuis l'entrée)">
