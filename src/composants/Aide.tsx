@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import type { Page } from '../types';
+import { LienLegal } from './InfosLegales';
 import { IconeCroix } from './Icones';
 
 const RACCOURCIS: [string, string][] = [
@@ -80,6 +81,10 @@ export function Aide({ ouvert, fermer, aller }: { ouvert: boolean; fermer: () =>
               ))}
             </ul>
           </section>
+          <p className="muet petit aide-legal">
+            Simulateur d'entraînement, sans argent réel ni conseil en investissement. <LienLegal onglet="risques">Risques</LienLegal> ·{' '}
+            <LienLegal onglet="confidentialite">Confidentialité</LienLegal> · <LienLegal onglet="conditions">Conditions</LienLegal>
+          </p>
         </div>
       </div>
     </div>

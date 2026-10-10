@@ -31,6 +31,7 @@ import { fermeAuWeekend, regleWeekendActive, reouverture } from '../weekend';
 import { echeance, engagement, formaterLots, formaterUsdt, lotsMax, lotsParRisque, ouvrir, placerCassure, placerOrdre, tauxFrais } from '../trading';
 import { jouer } from '../sons';
 import { nombre } from '../saisie';
+import { LienLegal } from './InfosLegales';
 
 type TypeOrdre = 'marche' | 'limite' | 'stop' | 'stop-limite' | 'cassure';
 
@@ -476,7 +477,9 @@ export function FormulaireOrdre({ etat, ticks, maj, capital, lecture, erreur, se
         </button>
       </div>
       )}
-      <p className="muet petit">Compte papier avec effet de levier : aucun ordre réel n'est transmis. Comme chez un courtier, chaque ordre au marché paie le spread (achat à l'ask, vente au bid) et chaque nuit passée coûte un swap. Stop-out automatique si le niveau de marge passe sous 50 %. Le compte crame à 99 % de perte : tout est fermé et bloqué jusqu'à la remise à zéro. Ordres en attente et protections surveillés tant que l'application est ouverte.</p>
+      <p className="muet petit">Compte papier avec effet de levier : aucun ordre réel n'est transmis. Comme chez un courtier, chaque ordre au marché paie le spread (achat à l'ask, vente au bid) et chaque nuit passée coûte un swap. Stop-out automatique si le niveau de marge passe sous 50 %. Le compte crame à 99 % de perte : tout est fermé et bloqué jusqu'à la remise à zéro. Ordres en attente et protections surveillés tant que l'application est ouverte.{' '}
+        <LienLegal onglet="risques">Risques et confidentialité</LienLegal>
+      </p>
     </div>
   );
 }

@@ -11,6 +11,7 @@ import type { SujetPartage } from './composants/CartePartage';
 import { bilanVeille, type BilanJour } from './bilan';
 import { annoncesSurPositions } from './newsPositions';
 import { BarriereErreur } from './composants/BarriereErreur';
+import { InfosLegales } from './composants/InfosLegales';
 import { etatMarche } from './horaires';
 import { cleSemaine, revueSemaine, type RevueSemaine as Revue } from './semaine';
 import { WidgetTradingView } from './composants/WidgetTradingView';
@@ -641,6 +642,7 @@ export function App() {
       {revue && <RevueSemaine revue={revue} portefeuille={etat.portefeuille} fermer={() => setRevue(null)} />}
       {partageBilan && <CartePartage sujet={partageBilan} fermer={() => setPartageBilan(null)} />}
       </Suspense>
+      <InfosLegales />
       <Aide ouvert={aideOuverte} fermer={() => setAideOuverte(false)} aller={(page) => maj({ page })} />
       <Parametres
         ouvert={parametresOuverts}

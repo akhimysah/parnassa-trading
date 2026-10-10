@@ -293,6 +293,14 @@ try {
     await page.getByRole('button', { name: 'dans 1 h' }).click();
     await page.waitForTimeout(400);
     verifier('clôture programmée : badge ⏰ sur la position', (await page.locator('tr', { hasText: 'BTCUSDT' }).first().innerText()).includes('⏰'));
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: 'Risques et confidentialité' }).click();
+    const legal = page.locator('.infos-legales');
+    const risques = await legal.locator('h3').first().innerText().catch(() => '');
+    await legal.getByRole('tab', { name: 'Confidentialité' }).click();
+    verifier('informations légales : risques puis confidentialité', risques.includes('risques') && (await legal.locator('h4').count()) >= 4);
+    await page.keyboard.press('Escape');
+    verifier('informations légales : fermeture par Échap', (await legal.count()) === 0);
     verifier('ordres avancés sans erreur', erreurs.length === 0, erreurs.join(' | '));
     await c.close();
   }

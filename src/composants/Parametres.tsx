@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Etat } from '../types';
 import { exporterEtat, importerEtat } from '../stockage';
+import { LienLegal } from './InfosLegales';
 import { reinitialiser } from '../trading';
 import { horodatageFichier, telecharger } from '../export';
 import { notifier } from '../alertes';
@@ -321,7 +322,10 @@ export function Parametres({ ouvert, fermer, etat, maj, remplacerEtat, signaler,
 
           <section>
             <h4>Données</h4>
-            <p className="muet">Tout est conservé dans ce navigateur. Exportez une sauvegarde pour changer d'appareil ou archiver.</p>
+            <p className="muet">
+              Tout est conservé dans ce navigateur. Exportez une sauvegarde pour changer d'appareil ou archiver.{' '}
+              <LienLegal onglet="confidentialite">Ce que Parnassa conserve</LienLegal>
+            </p>
             <div className="boutons-parametres">
               <button className="bouton-secondaire" onClick={exporter}>
                 Exporter la sauvegarde (JSON)
