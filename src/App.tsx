@@ -41,7 +41,7 @@ import { useMoteurRappels } from './rappels';
 import { useSynchroPush } from './push';
 import { useSynchro } from './synchro';
 import { useCompteTrading } from './comptes';
-import { blocageDiscipline, evaluerDiscipline } from './discipline';
+import { blocageDiscipline, evaluerDiscipline, finDePause } from './discipline';
 import { nouveauxTrophees } from './trophees';
 import { jouer, sonDesOperations } from './sons';
 import { estCrypto, estWeekendMarche, fermeAuWeekend, regleWeekendActive } from './weekend';
@@ -216,6 +216,7 @@ export function App() {
   const blocageOrdres = (e: Etat): BlocageOrdre => (symbole) => {
     const discipline = blocageDiscipline(e.portefeuille, e.parametres.discipline);
     if (discipline) return { raison: `discipline du jour (${discipline})`, annuler: true };
+    if (finDePause(e.portefeuille, e.parametres.discipline) !== null) return { raison: 'pause après une perte', annuler: false };
     if (regleWeekendActive(e) && fermeAuWeekend(symbole)) return { raison: 'marché fermé le week-end.', annuler: true };
     const { evenements, minutes } = refNews.current;
     if (minutes > 0) {

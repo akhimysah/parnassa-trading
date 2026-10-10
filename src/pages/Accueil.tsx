@@ -20,7 +20,7 @@ import {
 import { nomSymbole, ticker } from '../symboles';
 import { formaterUsdt, PERTE_CRAME, pnlLatent, valeurPortefeuille } from '../trading';
 import { mesurer, reglesCompletes } from '../challenge';
-import { blocageDiscipline, mesurerJournee, mesurerMois } from '../discipline';
+import { blocageDiscipline, mesurerJournee, mesurerMois, pauseApresPerte } from '../discipline';
 import type { CompteDistant } from '../compteLocal';
 import { Jauge } from '../composants/Jauge';
 import { MiniCourbe } from '../composants/MiniCourbe';
@@ -88,7 +88,7 @@ export function Accueil({ etat, fil, ticks, maj, compte, lecture, aller, ouvrirS
   const journee = mesurerJournee(p, capital);
   const mois = mesurerMois(p, capital, p.solde + immobilise);
   const regles = etat.parametres.discipline;
-  const blocage = blocageDiscipline(p, regles);
+  const blocage = blocageDiscipline(p, regles) ?? pauseApresPerte(p, regles);
   const ch = etat.challenge?.statut === 'en-cours' ? etat.challenge : null;
   const mesures = ch ? mesurer(ch, capital, p.solde, immobilise, p.operations) : null;
   // Règle des 99 % : part de la perte maximale déjà consommée, affichée dès la moitié du capital perdue.

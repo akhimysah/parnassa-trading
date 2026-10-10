@@ -24,6 +24,41 @@ export function finDuBlocage(p: Portefeuille): string {
   return p.journee?.bloque?.mois ? "jusqu'au mois prochain" : "jusqu'à demain";
 }
 
+/** Fin de la pause imposée par la dernière perte (ms), ou null s'il n'y en a pas en cours. */
+export function finDePause(p: Portefeuille, regles: ReglesDiscipline | undefined, maintenant = Date.now()): number | null {
+  if (!regles?.actif || !regles.pauseApresPerteMin) return null;
+  const duree = regles.pauseApresPerteMin * 60000;
+  // Opérations de la plus récente à la plus ancienne : on s'arrête dès qu'on sort de la fenêtre de pause.
+  for (const o of p.operations) {
+    if (o.date + duree <= maintenant) break;
+    if (o.type === 'cloture' && o.resultat !== undefined && o.resultat - o.frais < 0) return o.date + duree;
+  }
+  return null;
+}
+
+/** Message de la pause en cours (reprise à HH:MM, dans N min), ou null. */
+export function pauseApresPerte(p: Portefeuille, regles: ReglesDiscipline | undefined, maintenant = Date.now()): string | null {
+  const fin = finDePause(p, regles, maintenant);
+  if (fin === null) return null;
+  const heure = new Date(fin).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  return `Pause après une perte : reprise à ${heure} (dans ${Math.max(1, Math.ceil((fin - maintenant) / 60000))} min). Respirez, relisez votre plan.`;
+}
+
+/** Pertes d'affilée aujourd'hui (clôtures les plus récentes, un trade à zéro ne coupe ni ne prolonge la série). */
+export function pertesDAffilee(p: Portefeuille, maintenant = Date.now()): number {
+  const minuit = new Date(maintenant);
+  minuit.setHours(0, 0, 0, 0);
+  let n = 0;
+  for (const o of p.operations) {
+    if (o.date < minuit.getTime()) break;
+    if (o.type !== 'cloture' || o.resultat === undefined) continue;
+    const net = o.resultat - o.frais;
+    if (net > 0) break;
+    if (net < 0) n++;
+  }
+  return n;
+}
+
 export interface MesuresJournee {
   capitalDebut: number;
   variation: number;
@@ -111,6 +146,10 @@ export function evaluerDiscipline(
   }
   if (regles.perteJourPct && -m.pct >= regles.perteJourPct) return bloquer(`Perte du jour de ${pct(-m.pct)} : limite de ${pct(regles.perteJourPct)} atteinte.`, regles.fermerAuto);
   if (regles.objectifJourPct && m.pct >= regles.objectifJourPct) return bloquer(`Objectif du jour atteint (+${pct(m.pct)}) : profits verrouillés.`, regles.fermerAuto);
+  if (regles.pertesConsecutivesMax) {
+    const serie = pertesDAffilee(courant, maintenant);
+    if (serie >= regles.pertesConsecutivesMax) return bloquer(`${serie} pertes d'affilée : limite de ${regles.pertesConsecutivesMax} atteinte.`, false);
+  }
   if (regles.tradesMax && m.trades >= regles.tradesMax) return bloquer(`${m.trades} trades ouverts aujourd'hui : limite de ${regles.tradesMax} atteinte.`, false);
   return { portefeuille: courant };
 }

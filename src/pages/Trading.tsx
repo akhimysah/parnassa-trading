@@ -41,7 +41,7 @@ import { annonceBloquante, devisesInstrument, formuleSuivante, reglesCompletes }
 import { useCalendrier } from '../actualites';
 import { ouvrirCompte, type Acces } from '../comptes';
 import { cloturerPositions } from '../ordre';
-import { blocageDiscipline, controleRisqueTrade, finDuBlocage } from '../discipline';
+import { blocageDiscipline, controleRisqueTrade, finDuBlocage, pauseApresPerte } from '../discipline';
 import { fermeAuWeekend, regleWeekendActive, reouverture } from '../weekend';
 import { PanneauDiscipline } from '../composants/PanneauDiscipline';
 import { nomSymbole, ticker } from '../symboles';
@@ -278,6 +278,11 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
     const discipline = blocageDiscipline(p, etat.parametres.discipline);
     if (discipline) {
       setErreur(`Discipline du jour : ${discipline} Nouveaux ordres bloqués ${finDuBlocage(p)}.`);
+      return;
+    }
+    const pause = pauseApresPerte(p, etat.parametres.discipline);
+    if (pause) {
+      setErreur(pause);
       return;
     }
     if (etat.challenge && etat.challenge.statut !== 'en-cours') {

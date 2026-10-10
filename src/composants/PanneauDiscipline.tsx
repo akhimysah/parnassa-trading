@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { Etat, ReglesDiscipline } from '../types';
-import { blocageDiscipline, DISCIPLINE_DEFAUT, finDuBlocage, mesurerJournee, mesurerMois } from '../discipline';
+import { blocageDiscipline, DISCIPLINE_DEFAUT, finDuBlocage, mesurerJournee, mesurerMois, pauseApresPerte, pertesDAffilee } from '../discipline';
 import { Jauge } from './Jauge';
 import { formaterUsdt } from '../trading';
 
@@ -25,8 +25,16 @@ export function PanneauDiscipline({ etat, capital, balance, maj }: Props) {
   const m = mesurerJournee(p, capital);
   const mois = mesurerMois(p, capital, balance);
   const bloque = blocageDiscipline(p, regles);
-  const changer = (modif: Partial<ReglesDiscipline>) => maj({ parametres: { ...etat.parametres, discipline: { ...regles, ...modif } } });
+  const pause = bloque ? null : pauseApresPerte(p, regles);
+  const serie = regles.pertesConsecutivesMax ? pertesDAffilee(p) : 0;
   const pct = (v: number) => `${v.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} %`;
+  const reglesActives = [
+    regles.stopObligatoire && 'Stop-loss obligatoire',
+    regles.risqueTradePct && `risque max ${pct(regles.risqueTradePct)} par trade (${formaterUsdt((capital * regles.risqueTradePct) / 100)} au stop)`,
+    regles.pauseApresPerteMin && `pause de ${regles.pauseApresPerteMin} min après une perte`,
+    regles.pertesConsecutivesMax && `pertes d'affilée ${serie}/${regles.pertesConsecutivesMax}`,
+  ].filter((x): x is string => Boolean(x));
+  const changer = (modif: Partial<ReglesDiscipline>) => maj({ parametres: { ...etat.parametres, discipline: { ...regles, ...modif } } });
 
   if (!regles.actif) {
     return (
@@ -65,13 +73,13 @@ export function PanneauDiscipline({ etat, capital, balance, maj }: Props) {
         </button>
       </div>
 
-      {(regles.stopObligatoire || regles.risqueTradePct) && !bloque ? (
-        <p className="pd-regles muet">
-          🛡 {regles.stopObligatoire ? 'Stop-loss obligatoire' : ''}
-          {regles.stopObligatoire && regles.risqueTradePct ? ' · ' : ''}
-          {regles.risqueTradePct ? `risque max ${pct(regles.risqueTradePct)} par trade (${formaterUsdt((capital * regles.risqueTradePct) / 100)} au stop)` : ''}
+      {pause && (
+        <p className="pd-pause" role="status">
+          ⏸ {pause}
         </p>
-      ) : null}
+      )}
+
+      {reglesActives.length > 0 && !bloque ? <p className="pd-regles muet">🛡 {reglesActives.join(' · ')}</p> : null}
 
       {bloque && (
         <p className="pd-bloque" role="alert">
@@ -157,6 +165,14 @@ export function PanneauDiscipline({ etat, capital, balance, maj }: Props) {
           <label>
             <span className="muet">Risque max / trade (%)</span>
             <input inputMode="decimal" defaultValue={regles.risqueTradePct ?? ''} placeholder="libre" onBlur={(e) => changer({ risqueTradePct: nombre(e.target.value) })} />
+          </label>
+          <label>
+            <span className="muet">Pause après une perte (min)</span>
+            <input inputMode="numeric" defaultValue={regles.pauseApresPerteMin ?? ''} placeholder="aucune" onBlur={(e) => changer({ pauseApresPerteMin: nombre(e.target.value) })} />
+          </label>
+          <label>
+            <span className="muet">Pertes d'affilée max</span>
+            <input inputMode="numeric" defaultValue={regles.pertesConsecutivesMax ?? ''} placeholder="illimité" onBlur={(e) => changer({ pertesConsecutivesMax: nombre(e.target.value) ? Math.round(nombre(e.target.value)!) : undefined })} />
           </label>
           <label className="case">
             <input type="checkbox" checked={Boolean(regles.stopObligatoire)} onChange={(e) => changer({ stopObligatoire: e.target.checked })} />

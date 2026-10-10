@@ -275,6 +275,10 @@ export interface ReglesDiscipline {
   stopObligatoire?: boolean;
   /** Perte maximale au stop-loss d'une position ou d'un ordre, en % des fonds propres. */
   risqueTradePct?: number;
+  /** Minutes sans nouvelle ouverture après un trade perdant (anti-revanche). */
+  pauseApresPerteMin?: number;
+  /** Pertes d'affilée dans la journée qui arrêtent le trading jusqu'au lendemain. */
+  pertesConsecutivesMax?: number;
   /** Fermer les positions quand la perte ou l'objectif du jour est atteint. */
   fermerAuto: boolean;
   /** Fermer les positions hors crypto avant le week-end et bloquer les ouvertures jusqu'au dimanche soir. */

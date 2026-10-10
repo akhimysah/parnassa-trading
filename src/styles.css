@@ -4317,6 +4317,15 @@ th.trie {
 .pd-jauges:empty {
   display: none;
 }
+.pd-pause {
+  margin: 8px 14px 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(246, 168, 33, 0.12);
+  color: #f6a821;
+  font-weight: 600;
+  font-size: 12.5px;
+}
 .pd-regles {
   margin: 0;
   padding: 2px 14px 0;
