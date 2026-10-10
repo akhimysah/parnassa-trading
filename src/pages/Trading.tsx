@@ -28,6 +28,7 @@ import { EditeurProtections } from '../composants/EditeurProtections';
 import { CartePartage, type SujetPartage } from '../composants/CartePartage';
 import { JournalTrades } from '../composants/JournalTrades';
 import { PositionsGroupees } from '../composants/PositionsGroupees';
+import { genererRapport, ouvrirRapport } from '../rapport';
 import { BarreCompte, capitalDemande, FenetreComptes } from '../composants/ComptesTrading';
 import type { GestionCompte } from '../comptes';
 import { PanneauChallenge } from '../composants/PanneauChallenge';
@@ -768,6 +769,17 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
               {onglet === 'journal' && journal.length > 0 && (
                 <button className="bouton-secondaire avec-icone" onClick={exporterJournal} title="Exporter le journal en CSV">
                   <IconeTelecharger width={14} height={14} /> CSV
+                </button>
+              )}
+              {onglet === 'statistiques' && stats.nbTrades > 0 && (
+                <button
+                  className="bouton-secondaire avec-icone"
+                  title="Rapport de performance imprimable, à enregistrer en PDF"
+                  onClick={() => {
+                    if (!ouvrirRapport(genererRapport(etat, capital, session?.compte ?? null))) setErreur('Le navigateur a bloqué l’ouverture du rapport : autorisez les fenêtres pour ce site.');
+                  }}
+                >
+                  <IconeTelecharger width={14} height={14} /> Rapport PDF
                 </button>
               )}
               {onglet === 'historique' && p.operations.length > 0 && (
