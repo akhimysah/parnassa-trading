@@ -1,2 +1,6 @@
 node_modules
 dist
+.dev.vars
+.erreurs-cle
+.ui-baseline/
+worker/.wrangler/

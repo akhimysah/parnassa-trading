@@ -10,6 +10,7 @@ import { Aide } from './composants/Aide';
 import type { SujetPartage } from './composants/CartePartage';
 import { bilanVeille, type BilanJour } from './bilan';
 import { annoncesSurPositions } from './newsPositions';
+import { BarriereErreur } from './composants/BarriereErreur';
 import { etatMarche } from './horaires';
 import { cleSemaine, revueSemaine, type RevueSemaine as Revue } from './semaine';
 import { WidgetTradingView } from './composants/WidgetTradingView';
@@ -545,6 +546,7 @@ export function App() {
       </div>
       <RailGauche page={etat.page} changer={(page) => maj({ page })} />
       <main className="contenu">
+        <BarriereErreur cle={etat.page} accueil={() => maj({ page: 'accueil' })}>
         <Suspense fallback={<p className="chargement-page" role="status">Chargement…</p>}>
         {etat.page === 'accueil' && (
           <Accueil
@@ -604,6 +606,7 @@ export function App() {
           />
         )}
         </Suspense>
+        </BarriereErreur>
       </main>
       <RechercheSymbole
         ouvert={recherche.ouvert}

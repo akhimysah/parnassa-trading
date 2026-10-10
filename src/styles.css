@@ -5130,3 +5130,23 @@ kbd {
 .statut-marche.ferme i {
   background: var(--baisse);
 }
+.barriere-erreur {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 520px;
+  margin: 40px auto;
+  padding: 20px;
+  border-radius: 12px;
+  background: var(--panneau);
+  border: 1px solid var(--bordure);
+}
+.barriere-erreur p {
+  margin: 0;
+}
+.barriere-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}

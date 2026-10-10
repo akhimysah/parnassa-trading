@@ -3,6 +3,11 @@
  * avec CORS, mis en cache 60 s. Déployé sur Cloudflare Workers (aucune donnée personnelle traitée).
  */
 
+import { routeErreurs, type EnvErreurs } from './erreurs';
+
+/** Journal des erreurs de l'application (Durable Object, exporté pour Cloudflare). */
+export { JournalErreurs } from './erreurs';
+
 type Categorie = 'annonces' | 'marches' | 'forex' | 'crypto' | 'banques-centrales' | 'france' | 'matieres';
 
 interface Flux {
@@ -366,7 +371,7 @@ async function bilingue(depeches: Depeche[]): Promise<Depeche[]> {
 
 import { envoyerPush, type AbonnementPush, type MessagePush } from './push';
 
-interface Env {
+interface Env extends EnvErreurs {
   ANNONCES: KVNamespace;
   VAPID_PRIVEE: string;
   VAPID_PUBLIQUE: string;
@@ -852,6 +857,7 @@ export default {
     origine = url.origin;
     if (url.pathname.startsWith('/__cache/')) return json({ erreur: 'Route inconnue.' }, 0);
     if (url.pathname.startsWith('/push/')) return routePush(requete, url, env);
+    if (url.pathname === '/erreurs') return routeErreurs(requete, env);
     const cache = caches.default;
     const cleCache = new Request(url.toString(), { method: 'GET' });
     const enCache = await cache.match(cleCache);
@@ -904,7 +910,7 @@ export default {
       if (demandes.length === 0) return json({ erreur: 'Paramètre i requis (ex. XAU/USD,XAG/USD).' }, 0);
       reponse = json({ generéLe: Date.now(), cotations: await cotationsSwissquote(demandes) }, 1);
     } else if (url.pathname === '/' || url.pathname === '/sante') {
-      reponse = json({ service: 'parnassa-actualites', flux: FLUX.length, routes: ['/flux', '/annonces', '/calendrier', '/surprises', '/banques-centrales', '/resultats', '/recherche?q=…&ticker=…', '/bougies?s=…&i=…&r=…', '/swissquote?i=…'] }, 0);
+      reponse = json({ service: 'parnassa-actualites', flux: FLUX.length, routes: ['/flux', '/erreurs', '/annonces', '/calendrier', '/surprises', '/banques-centrales', '/resultats', '/recherche?q=…&ticker=…', '/bougies?s=…&i=…&r=…', '/swissquote?i=…'] }, 0);
     } else {
       return json({ erreur: 'Route inconnue.' }, 0);
     }

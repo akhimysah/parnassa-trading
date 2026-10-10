@@ -39,7 +39,8 @@ export function jouer(evenement: Evenement): void {
     // Audio indisponible : la notification visuelle suffit.
   }
   try {
-    navigator.vibrate?.(partition.vibration);
+    // Le navigateur refuse (et le signale) une vibration avant le premier geste de l'utilisateur sur la page.
+    if ((navigator as Navigator & { userActivation?: { hasBeenActive: boolean } }).userActivation?.hasBeenActive !== false) navigator.vibrate?.(partition.vibration);
   } catch {
     // pas de vibration
   }
