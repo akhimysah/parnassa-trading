@@ -1,5 +1,5 @@
 /* Service worker de Parnassa Trading : application installable, consultation hors ligne, notifications. */
-const VERSION = 'parnassa-trading-v3';
+const VERSION = 'parnassa-trading-v4';
 const COQUILLE = ['./', './index.html', './manifest.webmanifest', './icone.svg', './icone-192.png', './icone-512.png'];
 const RELAIS = 'parnassa-actualites.neobank.workers.dev';
 
@@ -42,7 +42,8 @@ async function reseauPuisCache(requete) {
 /** Garde au plus 12 fichiers compilés (les plus récents) : les versions précédentes sont supprimées. */
 async function elaguerAssets(cache) {
   const assets = (await cache.keys()).filter((r) => r.url.includes('/assets/'));
-  for (const r of assets.slice(0, Math.max(0, assets.length - 12))) await cache.delete(r);
+  // Application découpée en pages : on garde de quoi couvrir deux versions complètes.
+  for (const r of assets.slice(0, Math.max(0, assets.length - 40))) await cache.delete(r);
 }
 
 async function cachePuisReseau(requete) {

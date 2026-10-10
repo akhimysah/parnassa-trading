@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import type { DispositionSauvee, Etat } from './types';
 import { chargerEtat, sauverEtat } from './stockage';
 import { BarreHaut, INTERVALLES } from './composants/BarreHaut';
@@ -8,13 +8,24 @@ import { GestionListeSuivi } from './composants/GestionListeSuivi';
 import { Parametres } from './composants/Parametres';
 import { WidgetTradingView } from './composants/WidgetTradingView';
 import { Graphique } from './pages/Graphique';
-import { Marches } from './pages/Marches';
-import { Screener } from './pages/Screener';
-import { Symbole } from './pages/Symbole';
-import { Actualites } from './pages/Actualites';
-import { Calendrier } from './pages/Calendrier';
-import { Alertes } from './pages/Alertes';
-import { Trading } from './pages/Trading';
+// Pages chargées à la demande (l'accueil et le graphique sont dans le premier chargement), puis préchargées en
+// arrière-plan une fois l'application affichée : navigation instantanée et application complète hors ligne.
+const chargerPages = {
+  marches: () => import('./pages/Marches'),
+  screener: () => import('./pages/Screener'),
+  symbole: () => import('./pages/Symbole'),
+  actualites: () => import('./pages/Actualites'),
+  calendrier: () => import('./pages/Calendrier'),
+  alertes: () => import('./pages/Alertes'),
+  trading: () => import('./pages/Trading'),
+};
+const Marches = lazy(() => chargerPages.marches().then((m) => ({ default: m.Marches })));
+const Screener = lazy(() => chargerPages.screener().then((m) => ({ default: m.Screener })));
+const Symbole = lazy(() => chargerPages.symbole().then((m) => ({ default: m.Symbole })));
+const Actualites = lazy(() => chargerPages.actualites().then((m) => ({ default: m.Actualites })));
+const Calendrier = lazy(() => chargerPages.calendrier().then((m) => ({ default: m.Calendrier })));
+const Alertes = lazy(() => chargerPages.alertes().then((m) => ({ default: m.Alertes })));
+const Trading = lazy(() => chargerPages.trading().then((m) => ({ default: m.Trading })));
 import { Accueil } from './pages/Accueil';
 import { notifier, sonner, useMoteurAlertes } from './alertes';
 import { useFluxBinance } from './binance';
@@ -66,6 +77,16 @@ export function App() {
   const [toast, setToast] = useState<string | null>(null);
 
   const maj = useCallback((p: Partial<Etat>) => setEtat((e) => ({ ...e, ...p })), []);
+
+  // Préchargement des autres pages quand le navigateur est libre (et mise en cache hors ligne par le service worker).
+  useEffect(() => {
+    const precharger = () => Object.values(chargerPages).forEach((f) => void f().catch(() => undefined));
+    const ric = (window as Window & { requestIdleCallback?: (f: () => void, o?: { timeout: number }) => number }).requestIdleCallback;
+    const t = ric ? ric(precharger, { timeout: 5000 }) : window.setTimeout(precharger, 2500);
+    return () => {
+      if (!ric) window.clearTimeout(t);
+    };
+  }, []);
 
   // Moteur d'alertes : actif sur toutes les pages tant que l'application est ouverte.
   const majAlertes = useCallback(
@@ -360,6 +381,7 @@ export function App() {
       </div>
       <RailGauche page={etat.page} changer={(page) => maj({ page })} />
       <main className="contenu">
+        <Suspense fallback={<p className="chargement-page" role="status">Chargement…</p>}>
         {etat.page === 'accueil' && (
           <Accueil
             etat={etat}
@@ -415,6 +437,7 @@ export function App() {
             }}
           />
         )}
+        </Suspense>
       </main>
       <RechercheSymbole
         ouvert={recherche.ouvert}

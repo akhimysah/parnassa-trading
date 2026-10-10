@@ -4447,3 +4447,7 @@ th.trie {
     grid-template-columns: 1fr 1fr;
   }
 }
+.chargement-page {
+  padding: 24px;
+  color: var(--texte-muet);
+}
