@@ -4509,3 +4509,31 @@ kbd {
   flex: 1;
   font-size: 13px;
 }
+@media (max-width: 640px) {
+  .prochaine-annonce {
+    flex-basis: 100%;
+    white-space: normal;
+    text-align: left;
+    margin-left: 0;
+  }
+}
+/* Sous un tableau qui défile de côté, l'éditeur et la clôture partielle restent dans la partie visible. */
+@media (max-width: 760px) {
+  .ligne-cloture .editeur-protections,
+  .ligne-cloture .panneau-cloture {
+    position: sticky;
+    left: 0;
+    width: calc(100vw - 56px);
+    max-width: calc(100vw - 56px);
+    box-sizing: border-box;
+  }
+  .editeur-protections input,
+  .editeur-protections .ep-palier input {
+    width: 100%;
+    max-width: 140px;
+  }
+  .editeur-protections label {
+    min-width: 0;
+    flex: 1 1 130px;
+  }
+}
