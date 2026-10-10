@@ -1,6 +1,11 @@
 import { test } from 'node:test';
 import { ok } from './outils';
 import { grouperPositions } from '../src/composants/PositionsGroupees.tsx';
+import { COUTS } from '../src/couts';
+
+// Logique pure, sur des prix exacts : sans spread ni swap (testés à part dans couts.test.ts).
+COUTS.spread = false;
+COUTS.swap = false;
 
 test('Positions groupées par instrument', () => {
   const t = { BTCUSDT: { prix: 61000 }, ETHUSDT: { prix: 2500 } } as any;

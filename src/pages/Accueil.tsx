@@ -18,7 +18,7 @@ import {
   type FilActualites,
 } from '../actualites';
 import { nomSymbole, ticker } from '../symboles';
-import { formaterUsdt, PERTE_CRAME, pnlLatent, valeurPortefeuille } from '../trading';
+import { formaterUsdt, PERTE_CRAME, pnlMarche, valeurPortefeuille } from '../trading';
 import { mesurer, reglesCompletes } from '../challenge';
 import { blocageDiscipline, mesurerJournee, mesurerMois, pauseApresPerte } from '../discipline';
 import type { CompteDistant } from '../compteLocal';
@@ -309,7 +309,7 @@ export function Accueil({ etat, fil, ticks, maj, compte, lecture, aller, ouvrirS
           <ul className="liste-positions">
             {p.positions.slice(0, 4).map((pos) => {
               const prix = ticks[paireBinance(pos.symbole)]?.prix;
-              const pnl = prix ? pnlLatent(pos, prix, ticks) : null;
+              const pnl = prix ? pnlMarche(pos, prix, ticks) : null;
               return (
                 <li key={pos.id}>
                   <span>

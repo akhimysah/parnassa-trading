@@ -27,6 +27,7 @@ import { VitrineTrophees } from '../composants/VitrineTrophees';
 import { AnalyseAvancee } from '../composants/AnalyseAvancee';
 import { ProjectionMonteCarlo } from '../composants/ProjectionMonteCarlo';
 import { RisqueExposition } from '../composants/RisqueExposition';
+import { categorieDe, coteEntree, fourchette, SWAP_ANNUEL_PCT } from '../couts';
 import { BandeauNewsPositions } from '../composants/BandeauNewsPositions';
 import { annoncesSurPositions } from '../newsPositions';
 import { CoachTrading } from '../composants/CoachTrading';
@@ -50,32 +51,7 @@ import { blocageDiscipline, controleRisqueTrade, finDuBlocage, pauseApresPerte }
 import { fermeAuWeekend, regleWeekendActive, reouverture } from '../weekend';
 import { PanneauDiscipline } from '../composants/PanneauDiscipline';
 import { nomSymbole, ticker } from '../symboles';
-import {
-  annoterOperation,
-  annoterPosition,
-  annulerOrdre,
-  cloturer,
-  formaterQuantite,
-  formaterUsdt,
-  modifierProtections,
-  placerCassure,
-  echeance,
-  etiqueterOperation,
-  breakEven,
-  ouvrir,
-  placerOrdre,
-  pnlLatent,
-  engagement,
-  formaterLots,
-  lotsMax,
-  lotsParRisque,
-  tauxFrais,
-  realiseTotal,
-  reinitialiser,
-  PERTE_CRAME,
-  statistiques,
-  valeurPortefeuille,
-} from '../trading';
+import { annoterOperation, annoterPosition, annulerOrdre, breakEven, cloturer, echeance, engagement, etiqueterOperation, formaterLots, formaterQuantite, formaterUsdt, lotsMax, lotsParRisque, modifierProtections, ouvrir, PERTE_CRAME, placerCassure, placerOrdre, pnlMarche, realiseTotal, reinitialiser, statistiques, tauxFrais, valeurPortefeuille } from '../trading';
 import { horodatageFichier, telecharger, versCsv } from '../export';
 import { CourbeCapital } from '../composants/CourbeCapital';
 import { Repartition, type Part } from '../composants/Repartition';
@@ -224,7 +200,7 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
     const parSymbole = new Map<string, number>();
     for (const pos of p.positions) {
       const actuel = ticks[paireBinance(pos.symbole)]?.prix;
-      const valeur = pos.cout + (actuel ? pnlLatent(pos, actuel, ticks) : 0);
+      const valeur = pos.cout + (actuel ? pnlMarche(pos, actuel, ticks) : (pos.swap ?? 0));
       parSymbole.set(pos.symbole, (parSymbole.get(pos.symbole) ?? 0) + valeur);
     }
     const lignes = [...parSymbole.entries()]
@@ -235,7 +211,8 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
 
   const slNum = protections ? nombre(stopLoss) : undefined;
   const risqueNum = nombre(risque);
-  const prixEntreePrevu = typeOrdre === 'marche' ? prix : nombre(prixOrdre);
+  // Au marché, l'entrée se fait à l'ask (achat, stop sous le prix) ou au bid (vente) : le spread compte dans le risque.
+  const prixEntreePrevu = typeOrdre === 'marche' ? (prix && slNum ? coteEntree(symbole, slNum < prix ? 'achat' : 'vente', prix) : prix) : nombre(prixOrdre);
   const perteSiStop = slNum && prixEntreePrevu && quantite ? Math.abs(prixEntreePrevu - slNum) * quantite * conversionUsd(symbole, ticksSelecteur) : null;
   const lotsConseilles = slNum && prixEntreePrevu && risqueNum ? lotsParRisque((risqueNum / 100) * capital, prixEntreePrevu, slNum, symbole, ticksSelecteur) : null;
 
@@ -758,6 +735,20 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
               <dd>{calcul ? formaterUsdt(calcul.frais) : '…'}</dd>
             </div>
             <div>
+              <dt title="Écart entre prix acheteur et vendeur, payé à l'ouverture d'un ordre au marché">Spread (coût à l'ouverture)</dt>
+              <dd>{prixReference && quantite ? formaterUsdt(fourchette(symbole, prixReference).spread * quantite * conversionUsd(symbole, ticksSelecteur)) : '…'}</dd>
+            </div>
+            <div>
+              <dt title="Financement facturé à chaque nuit passée (21 h UTC), triple le mercredi (change, matières premières) ou le vendredi (indices, actions)">
+                Swap par nuit (achat / vente)
+              </dt>
+              <dd>
+                {prixReference && quantite
+                  ? `${formaterUsdt((-prixReference * quantite * conversionUsd(symbole, ticksSelecteur) * SWAP_ANNUEL_PCT[categorieDe(symbole)].achat) / 100 / 365)} / ${formaterUsdt((-prixReference * quantite * conversionUsd(symbole, ticksSelecteur) * SWAP_ANNUEL_PCT[categorieDe(symbole)].vente) / 100 / 365)}`
+                  : '…'}
+              </dd>
+            </div>
+            <div>
               <dt>Volume max (marge libre)</dt>
               <dd>{maxLots >= LOT_MIN ? formaterLots(maxLots) : 'insuffisant'}</dd>
             </div>
@@ -779,7 +770,7 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
             </button>
           </div>
           )}
-          <p className="muet petit">Compte papier avec effet de levier : aucun ordre réel n'est transmis. Stop-out automatique si le niveau de marge passe sous 50 %. Le compte crame à 99 % de perte : tout est fermé et bloqué jusqu'à la remise à zéro. Ordres en attente et protections surveillés tant que l'application est ouverte.</p>
+          <p className="muet petit">Compte papier avec effet de levier : aucun ordre réel n'est transmis. Comme chez un courtier, chaque ordre au marché paie le spread (achat à l'ask, vente au bid) et chaque nuit passée coûte un swap. Stop-out automatique si le niveau de marge passe sous 50 %. Le compte crame à 99 % de perte : tout est fermé et bloqué jusqu'à la remise à zéro. Ordres en attente et protections surveillés tant que l'application est ouverte.</p>
         </div>
 
         <div className="carte">
@@ -900,7 +891,7 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
                     <tbody>
                       {p.positions.slice(0, positionsVisibles).map((pos) => {
                         const actuel = ticks[paireBinance(pos.symbole)]?.prix;
-                        const pnl = actuel ? pnlLatent(pos, actuel, ticks) : null;
+                        const pnl = actuel ? pnlMarche(pos, actuel, ticks) : null;
                         // Rendement sur la marge immobilisée, comme sur les plateformes à effet de levier.
                         const pct = pnl !== null ? (pnl / pos.cout) * 100 : null;
                         const enCloture = clotureEnCours === pos.id;
@@ -928,6 +919,11 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
                               {pnl === null
                                 ? '…'
                                 : `${formaterUsdt(pnl, true)} (${pct! >= 0 ? '+' : ''}${pct!.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} %)`}
+                              {pos.swap ? (
+                                <span className="sous-ligne muet" title="Swap cumulé (financement des nuits passées), compris dans le P&L">
+                                  dont swap {formaterUsdt(pos.swap, true)}
+                                </span>
+                              ) : null}
                             </td>
                             <td className="num">
                               <button className="lien discret" onClick={() => editerProtections(pos.id)} title="Modifier stop-loss et take-profit">

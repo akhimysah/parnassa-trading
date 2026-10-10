@@ -1,6 +1,11 @@
 import { test } from 'node:test';
 import { ok } from './outils';
 import { ouvrir, appliquerFlux, modifierProtections, breakEven, reinitialiser } from '../src/trading';
+import { COUTS } from '../src/couts';
+
+// Logique pure, sur des prix exacts : sans spread ni swap (testés à part dans couts.test.ts).
+COUTS.spread = false;
+COUTS.swap = false;
 
 test('Stop suiveur et break-even', () => {
   const t = (prix: number) => ({ BTCUSDT: { prix, variation: 0, haut: prix, bas: prix, volume: 0, t: Date.now() } } as any);

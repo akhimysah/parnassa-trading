@@ -2,7 +2,7 @@ import type { Etat, Portefeuille, Position } from './types';
 import type { Tick } from './binance';
 import { paireBinance } from './binance';
 import { LOT_MIN, estNegociable } from './instruments';
-import { cloturer, pnlLatent } from './trading';
+import { cloturer, pnlMarche } from './trading';
 import { blocageDiscipline, finDuBlocage, pauseApresPerte } from './discipline';
 import { planManquant } from './plan';
 import { fermeAuWeekend, regleWeekendActive, reouverture } from './weekend';
@@ -55,7 +55,7 @@ export function cloturerPositions(
   for (const pos of p.positions) {
     const prix = ticks[paireBinance(pos.symbole)]?.prix;
     if (!prix) continue;
-    const pnl = pnlLatent(pos, prix, ticks);
+    const pnl = pnlMarche(pos, prix, ticks);
     if (!filtre(pos, pnl)) continue;
     const r = cloturer(courant, pos.id, prix, ticks, { tauxCrypto });
     if (typeof r === 'string') continue;

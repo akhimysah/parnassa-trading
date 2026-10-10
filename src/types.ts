@@ -166,6 +166,10 @@ export interface Position {
   beApresPalier?: boolean;
   /** Note de journal : plan, raison d'entrée… */
   note?: string;
+  /** Swap cumulé en USD (négatif = coût), réalisé à la clôture. */
+  swap?: number;
+  /** Dernier passage de nuit (rollover) compté dans le swap. */
+  swapCompteAu?: number;
 }
 
 export interface OrdreEnAttente {
@@ -205,8 +209,10 @@ export interface Operation {
   lots?: number;
   prix: number;
   frais: number;
-  /** Résultat réalisé (clôtures uniquement). */
+  /** Résultat réalisé (clôtures uniquement), swap compris. */
   resultat?: number;
+  /** Part du résultat due au swap (clôtures). */
+  swap?: number;
   /** Prix d'entrée de la position fermée (clôtures). */
   prixEntree?: number;
   note?: string;

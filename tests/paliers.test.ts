@@ -1,6 +1,11 @@
 import { test } from 'node:test';
 import { ok } from './outils';
 import { ouvrir, appliquerFlux, modifierProtections, reinitialiser } from '../src/trading';
+import { COUTS } from '../src/couts';
+
+// Logique pure, sur des prix exacts : sans spread ni swap (testés à part dans couts.test.ts).
+COUTS.spread = false;
+COUTS.swap = false;
 
 test('Prises de profit partielles', () => {
   const t = (prix: number) => ({ BTCUSDT: { prix, variation: 0, haut: prix, bas: prix, volume: 0, t: Date.now() } } as any);
@@ -19,7 +24,8 @@ test('Prises de profit partielles', () => {
   f = appliquerFlux(p, t(61600), 0); p = f.portefeuille;
   ok(p.positions.length === 0 && f.messages.filter((m) => m.startsWith('Palier')).length === 2, '61 600 : paliers 2 et 3 d’un coup, position soldée');
   const gains = p.operations.filter((o: any) => o.type === 'cloture').map((o: any) => Math.round(o.resultat)).reverse();
-  ok(gains.join(',') === '2500,4800,3200', `résultats 5 lots ×500 / 3 lots ×1600 / 2 lots ×1600 : ${gains.join(',')}`);
+  // Un palier est une prise de profit à cours limité : exécuté à son prix (61 000, 61 500), même si le cours l'a dépassé.
+  ok(gains.join(',') === '2500,3000,3000', `résultats 5 lots ×500 / 3 lots ×1000 / 2 lots ×1500 : ${gains.join(',')}`);
   // Short
   let q: any = ouvrir(reinitialiser(10_000_000), 'BINANCE:BTCUSDT', 'vente', 4, 60000, t(60000), { levier: 10, tauxCrypto: 0 });
   q = modifierProtections(q, q.positions[0].id, { paliers: [{ prix: 59000, part: 0.25 }] }, 60000);

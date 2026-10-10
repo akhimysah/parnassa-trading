@@ -2,6 +2,7 @@ import type { Operation, OrdreEnAttente, Palier, Portefeuille, Position, Sens } 
 import type { Tick } from './binance';
 import { paireBinance } from './binance';
 import { conversionUsd, instrument, LOT_MAX, normaliserLots, tailleContrat } from './instruments';
+import { appliquerSwaps, coteEntree, coteSortie } from './couts';
 
 /** Frais par défaut sur la crypto (0,1 % du notionnel, tarif spot standard de Binance). */
 export const TAUX_FRAIS = 0.001;
@@ -45,13 +46,22 @@ export interface EtatCompte {
   niveauMarge: number | null;
 }
 
+/**
+ * P&L latent au marché : la position est valorisée au prix auquel on la fermerait (bid pour un long, ask pour un short),
+ * swap cumulé compris. `milieu` est le cours milieu coté.
+ */
+export function pnlMarche(position: Position, milieu: number, ticks: Ticks = {}): number {
+  return pnlLatent(position, coteSortie(position.symbole, position.sens, milieu), ticks) + (position.swap ?? 0);
+}
+
 export function valeurPortefeuille(p: Portefeuille, ticks: Ticks): EtatCompte {
   let latent = 0;
   let immobilise = 0;
   for (const pos of p.positions) {
     immobilise += pos.cout;
     const t = ticks[paireBinance(pos.symbole)];
-    if (t) latent += pnlLatent(pos, t.prix, ticks);
+    if (t) latent += pnlMarche(pos, t.prix, ticks);
+    else latent += pos.swap ?? 0;
   }
   const capital = p.solde + immobilise + latent;
   return { capital, latent, immobilise, niveauMarge: immobilise > 0 ? capital / immobilise : null };
@@ -144,14 +154,16 @@ export function ouvrir(
   symbole: string,
   sens: Sens,
   lots: number,
-  prix: number,
+  milieu: number,
   ticks: Ticks,
-  options: { levier: number; prot?: Protections; origine?: Operation['origine']; tauxCrypto?: number; volumeMax?: number },
+  options: { levier: number; prot?: Protections; origine?: Operation['origine']; tauxCrypto?: number; volumeMax?: number; prixExact?: boolean },
 ): Portefeuille | string {
   if (p.crameLe) return MESSAGE_CRAME;
   const volumeMax = options.volumeMax ?? LOT_MAX;
   if (!(lots >= 0.01) || lots > volumeMax) return `Volume invalide : entre 0,01 et ${volumeMax.toLocaleString('fr-FR')} lots.`;
-  if (!(prix > 0)) return 'Prix invalide.';
+  if (!(milieu > 0)) return 'Prix invalide.';
+  // Au marché, on paie le spread : achat à l'ask, vente au bid. Un ordre limite s'exécute à son prix exact.
+  const prix = options.prixExact ? milieu : coteEntree(symbole, sens, milieu);
   const lotsNet = normaliserLots(lots, volumeMax);
   const prot = options.prot ?? {};
   const erreur = verifierProtections(sens, prix, prot);
@@ -170,6 +182,7 @@ export function ouvrir(
     prixEntree: prix,
     cout: e.marge,
     ouvertLe: Date.now(),
+    swapCompteAu: Date.now(),
     stopLoss: prot.stopLoss ?? (prot.suiveur && prot.suiveur > 0 ? (sens === 'achat' ? prix - prot.suiveur : prix + prot.suiveur) : undefined),
     takeProfit: prot.takeProfit,
     suiveur: prot.suiveur && prot.suiveur > 0 ? prot.suiveur : undefined,
@@ -195,19 +208,23 @@ export function ouvrir(
 export function cloturer(
   p: Portefeuille,
   positionId: string,
-  prix: number,
+  milieu: number,
   ticks: Ticks,
-  options: { origine?: Operation['origine']; tauxCrypto?: number; quantite?: number } = {},
+  options: { origine?: Operation['origine']; tauxCrypto?: number; quantite?: number; prixExact?: boolean } = {},
 ): Portefeuille | string {
   const position = p.positions.find((x) => x.id === positionId);
   if (!position) return 'Position introuvable.';
-  if (!(prix > 0)) return 'Prix indisponible.';
+  if (!(milieu > 0)) return 'Prix indisponible.';
+  // Au marché, un long se revend au bid et un short se rachète à l'ask ; un take-profit s'exécute à son prix.
+  const prix = options.prixExact ? milieu : coteSortie(position.symbole, position.sens, milieu);
   const q = options.quantite === undefined ? position.quantite : Math.min(options.quantite, position.quantite);
   if (!(q > 0)) return 'Quantité invalide.';
   const part = q / position.quantite;
   const margePart = position.cout * part;
   const conversion = conversionUsd(position.symbole, ticks);
-  const resultat = (prix - position.prixEntree) * q * (position.sens === 'achat' ? 1 : -1) * conversion;
+  // Swap réalisé au prorata du volume fermé, le reste demeure sur la position.
+  const swapPart = Math.round((position.swap ?? 0) * part * 100) / 100;
+  const resultat = (prix - position.prixEntree) * q * (position.sens === 'achat' ? 1 : -1) * conversion + swapPart;
   const frais = q * prix * conversion * tauxFrais(position.symbole, options.tauxCrypto);
   const lotsFermes = position.lots !== undefined ? Math.round(position.lots * part * 100) / 100 : undefined;
   const operation: Operation = {
@@ -221,6 +238,7 @@ export function cloturer(
     prix,
     frais,
     resultat,
+    ...(swapPart ? { swap: swapPart } : {}),
     prixEntree: position.prixEntree,
     note: position.note,
     date: Date.now(),
@@ -232,7 +250,13 @@ export function cloturer(
     ? p.positions.filter((x) => x.id !== positionId)
     : p.positions.map((x) =>
         x.id === positionId
-          ? { ...x, quantite: reste, cout: position.cout - margePart, lots: x.lots !== undefined ? Math.round((x.lots - (lotsFermes ?? 0)) * 100) / 100 : undefined }
+          ? {
+              ...x,
+              quantite: reste,
+              cout: position.cout - margePart,
+              lots: x.lots !== undefined ? Math.round((x.lots - (lotsFermes ?? 0)) * 100) / 100 : undefined,
+              swap: x.swap !== undefined ? Math.round((x.swap - swapPart) * 100) / 100 : undefined,
+            }
           : x,
       );
   return ajouterOperation({ ...p, solde: p.solde + (totale ? position.cout : margePart) + resultat - frais, positions }, operation);
@@ -263,7 +287,8 @@ export function modifierProtections(
 ): Portefeuille | string {
   const position = p.positions.find((x) => x.id === positionId);
   if (!position) return 'Position introuvable.';
-  const reference = prixActuel ?? position.prixEntree;
+  // Le prix de référence est celui auquel la position se fermerait (bid pour un long, ask pour un short).
+  const reference = prixActuel !== undefined ? coteSortie(position.symbole, position.sens, prixActuel) : position.prixEntree;
   if (prot.stopLoss !== undefined) {
     if (position.sens === 'achat' && prot.stopLoss >= reference) return "Le stop-loss d'un long doit être sous le prix actuel.";
     if (position.sens === 'vente' && prot.stopLoss <= reference) return "Le stop-loss d'un short doit être au-dessus du prix actuel.";
@@ -308,7 +333,8 @@ export function modifierProtections(
 export function breakEven(p: Portefeuille, positionId: string, prixActuel: number): Portefeuille | string {
   const position = p.positions.find((x) => x.id === positionId);
   if (!position) return 'Position introuvable.';
-  const enGain = position.sens === 'achat' ? prixActuel > position.prixEntree : prixActuel < position.prixEntree;
+  const sortie = coteSortie(position.symbole, position.sens, prixActuel);
+  const enGain = position.sens === 'achat' ? sortie > position.prixEntree : sortie < position.prixEntree;
   if (!enGain) return "Break-even possible seulement quand la position est en gain.";
   return modifierProtections(p, positionId, { stopLoss: position.prixEntree, takeProfit: position.takeProfit, suiveur: position.suiveur, beApresPalier: position.beApresPalier }, prixActuel);
 }
@@ -397,8 +423,8 @@ export function appliquerFlux(
 ): { portefeuille: Portefeuille; messages: string[] } {
   const nom = (s: string) => instrument(s)?.code ?? s.split(':').pop();
 
-  // Ordres expirés : annulés avant tout déclenchement.
-  const expiration = expirerOrdres(p);
+  // Ordres expirés : annulés avant tout déclenchement. Swap des nuits passées facturé aux positions.
+  const expiration = expirerOrdres(appliquerSwaps(p, ticks));
   let courant = expiration.portefeuille;
   const messages: string[] = [...expiration.messages];
 
@@ -406,7 +432,8 @@ export function appliquerFlux(
     // Un ordre OCO peut avoir été annulé par son jumeau déclenché juste avant.
     if (!courant.ordres.some((x) => x.id === o.id)) continue;
     const tick = ticks[paireBinance(o.symbole)];
-    if (!tick || !ordreDeclenchable(o, tick.prix)) continue;
+    // Un achat se déclenche sur l'ask, une vente sur le bid.
+    if (!tick || !ordreDeclenchable(o, coteEntree(o.symbole, o.sens, tick.prix))) continue;
     // Les règles qui bloquent les nouvelles positions valent aussi pour les ordres en attente.
     const bloque = blocage?.(o.symbole);
     if (bloque) {
@@ -416,10 +443,10 @@ export function appliquerFlux(
       }
       continue;
     }
-    // Une limite s'exécute à son prix ; un stop au prix du marché qui l'a franchi.
-    const prixExecution = o.type === 'limite' ? o.prix : tick.prix;
+    // Une limite s'exécute à son prix ; un stop au prix du marché qui l'a franchi (spread compris).
+    const prixExecution = o.type === 'limite' ? o.prix : coteEntree(o.symbole, o.sens, tick.prix);
     const { lots, levier } = lotsOrdre(o, prixExecution);
-    const r = ouvrir(courant, o.symbole, o.sens, lots, prixExecution, ticks, { levier, prot: o, origine: o.type, tauxCrypto, volumeMax: Math.max(LOT_MAX, lots) });
+    const r = ouvrir(courant, o.symbole, o.sens, lots, prixExecution, ticks, { levier, prot: o, origine: o.type, tauxCrypto, volumeMax: Math.max(LOT_MAX, lots), prixExact: true });
     courant = annulerOrdre(typeof r === 'string' ? courant : r, o.id);
     if (o.groupeOco && typeof r !== 'string') {
       const jumeaux = courant.ordres.filter((x) => x.groupeOco === o.groupeOco);
@@ -446,11 +473,13 @@ export function appliquerFlux(
       if (!pos) break;
       const pl = pos.paliers![i]!;
       if (pl.fait) continue;
-      const atteint = pos.sens === 'achat' ? tick.prix >= pl.prix : tick.prix <= pl.prix;
+      const sortie = coteSortie(pos.symbole, pos.sens, tick.prix);
+      const atteint = pos.sens === 'achat' ? sortie >= pl.prix : sortie <= pl.prix;
       if (!atteint) continue;
       const q = Math.min(pos.quantite, pl.part * (pos.quantiteInitiale ?? pos.quantite));
-      const resultat = pnlLatent(pos, tick.prix, ticks) * (q / pos.quantite);
-      const r = cloturer(courant, id, tick.prix, ticks, { origine: 'take-profit', tauxCrypto, quantite: q });
+      // Un palier est une prise de profit à cours limité : exécuté à son prix.
+      const resultat = pnlLatent(pos, pl.prix, ticks) * (q / pos.quantite);
+      const r = cloturer(courant, id, pl.prix, ticks, { origine: 'take-profit', tauxCrypto, quantite: q, prixExact: true });
       if (typeof r === 'string') continue;
       if (!pos.paliers!.slice(0, i).some((x) => x.fait)) premierAtteint = true;
       courant = {
@@ -465,7 +494,7 @@ export function appliquerFlux(
             : x,
         ),
       };
-      messages.push(`Palier ${i + 1} ${nom(pos.symbole)} : ${Math.round(pl.part * 100)} % fermés à ${tick.prix.toLocaleString('fr-FR')} (${resultat >= 0 ? '+' : ''}${resultat.toFixed(2)} USDT)`);
+      messages.push(`Palier ${i + 1} ${nom(pos.symbole)} : ${Math.round(pl.part * 100)} % fermés à ${pl.prix.toLocaleString('fr-FR')} (${resultat >= 0 ? '+' : ''}${resultat.toFixed(2)} USDT)`);
     }
   }
 
@@ -473,7 +502,7 @@ export function appliquerFlux(
   if (courant.positions.some((x) => x.suiveur)) {
     const suivies = courant.positions.map((x) => {
       const t = ticks[paireBinance(x.symbole)];
-      return t ? suivreStop(x, t.prix) : x;
+      return t ? suivreStop(x, coteSortie(x.symbole, x.sens, t.prix)) : x;
     });
     if (suivies.some((x, i) => x !== courant.positions[i])) courant = { ...courant, positions: suivies };
   }
@@ -481,12 +510,17 @@ export function appliquerFlux(
   for (const pos of courant.positions) {
     const tick = ticks[paireBinance(pos.symbole)];
     if (!tick) continue;
-    const prix = tick.prix;
-    const touchéSL = pos.stopLoss !== undefined && (pos.sens === 'achat' ? prix <= pos.stopLoss : prix >= pos.stopLoss);
-    const touchéTP = pos.takeProfit !== undefined && (pos.sens === 'achat' ? prix >= pos.takeProfit : prix <= pos.takeProfit);
+    // Stops et cibles se jugent sur le prix de sortie : bid pour un long, ask pour un short.
+    const sortie = coteSortie(pos.symbole, pos.sens, tick.prix);
+    const touchéSL = pos.stopLoss !== undefined && (pos.sens === 'achat' ? sortie <= pos.stopLoss : sortie >= pos.stopLoss);
+    const touchéTP = pos.takeProfit !== undefined && (pos.sens === 'achat' ? sortie >= pos.takeProfit : sortie <= pos.takeProfit);
     if (!touchéSL && !touchéTP) continue;
-    const resultat = pnlLatent(pos, prix, ticks);
-    const r = cloturer(courant, pos.id, prix, ticks, { origine: touchéSL ? 'stop-loss' : 'take-profit', tauxCrypto });
+    // Le stop part au marché (glissement possible au-delà du stop) ; le take-profit s'exécute à son prix.
+    const prix = touchéSL ? sortie : pos.takeProfit!;
+    const resultat = pnlLatent(pos, prix, ticks) + (pos.swap ?? 0);
+    const r = touchéSL
+      ? cloturer(courant, pos.id, tick.prix, ticks, { origine: 'stop-loss', tauxCrypto })
+      : cloturer(courant, pos.id, prix, ticks, { origine: 'take-profit', tauxCrypto, prixExact: true });
     if (typeof r === 'string') continue;
     courant = r;
     messages.push(

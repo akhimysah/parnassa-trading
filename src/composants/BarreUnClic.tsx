@@ -5,8 +5,9 @@ import { jouer } from '../sons';
 import type { Tick } from '../binance';
 import { estBinance, useFluxBinance } from '../binance';
 import { cleCotation, estNegociable, formaterCotation, instrument, LOT_MAX, normaliserLots, symbolesConversion, useCotationsScanner } from '../instruments';
-import { formaterLots, formaterUsdt, lotsParRisque, ouvrir, pnlLatent, TAUX_FRAIS, valeurPortefeuille } from '../trading';
+import { formaterLots, formaterUsdt, lotsParRisque, ouvrir, pnlMarche, TAUX_FRAIS, valeurPortefeuille } from '../trading';
 import { controleRisqueTrade } from '../discipline';
+import { coteEntree, fourchette } from '../couts';
 import { annonceBloquante, devisesInstrument, reglesCompletes } from '../challenge';
 import { useCalendrier } from '../actualites';
 import { cloturerPositions, controleOuverture } from '../ordre';
@@ -45,7 +46,7 @@ export function BarreUnClic({ etat, symbole, ticks, maj, lecture, signaler, chan
   const p = etat.portefeuille;
   const positions = p.positions.filter((x) => x.symbole === symbole);
   const net = positions.reduce((s, x) => s + (x.lots ?? 0) * (x.sens === 'achat' ? 1 : -1), 0);
-  const latent = prix ? positions.reduce((s, x) => s + pnlLatent(x, prix, tous), 0) : 0;
+  const latent = prix ? positions.reduce((s, x) => s + pnlMarche(x, prix, tous), 0) : 0;
 
   const fixer = (lots: number) => {
     const n = normaliserLots(lots, volumeMax);
@@ -58,6 +59,7 @@ export function BarreUnClic({ etat, symbole, ticks, maj, lecture, signaler, chan
   const modeRisque = Boolean(reglage.modeRisque);
   const risquePct = reglage.risquePct ?? 1;
   const distanceSl = reglage.protections?.actif ? reglage.protections.sl : undefined;
+  const cours = prix ? fourchette(symbole, prix) : null;
   const fondsPropres = useMemo(() => valeurPortefeuille(p, tous).capital, [p, tous]);
   const montantRisque = (fondsPropres * risquePct) / 100;
   const lotsRisque = prix && distanceSl ? lotsParRisque(montantRisque, prix, prix - distanceSl, symbole, tous) : null;
@@ -83,7 +85,7 @@ export function BarreUnClic({ etat, symbole, ticks, maj, lecture, signaler, chan
       setErreur(probleme);
       return;
     }
-    const r = ouvrir(p, symbole, sens, lots, prix, tous, { levier: etat.parametres.levier, prot: protectionsPour(sens, prix), origine: 'marche', tauxCrypto: etat.parametres.frais ?? TAUX_FRAIS, volumeMax });
+    const r = ouvrir(p, symbole, sens, lots, prix, tous, { levier: etat.parametres.levier, prot: protectionsPour(sens, coteEntree(symbole, sens, prix)), origine: 'marche', tauxCrypto: etat.parametres.frais ?? TAUX_FRAIS, volumeMax });
     if (typeof r === 'string') {
       setErreur(r);
       return;
@@ -129,7 +131,7 @@ export function BarreUnClic({ etat, symbole, ticks, maj, lecture, signaler, chan
     const fermeture = cloturerPositions(p, tous, etat.parametres.frais ?? TAUX_FRAIS, (x) => x.symbole === symbole);
     const r = ouvrir(fermeture.portefeuille, symbole, sens, volume, prix, tous, {
       levier: etat.parametres.levier,
-      prot: protectionsPour(sens, prix),
+      prot: protectionsPour(sens, coteEntree(symbole, sens, prix)),
       origine: 'marche',
       tauxCrypto: etat.parametres.frais ?? TAUX_FRAIS,
       volumeMax: Math.max(volumeMax, volume),
@@ -207,8 +209,13 @@ export function BarreUnClic({ etat, symbole, ticks, maj, lecture, signaler, chan
         <>
           <button className="uc-vente" disabled={!prix || lecture} onClick={() => passer('vente')} title="Vendre au marché (Maj+S) · Maj+X ferme l’instrument · Maj+R inverse">
             <span>Vendre</span>
-            <strong>{prix ? formaterCotation(symbole, prix) : '…'}</strong>
+            <strong>{cours ? formaterCotation(symbole, cours.bid) : '…'}</strong>
           </button>
+          {cours && (
+            <span className="uc-spread" title="Spread simulé, en points : écart entre le prix acheteur et le prix vendeur, payé à chaque ouverture">
+              {info ? Math.max(1, Math.round(cours.spread * 10 ** info.decimales)).toLocaleString('fr-FR') : formaterCotation(symbole, cours.spread)}
+            </span>
+          )}
           {modeRisque ? (
             <div className="uc-volume uc-risque" title={distanceSl ? `Stop à ${distanceSl} du prix : ${lotsRisqueBornes ?? '—'} lots pour risquer ${formaterUsdt(montantRisque)}` : 'Réglez une distance de stop-loss dans 🛡'}>
               <input
@@ -257,7 +264,7 @@ export function BarreUnClic({ etat, symbole, ticks, maj, lecture, signaler, chan
           </button>
           <button className="uc-achat" disabled={!prix || lecture} onClick={() => passer('achat')} title="Acheter au marché (Maj+B)">
             <span>Acheter</span>
-            <strong>{prix ? formaterCotation(symbole, prix) : '…'}</strong>
+            <strong>{cours ? formaterCotation(symbole, cours.ask) : '…'}</strong>
           </button>
           {positions.length > 0 && (
             <div className="uc-position">

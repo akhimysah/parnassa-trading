@@ -2,7 +2,7 @@ import type { Position } from '../types';
 import type { Tick } from '../binance';
 import { paireBinance } from '../binance';
 import { formaterCotation } from '../instruments';
-import { formaterLots, formaterUsdt, pnlLatent } from '../trading';
+import { formaterLots, formaterUsdt, pnlMarche } from '../trading';
 import { nomSymbole, ticker } from '../symboles';
 
 interface Groupe {
@@ -33,7 +33,7 @@ export function grouperPositions(positions: Position[], ticks: Record<string, Ti
       g.vS += pos.quantite * pos.prixEntree;
     }
     const prix = ticks[paireBinance(pos.symbole)]?.prix;
-    if (prix) g.pnl += pnlLatent(pos, prix, ticks);
+    if (prix) g.pnl += pnlMarche(pos, prix, ticks);
     else g.cote = false;
     m.set(pos.symbole, g);
   }

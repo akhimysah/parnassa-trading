@@ -2,6 +2,11 @@ import { test } from 'node:test';
 import { ok } from './outils';
 import { controleRisqueTrade, perteAuStop } from '../src/discipline';
 import { modifierProtections, ouvrir, placerOrdre, reinitialiser } from '../src/trading';
+import { COUTS } from '../src/couts';
+
+// Logique pure, sur des prix exacts : sans spread ni swap (testés à part dans couts.test.ts).
+COUTS.spread = false;
+COUTS.swap = false;
 
 const tick = (prix: number) => ({ prix, variation: 0, variationPct: 0, haut: prix, bas: prix, volume: 0 }) as any;
 
