@@ -1,11 +1,14 @@
 import { useState } from 'react';
 import type { Etat, ReglesDiscipline } from '../types';
-import { blocageDiscipline, DISCIPLINE_DEFAUT, mesurerJournee } from '../discipline';
+import { blocageDiscipline, DISCIPLINE_DEFAUT, finDuBlocage, mesurerJournee, mesurerMois } from '../discipline';
+import { Jauge } from './Jauge';
 import { formaterUsdt } from '../trading';
 
 interface Props {
   etat: Etat;
   capital: number;
+  /** Balance : fonds propres sans le P&L latent (solde + marges). */
+  balance: number;
   maj: (p: Partial<Etat>) => void;
 }
 
@@ -15,11 +18,12 @@ const nombre = (t: string): number | undefined => {
 };
 
 /** Garde-fous personnels de la journée : perte max, objectif, nombre de trades ; blocage jusqu'au lendemain. */
-export function PanneauDiscipline({ etat, capital, maj }: Props) {
+export function PanneauDiscipline({ etat, capital, balance, maj }: Props) {
   const regles = etat.parametres.discipline ?? DISCIPLINE_DEFAUT;
   const [reglage, setReglage] = useState(false);
   const p = etat.portefeuille;
   const m = mesurerJournee(p, capital);
+  const mois = mesurerMois(p, capital, balance);
   const bloque = blocageDiscipline(p, regles);
   const changer = (modif: Partial<ReglesDiscipline>) => maj({ parametres: { ...etat.parametres, discipline: { ...regles, ...modif } } });
   const pct = (v: number) => `${v.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} %`;
@@ -63,7 +67,7 @@ export function PanneauDiscipline({ etat, capital, maj }: Props) {
 
       {bloque && (
         <p className="pd-bloque" role="alert">
-          ⛔ {bloque} Nouveaux ordres bloqués jusqu'à demain.
+          ⛔ {bloque} Nouveaux ordres bloqués {finDuBlocage(p)}.
         </p>
       )}
 
@@ -92,7 +96,33 @@ export function PanneauDiscipline({ etat, capital, maj }: Props) {
             </div>
           </div>
         )}
+        {regles.perteMoisPct ? (
+          <Jauge
+            libelle={`Perte max du mois (${pct(regles.perteMoisPct)})`}
+            valeur={Math.max(0, -mois.variation)}
+            max={(mois.capitalDebut * regles.perteMoisPct) / 100}
+            texte={`reste ${formaterUsdt(Math.max(0, (mois.capitalDebut * regles.perteMoisPct) / 100 + Math.min(0, mois.variation)))}`}
+            sens="limite"
+          />
+        ) : null}
+        {regles.objectifMoisPct ? (
+          <Jauge
+            libelle={`Objectif du mois (+${pct(regles.objectifMoisPct)})`}
+            valeur={mois.variation}
+            max={(mois.capitalDebut * regles.objectifMoisPct) / 100}
+            texte={`${formaterUsdt(Math.max(0, mois.variation))} / ${formaterUsdt((mois.capitalDebut * regles.objectifMoisPct) / 100)}`}
+            sens="objectif"
+          />
+        ) : null}
       </div>
+      <p className="pd-mois muet">
+        Ce mois-ci :{' '}
+        <span className={mois.variation >= 0 ? 'hausse' : 'baisse'}>
+          {formaterUsdt(mois.variation, true)} ({mois.pct >= 0 ? '+' : ''}
+          {pct(mois.pct)})
+        </span>{' '}
+        · {mois.joursGagnants} jour{mois.joursGagnants > 1 ? 's' : ''} gagnant{mois.joursGagnants > 1 ? 's' : ''}, {mois.joursPerdants} perdant{mois.joursPerdants > 1 ? 's' : ''}
+      </p>
 
       {reglage && (
         <div className="pd-reglage">
@@ -107,6 +137,14 @@ export function PanneauDiscipline({ etat, capital, maj }: Props) {
           <label>
             <span className="muet">Trades max / jour</span>
             <input inputMode="numeric" defaultValue={regles.tradesMax ?? ''} placeholder="illimité" onBlur={(e) => changer({ tradesMax: nombre(e.target.value) ? Math.round(nombre(e.target.value)!) : undefined })} />
+          </label>
+          <label>
+            <span className="muet">Perte max / mois (%)</span>
+            <input inputMode="decimal" defaultValue={regles.perteMoisPct ?? ''} placeholder="aucune" onBlur={(e) => changer({ perteMoisPct: nombre(e.target.value) })} />
+          </label>
+          <label>
+            <span className="muet">Objectif / mois (%)</span>
+            <input inputMode="decimal" defaultValue={regles.objectifMoisPct ?? ''} placeholder="aucun" onBlur={(e) => changer({ objectifMoisPct: nombre(e.target.value) })} />
           </label>
           <label className="case">
             <input type="checkbox" checked={regles.fermerAuto} onChange={(e) => changer({ fermerAuto: e.target.checked })} />
@@ -124,7 +162,7 @@ export function PanneauDiscipline({ etat, capital, maj }: Props) {
           >
             Désactiver
           </button>
-          <span className="muet petit">Les limites se comptent depuis les fonds propres du début de journée, ou de l'activation si elle a eu lieu dans la journée ({formaterUsdt(m.capitalDebut)}). Un blocage dure jusqu'au lendemain.</span>
+          <span className="muet petit">Les limites se comptent depuis les fonds propres du début de journée, ou de l'activation si elle a eu lieu dans la journée ({formaterUsdt(m.capitalDebut)}). Un blocage dure jusqu'au lendemain ; celui de la perte du mois, jusqu'au 1er du mois suivant. Le mois se compte depuis les opérations du mois (réalisé + P&L latent).</span>
         </div>
       )}
     </div>

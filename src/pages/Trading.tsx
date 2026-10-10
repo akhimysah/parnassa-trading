@@ -38,7 +38,7 @@ import { annonceBloquante, devisesInstrument, formuleSuivante, reglesCompletes }
 import { useCalendrier } from '../actualites';
 import { ouvrirCompte, type Acces } from '../comptes';
 import { cloturerPositions } from '../ordre';
-import { blocageDiscipline } from '../discipline';
+import { blocageDiscipline, finDuBlocage } from '../discipline';
 import { fermeAuWeekend, regleWeekendActive, reouverture } from '../weekend';
 import { PanneauDiscipline } from '../composants/PanneauDiscipline';
 import { nomSymbole, ticker } from '../symboles';
@@ -274,7 +274,7 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
     }
     const discipline = blocageDiscipline(p, etat.parametres.discipline);
     if (discipline) {
-      setErreur(`Discipline du jour : ${discipline} Nouveaux ordres bloqués jusqu'à demain.`);
+      setErreur(`Discipline du jour : ${discipline} Nouveaux ordres bloqués ${finDuBlocage(p)}.`);
       return;
     }
     if (etat.challenge && etat.challenge.statut !== 'en-cours') {
@@ -441,7 +441,7 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
         accesInitial={accesPhase}
       />
       <PanneauChallenge etat={etat} capital={capital} marges={immobilise} maj={maj} compte={session?.compte ?? null} ouvrirPhaseSuivante={() => void ouvrirPhaseSuivante()} />
-      <PanneauDiscipline etat={etat} capital={capital} maj={maj} />
+      <PanneauDiscipline etat={etat} capital={capital} balance={etat.portefeuille.solde + immobilise} maj={maj} />
       {p.crameLe ? (
         <div className="bandeau-crame" role="alert">
           <strong>🔥 Compte cramé</strong>

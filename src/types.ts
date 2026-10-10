@@ -223,7 +223,7 @@ export interface Portefeuille {
   ordres: OrdreEnAttente[];
   historiqueCapital: PointCapital[];
   /** Discipline du jour : fonds propres au début de la journée et blocage éventuel jusqu'au lendemain. */
-  journee?: { date: string; capitalDebut: number; bloque?: { raison: string; depuis: number } };
+  journee?: { date: string; capitalDebut: number; bloque?: { raison: string; depuis: number; /** Limite du mois : bloqué jusqu'au mois suivant. */ mois?: boolean } };
   /** Opérations anciennes résumées pour garder l'état léger : nombre, résultat et frais cumulés. */
   archive?: { operations: number; clotures: number; resultat: number; frais: number; jusquAu: number };
   /** Compte « cramé » : 99 % du capital de départ perdu. Positions fermées, plus aucun ordre jusqu'à la remise à zéro. */
@@ -267,6 +267,10 @@ export interface ReglesDiscipline {
   objectifJourPct?: number;
   /** Nombre maximal de positions ouvertes dans la journée. */
   tradesMax?: number;
+  /** Perte du mois (en % des fonds propres du début du mois) qui arrête le trading jusqu'au mois suivant. */
+  perteMoisPct?: number;
+  /** Gain visé sur le mois (en %), suivi sans blocage. */
+  objectifMoisPct?: number;
   /** Fermer les positions quand la perte ou l'objectif du jour est atteint. */
   fermerAuto: boolean;
   /** Fermer les positions hors crypto avant le week-end et bloquer les ouvertures jusqu'au dimanche soir. */

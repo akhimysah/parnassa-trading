@@ -4317,6 +4317,11 @@ th.trie {
 .pd-jauges:empty {
   display: none;
 }
+.pd-mois {
+  margin: 0;
+  padding: 0 14px 12px;
+  font-size: 12px;
+}
 .pd-reglage {
   display: flex;
   flex-wrap: wrap;

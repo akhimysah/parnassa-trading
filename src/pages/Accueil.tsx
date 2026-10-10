@@ -20,7 +20,7 @@ import {
 import { nomSymbole, ticker } from '../symboles';
 import { formaterUsdt, PERTE_CRAME, pnlLatent, valeurPortefeuille } from '../trading';
 import { mesurer, reglesCompletes } from '../challenge';
-import { blocageDiscipline, mesurerJournee } from '../discipline';
+import { blocageDiscipline, mesurerJournee, mesurerMois } from '../discipline';
 import type { CompteDistant } from '../compteLocal';
 import { Jauge } from '../composants/Jauge';
 import { MiniCourbe } from '../composants/MiniCourbe';
@@ -86,6 +86,7 @@ export function Accueil({ etat, fil, ticks, maj, compte, lecture, aller, ouvrirS
   const { capital, latent, immobilise } = valeurPortefeuille(p, ticks);
   const perf = ((capital - p.capitalInitial) / p.capitalInitial) * 100;
   const journee = mesurerJournee(p, capital);
+  const mois = mesurerMois(p, capital, p.solde + immobilise);
   const regles = etat.parametres.discipline;
   const blocage = blocageDiscipline(p, regles);
   const ch = etat.challenge?.statut === 'en-cours' ? etat.challenge : null;
@@ -244,6 +245,14 @@ export function Accueil({ etat, fil, ticks, maj, compte, lecture, aller, ouvrirS
               · {journee.trades} trade{journee.trades > 1 ? 's' : ''}
             </span>
             <span className="muet">
+              Ce mois{' '}
+              <span className={mois.variation >= 0 ? 'hausse' : 'baisse'}>
+                {formaterUsdt(mois.variation, true)} ({mois.pct >= 0 ? '+' : ''}
+                {mois.pct.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} %)
+              </span>{' '}
+              · {mois.joursGagnants} j gagnant{mois.joursGagnants > 1 ? 's' : ''} / {mois.joursPerdants} perdant{mois.joursPerdants > 1 ? 's' : ''}
+            </span>
+            <span className="muet">
               P&amp;L latent <span className={latent >= 0 ? 'hausse' : 'baisse'}>{formaterUsdt(latent, true)}</span> · {p.positions.length} position
               {p.positions.length > 1 ? 's' : ''} · {p.ordres.length} ordre{p.ordres.length > 1 ? 's' : ''}
             </span>
@@ -255,10 +264,11 @@ export function Accueil({ etat, fil, ticks, maj, compte, lecture, aller, ouvrirS
           ) : regles?.actif ? (
             <p className="accueil-etat muet">
               🧘 Discipline active{regles.perteJourPct ? ` · perte max ${regles.perteJourPct} %/jour` : ''}
+              {regles.perteMoisPct ? ` · ${regles.perteMoisPct} %/mois` : ''}
               {regles.tradesMax ? ` · ${journee.trades}/${regles.tradesMax} trades` : ''}
             </p>
           ) : null}
-          {(ch && mesures) || (!p.crameLe && perteCrame >= limiteCrame / 2) ? (
+          {(ch && mesures) || (regles?.actif && regles.objectifMoisPct) || (!p.crameLe && perteCrame >= limiteCrame / 2) ? (
             <div className="accueil-jauges">
               {ch && mesures && (
                 <>
@@ -273,6 +283,15 @@ export function Accueil({ etat, fil, ticks, maj, compte, lecture, aller, ouvrirS
                   <Jauge libelle="Perte maximale" valeur={mesures.perteTotale} max={mesures.limiteTotale} texte={`${formaterUsdt(mesures.perteTotale)} / ${formaterUsdt(mesures.limiteTotale)}`} sens="limite" />
                 </>
               )}
+              {regles?.actif && regles.objectifMoisPct ? (
+                <Jauge
+                  libelle={`Objectif du mois +${regles.objectifMoisPct} %`}
+                  valeur={mois.variation}
+                  max={(mois.capitalDebut * regles.objectifMoisPct) / 100}
+                  texte={`${formaterUsdt(Math.max(0, mois.variation))} / ${formaterUsdt((mois.capitalDebut * regles.objectifMoisPct) / 100)}`}
+                  sens="objectif"
+                />
+              ) : null}
               {!p.crameLe && perteCrame >= limiteCrame / 2 && (
                 <Jauge libelle="Règle des 99 %" valeur={perteCrame} max={limiteCrame} texte={`${formaterUsdt(perteCrame)} / ${formaterUsdt(limiteCrame)}`} sens="limite" />
               )}

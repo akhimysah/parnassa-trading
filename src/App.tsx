@@ -301,7 +301,8 @@ export function App() {
 
       // Discipline du jour : perte max, objectif et nombre de trades, pour tout compte.
       if (e.parametres.discipline?.actif && toutesCotees) {
-        const d = evaluerDiscipline(portefeuille, capital, e.parametres.discipline);
+        const v = valeurPortefeuille(portefeuille, ticks);
+        const d = evaluerDiscipline(portefeuille, capital, e.parametres.discipline, Date.now(), portefeuille.solde + v.immobilise);
         portefeuille = d.portefeuille;
         // Journée bloquée : les ordres en attente sont annulés (aucune nouvelle position jusqu'à demain).
         if (d.message && portefeuille.ordres.length) portefeuille = { ...portefeuille, ordres: [] };
