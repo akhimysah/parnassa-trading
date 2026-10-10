@@ -5,6 +5,7 @@ import { LOT_MIN, estNegociable } from './instruments';
 import { cloturer, pnlMarche } from './trading';
 import { blocageDiscipline, finDuBlocage, pauseApresPerte } from './discipline';
 import { planManquant } from './plan';
+import { marcheFerme } from './horaires';
 import { fermeAuWeekend, regleWeekendActive, reouverture } from './weekend';
 
 type Ticks = Record<string, Tick>;
@@ -23,6 +24,8 @@ export function controleOuverture(o: {
   if (o.lecture) return 'Accès investisseur : lecture seule, aucun ordre possible.';
   if (!estNegociable(o.symbole)) return 'Cet instrument ne se trade pas ici : choisissez-en un de la liste des instruments.';
   if (!o.prix) return 'Prix en direct indisponible pour cet instrument, patientez une seconde.';
+  const ferme = marcheFerme(o.symbole);
+  if (ferme) return ferme;
   if (regleWeekendActive(o.etat) && fermeAuWeekend(o.symbole)) return `Marché fermé le week-end : réouverture ${reouverture()} (la crypto reste ouverte).`;
   const discipline = blocageDiscipline(o.etat.portefeuille, o.etat.parametres.discipline);
   if (discipline) return `Discipline du jour : ${discipline} Nouveaux ordres bloqués ${finDuBlocage(o.etat.portefeuille)}.`;

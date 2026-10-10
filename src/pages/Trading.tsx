@@ -1,5 +1,5 @@
 import { Fragment, lazy, Suspense, useMemo, useState } from 'react';
-import type { Etat, Sens } from '../types';
+import type { Etat, Position, Sens } from '../types';
 import type { Tick } from '../binance';
 import { estBinance, paireBinance, useFluxBinance } from '../binance';
 import {
@@ -27,7 +27,9 @@ import { VitrineTrophees } from '../composants/VitrineTrophees';
 import { AnalyseAvancee } from '../composants/AnalyseAvancee';
 import { ProjectionMonteCarlo } from '../composants/ProjectionMonteCarlo';
 import { RisqueExposition } from '../composants/RisqueExposition';
-import { categorieDe, coteEntree, fourchette, SWAP_ANNUEL_PCT } from '../couts';
+import { marcheFerme } from '../horaires';
+import { StatutMarche } from '../composants/StatutMarche';
+import { categorieDe, coteEntree, fourchette, LEVIER_MAX, levierEffectif, SWAP_ANNUEL_PCT } from '../couts';
 import { BandeauNewsPositions } from '../composants/BandeauNewsPositions';
 import { annoncesSurPositions } from '../newsPositions';
 import { CoachTrading } from '../composants/CoachTrading';
@@ -257,6 +259,11 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
       setErreur('Prix en direct indisponible pour cette paire, patientez une seconde.');
       return;
     }
+    const ferme = marcheFerme(id);
+    if (ferme) {
+      setErreur(ferme);
+      return;
+    }
     if (regleWeekendActive(etat) && fermeAuWeekend(id)) {
       setErreur(`Marché fermé le week-end : réouverture ${reouverture()} (la crypto reste ouverte).`);
       return;
@@ -340,6 +347,11 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
       setErreur('Prix en direct indisponible, impossible de clôturer pour le moment.');
       return;
     }
+    const ferme = marcheFerme(position!.symbole);
+    if (ferme) {
+      setErreur(`${ferme} Vous pourrez la fermer à la réouverture ; ses stops attendent aussi.`);
+      return;
+    }
     appliquer(cloturer(p, positionId, prixActuel, ticks, { tauxCrypto: TAUX_FRAIS, quantite }));
     setClotureEnCours(null);
     setQuantiteCloture('');
@@ -389,13 +401,22 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
 
   /** Fermeture groupée : toutes les positions, seulement les gagnantes ou seulement les perdantes. */
   const fermerGroupe = (quoi: 'tout' | 'gagnantes' | 'perdantes') => {
-    const r = cloturerPositions(p, ticks, TAUX_FRAIS, (_pos, pnl) => quoi === 'tout' || (quoi === 'gagnantes' ? pnl > 0 : pnl < 0));
+    const retenue = (pos: Position, pnl: number) => quoi === 'tout' || (quoi === 'gagnantes' ? pnl > 0 : pnl < 0);
+    // Marché fermé : ces positions restent ouvertes jusqu'à la réouverture.
+    const enAttente = p.positions.filter((x) => marcheFerme(x.symbole) !== null).length;
+    const r = cloturerPositions(p, ticks, TAUX_FRAIS, (pos, pnl) => retenue(pos, pnl) && marcheFerme(pos.symbole) === null);
     if (r.fermees === 0) {
-      setErreur(quoi === 'tout' ? 'Aucune position à fermer (prix indisponibles).' : `Aucune position ${quoi === 'gagnantes' ? 'gagnante' : 'perdante'} en ce moment.`);
+      setErreur(
+        enAttente
+          ? `Marché fermé pour ${enAttente} position${enAttente > 1 ? 's' : ''} : rien à fermer pour le moment.`
+          : quoi === 'tout'
+            ? 'Aucune position à fermer (prix indisponibles).'
+            : `Aucune position ${quoi === 'gagnantes' ? 'gagnante' : 'perdante'} en ce moment.`,
+      );
       return;
     }
     maj({ portefeuille: r.portefeuille });
-    signaler(`${r.fermees} position${r.fermees > 1 ? 's' : ''} fermée${r.fermees > 1 ? 's' : ''} : ${formaterUsdt(r.resultat, true)}`);
+    signaler(`${r.fermees} position${r.fermees > 1 ? 's' : ''} fermée${r.fermees > 1 ? 's' : ''} : ${formaterUsdt(r.resultat, true)}${enAttente ? ` · ${enAttente} sur un marché fermé, gardée${enAttente > 1 ? 's' : ''}` : ''}`);
   };
 
   const [editionProtections, setEditionProtections] = useState<string | null>(null);
@@ -548,6 +569,7 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
           <label>
             Paire
             <SelecteurInstrument valeur={symbole} onChange={setSymbole} ticks={ticksSelecteur} />
+            <StatutMarche symbole={symbole} />
             {infoInstrument && infoInstrument.differe > 0 && (
               <span className="aide">Cotation gratuite différée d'environ {infoInstrument.differe} min : les ordres s'exécutent à ce prix.</span>
             )}
@@ -719,7 +741,10 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
               <dd>{calcul ? formaterUsdt(calcul.notionnel) : '…'}</dd>
             </div>
             <div>
-              <dt>Marge requise (1:{levier})</dt>
+              <dt title={levierEffectif(symbole, levier) < levier ? `Levier plafonné à 1:${LEVIER_MAX[categorieDe(symbole)]} pour cette catégorie d'instruments` : undefined}>
+                Marge requise (1:{levierEffectif(symbole, levier)}
+                {levierEffectif(symbole, levier) < levier ? ' max' : ''})
+              </dt>
               <dd className={calcul && calcul.marge + calcul.frais > p.solde ? 'baisse' : ''}>{calcul ? formaterUsdt(calcul.marge) : '…'}</dd>
             </div>
             {pas && valeurPas !== null && (
@@ -865,6 +890,8 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
                   ticks={ticks}
                   ouvrirSymbole={ouvrirSymbole}
                   fermerSymbole={(sym) => {
+                    const ferme = marcheFerme(sym);
+                    if (ferme) return setErreur(ferme);
                     const r = cloturerPositions(p, ticks, TAUX_FRAIS, (x) => x.symbole === sym);
                     if (r.fermees === 0) return setErreur('Prix indisponible pour cet instrument.');
                     maj({ portefeuille: r.portefeuille });
@@ -904,6 +931,12 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
                           <tr className={enCloture ? 'selectionnee' : ''}>
                             <td onClick={() => ouvrirSymbole(pos.symbole)}>
                               <strong>{ticker(pos.symbole)}</strong> <span className="muet">{nomSymbole(pos.symbole)}</span>
+                              {marcheFerme(pos.symbole) && (
+                                <>
+                                  {' '}
+                                  <StatutMarche symbole={pos.symbole} compact />
+                                </>
+                              )}
                             </td>
                             <td className={pos.sens === 'achat' ? 'hausse' : 'baisse'}>{pos.sens === 'achat' ? 'Long' : 'Short'}</td>
                             <td className="num">

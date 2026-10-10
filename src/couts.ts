@@ -30,6 +30,22 @@ export const SWAP_ANNUEL_PCT: Record<CategorieInstrument, { achat: number; vente
   crypto: { achat: 15, vente: 15 },
 };
 
+/** Levier maximal par catégorie, comme chez les prop firms : le levier choisi est plafonné instrument par instrument. */
+export const LEVIER_MAX: Record<CategorieInstrument, number> = {
+  forex: 100,
+  metaux: 50,
+  indices: 50,
+  energie: 30,
+  'actions-us': 20,
+  'actions-fr': 20,
+  crypto: 10,
+};
+
+/** Levier appliqué à un instrument : celui du compte, plafonné au maximum de sa catégorie. */
+export function levierEffectif(symbole: string, levier: number): number {
+  return Math.max(1, Math.min(levier, LEVIER_MAX[categorieDe(symbole)]));
+}
+
 /** Coûts simulés actifs (les tests de logique pure les coupent pour raisonner sur des prix exacts). */
 export const COUTS = { spread: true, swap: true };
 

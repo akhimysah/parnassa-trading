@@ -2,7 +2,7 @@ import type { Operation, OrdreEnAttente, Palier, Portefeuille, Position, Sens } 
 import type { Tick } from './binance';
 import { paireBinance } from './binance';
 import { conversionUsd, instrument, LOT_MAX, normaliserLots, tailleContrat } from './instruments';
-import { appliquerSwaps, coteEntree, coteSortie } from './couts';
+import { appliquerSwaps, coteEntree, coteSortie, levierEffectif } from './couts';
 
 /** Frais par défaut sur la crypto (0,1 % du notionnel, tarif spot standard de Binance). */
 export const TAUX_FRAIS = 0.001;
@@ -138,7 +138,8 @@ export interface Engagement {
 export function engagement(symbole: string, lots: number, prix: number, levier: number, ticks: Ticks, tauxCrypto = TAUX_FRAIS): Engagement {
   const unites = lots * tailleContrat(symbole);
   const notionnel = unites * prix * conversionUsd(symbole, ticks);
-  return { unites, notionnel, marge: notionnel / Math.max(1, levier), frais: notionnel * tauxFrais(symbole, tauxCrypto) };
+  // Le levier est plafonné par catégorie (forex 1:100, indices 1:50, crypto 1:10…).
+  return { unites, notionnel, marge: notionnel / levierEffectif(symbole, levier), frais: notionnel * tauxFrais(symbole, tauxCrypto) };
 }
 
 /** Volume maximal (lots) que permet la marge libre. */
@@ -178,7 +179,7 @@ export function ouvrir(
     sens,
     quantite: e.unites,
     lots: lotsNet,
-    levier: options.levier,
+    levier: levierEffectif(symbole, options.levier),
     prixEntree: prix,
     cout: e.marge,
     ouvertLe: Date.now(),
@@ -420,6 +421,8 @@ export function appliquerFlux(
   ticks: Ticks,
   tauxCrypto = TAUX_FRAIS,
   blocage?: BlocageOrdre,
+  /** Marché ouvert pour cet instrument ? Fermé : ordres, paliers, stops et cibles attendent la réouverture. */
+  ouvert: (symbole: string) => boolean = () => true,
 ): { portefeuille: Portefeuille; messages: string[] } {
   const nom = (s: string) => instrument(s)?.code ?? s.split(':').pop();
 
@@ -433,7 +436,7 @@ export function appliquerFlux(
     if (!courant.ordres.some((x) => x.id === o.id)) continue;
     const tick = ticks[paireBinance(o.symbole)];
     // Un achat se déclenche sur l'ask, une vente sur le bid.
-    if (!tick || !ordreDeclenchable(o, coteEntree(o.symbole, o.sens, tick.prix))) continue;
+    if (!tick || !ouvert(o.symbole) || !ordreDeclenchable(o, coteEntree(o.symbole, o.sens, tick.prix))) continue;
     // Les règles qui bloquent les nouvelles positions valent aussi pour les ordres en attente.
     const bloque = blocage?.(o.symbole);
     if (bloque) {
@@ -466,7 +469,7 @@ export function appliquerFlux(
   for (const id of courant.positions.filter((x) => x.paliers?.some((pl) => !pl.fait)).map((x) => x.id)) {
     const pos0 = courant.positions.find((x) => x.id === id);
     const tick = pos0 && ticks[paireBinance(pos0.symbole)];
-    if (!pos0 || !tick) continue;
+    if (!pos0 || !tick || !ouvert(pos0.symbole)) continue;
     let premierAtteint = false;
     for (let i = 0; i < (pos0.paliers?.length ?? 0); i++) {
       const pos = courant.positions.find((x) => x.id === id);
@@ -502,14 +505,14 @@ export function appliquerFlux(
   if (courant.positions.some((x) => x.suiveur)) {
     const suivies = courant.positions.map((x) => {
       const t = ticks[paireBinance(x.symbole)];
-      return t ? suivreStop(x, coteSortie(x.symbole, x.sens, t.prix)) : x;
+      return t && ouvert(x.symbole) ? suivreStop(x, coteSortie(x.symbole, x.sens, t.prix)) : x;
     });
     if (suivies.some((x, i) => x !== courant.positions[i])) courant = { ...courant, positions: suivies };
   }
 
   for (const pos of courant.positions) {
     const tick = ticks[paireBinance(pos.symbole)];
-    if (!tick) continue;
+    if (!tick || !ouvert(pos.symbole)) continue;
     // Stops et cibles se jugent sur le prix de sortie : bid pour un long, ask pour un short.
     const sortie = coteSortie(pos.symbole, pos.sens, tick.prix);
     const touchéSL = pos.stopLoss !== undefined && (pos.sens === 'achat' ? sortie <= pos.stopLoss : sortie >= pos.stopLoss);

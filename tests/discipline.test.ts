@@ -30,5 +30,5 @@ test('Discipline du jour', () => {
   d = evaluerDiscipline(avecTrades, 100000, regles);
   ok(Boolean(d.message?.includes('3 trades')) && d.fermerTout === false, '3 trades sur 3 : nouvelles positions bloquées, sans fermer');
   const etat = { portefeuille: bloque, challenge: null, parametres: { discipline: regles } } as any;
-  ok(controleOuverture({ etat, symbole: 'OANDA:XAUUSD', prix: 4100, lots: 1, volumeMax: 500, lecture: false })?.startsWith('Discipline du jour') === true, 'le trading en un clic refuse aussi');
+  ok(controleOuverture({ etat, symbole: 'BINANCE:BTCUSDT', prix: 80000, lots: 1, volumeMax: 500, lecture: false })?.startsWith('Discipline du jour') === true, 'le trading en un clic refuse aussi');
 });

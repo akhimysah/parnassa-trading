@@ -8,6 +8,8 @@ import { cleCotation, estNegociable, formaterCotation, instrument, LOT_MAX, norm
 import { formaterLots, formaterUsdt, lotsParRisque, ouvrir, pnlMarche, TAUX_FRAIS, valeurPortefeuille } from '../trading';
 import { controleRisqueTrade } from '../discipline';
 import { coteEntree, fourchette } from '../couts';
+import { etatMarche, marcheFerme } from '../horaires';
+import { StatutMarche } from './StatutMarche';
 import { annonceBloquante, devisesInstrument, reglesCompletes } from '../challenge';
 import { useCalendrier } from '../actualites';
 import { cloturerPositions, controleOuverture } from '../ordre';
@@ -154,6 +156,8 @@ export function BarreUnClic({ etat, symbole, ticks, maj, lecture, signaler, chan
 
   const fermer = () => {
     if (lecture) return setErreur('Accès investisseur : lecture seule.');
+    const ferme = marcheFerme(symbole);
+    if (ferme) return setErreur(ferme);
     const r = cloturerPositions(p, tous, etat.parametres.frais ?? TAUX_FRAIS, (x) => x.symbole === symbole);
     if (r.fermees === 0) return;
     maj({ portefeuille: r.portefeuille });
@@ -201,13 +205,13 @@ export function BarreUnClic({ etat, symbole, ticks, maj, lecture, signaler, chan
     <div className="un-clic" role="toolbar" aria-label="Trading en un clic">
       <button className="uc-symbole" onClick={changerSymbole} title="Instrument tradé en un clic : cliquez pour en changer (graphique compris)">
         <strong>{info?.code ?? symbole.split(':').pop()}</strong>
-        <span className="muet">⚡ 1 clic</span>
+        {etatMarche(symbole).ouvert ? <span className="muet">⚡ 1 clic</span> : <StatutMarche symbole={symbole} compact />}
       </button>
       {!negociable ? (
         <span className="muet">Cet instrument ne se trade pas en papier ici : choisissez l'or, le forex, un indice ou une crypto de la liste.</span>
       ) : (
         <>
-          <button className="uc-vente" disabled={!prix || lecture} onClick={() => passer('vente')} title="Vendre au marché (Maj+S) · Maj+X ferme l’instrument · Maj+R inverse">
+          <button className="uc-vente" disabled={!prix || lecture || !etatMarche(symbole).ouvert} onClick={() => passer('vente')} title="Vendre au marché (Maj+S) · Maj+X ferme l’instrument · Maj+R inverse">
             <span>Vendre</span>
             <strong>{cours ? formaterCotation(symbole, cours.bid) : '…'}</strong>
           </button>
@@ -262,7 +266,7 @@ export function BarreUnClic({ etat, symbole, ticks, maj, lecture, signaler, chan
           >
             {modeRisque ? 'risque %' : 'lots'}
           </button>
-          <button className="uc-achat" disabled={!prix || lecture} onClick={() => passer('achat')} title="Acheter au marché (Maj+B)">
+          <button className="uc-achat" disabled={!prix || lecture || !etatMarche(symbole).ouvert} onClick={() => passer('achat')} title="Acheter au marché (Maj+B)">
             <span>Acheter</span>
             <strong>{cours ? formaterCotation(symbole, cours.ask) : '…'}</strong>
           </button>

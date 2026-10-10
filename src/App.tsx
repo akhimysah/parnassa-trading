@@ -10,6 +10,7 @@ import { Aide } from './composants/Aide';
 import type { SujetPartage } from './composants/CartePartage';
 import { bilanVeille, type BilanJour } from './bilan';
 import { annoncesSurPositions } from './newsPositions';
+import { etatMarche } from './horaires';
 import { cleSemaine, revueSemaine, type RevueSemaine as Revue } from './semaine';
 import { WidgetTradingView } from './composants/WidgetTradingView';
 import { Graphique } from './pages/Graphique';
@@ -282,7 +283,7 @@ export function App() {
     // Accès investisseur : le moteur tourne sur l'appareil du titulaire, ici on ne fait que regarder.
     if (Object.keys(ticks).length === 0 || lectureSeule.current) return;
     setEtat((e) => {
-      const resultat = appliquerFlux(e.portefeuille, ticks, e.parametres.frais, blocageOrdres(e));
+      const resultat = appliquerFlux(e.portefeuille, ticks, e.parametres.frais, blocageOrdres(e), (s) => etatMarche(s).ouvert);
       let portefeuille = resultat.portefeuille;
       const messages = [...resultat.messages];
       if (portefeuille.crameLe && !e.portefeuille.crameLe) notifier('Compte cramé 🔥', MESSAGE_CRAME, undefined, `crame-${portefeuille.crameLe}`);
