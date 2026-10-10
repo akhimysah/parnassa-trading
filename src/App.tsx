@@ -7,6 +7,9 @@ import { RechercheSymbole } from './composants/RechercheSymbole';
 import { GestionListeSuivi } from './composants/GestionListeSuivi';
 import { Parametres } from './composants/Parametres';
 import { Aide } from './composants/Aide';
+import { BilanVeille } from './composants/BilanVeille';
+import { CartePartage, type SujetPartage } from './composants/CartePartage';
+import { bilanVeille, type BilanJour } from './bilan';
 import { WidgetTradingView } from './composants/WidgetTradingView';
 import { Graphique } from './pages/Graphique';
 // Pages chargées à la demande (l'accueil et le graphique sont dans le premier chargement), puis préchargées en
@@ -78,10 +81,34 @@ export function App() {
   const [gestionSuivi, setGestionSuivi] = useState(false);
   const [parametresOuverts, setParametresOuverts] = useState(false);
   const [aideOuverte, setAideOuverte] = useState(false);
+  const [bilan, setBilan] = useState<BilanJour | null>(null);
+  const [partageBilan, setPartageBilan] = useState<SujetPartage | null>(null);
   const [emplacementActif, setEmplacementActif] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
 
   const maj = useCallback((p: Partial<Etat>) => setEtat((e) => ({ ...e, ...p })), []);
+
+  // Bilan de la veille : une fois par jour, au premier lancement, s'il y a eu des trades.
+  useEffect(() => {
+    const cle = 'parnassa-trading:bilan-vu';
+    const aujourdhui = new Date().toDateString();
+    try {
+      if (localStorage.getItem(cle) === aujourdhui) return;
+    } catch {
+      return;
+    }
+    const t = window.setTimeout(() => {
+      const b = bilanVeille(etat.portefeuille.operations);
+      try {
+        localStorage.setItem(cle, aujourdhui);
+      } catch {
+        // stockage indisponible
+      }
+      if (b) setBilan(b);
+    }, 1500);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Trophées : vérifiés quand les opérations ou les challenges changent.
   useEffect(() => {
@@ -507,6 +534,17 @@ export function App() {
           maj({ page: 'graphique' });
         }}
       />
+      {bilan && (
+        <BilanVeille
+          bilan={bilan}
+          fermer={() => setBilan(null)}
+          partager={() => {
+            setPartageBilan({ type: 'jour', date: bilan.date, operations: bilan.operations });
+            setBilan(null);
+          }}
+        />
+      )}
+      {partageBilan && <CartePartage sujet={partageBilan} fermer={() => setPartageBilan(null)} />}
       <Aide ouvert={aideOuverte} fermer={() => setAideOuverte(false)} aller={(page) => maj({ page })} />
       <Parametres
         ouvert={parametresOuverts}

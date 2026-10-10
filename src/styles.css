@@ -4588,3 +4588,55 @@ kbd {
 .vt-icone {
   font-size: 26px;
 }
+
+/* ---- Bilan de la veille ---- */
+.bilan-veille {
+  width: min(520px, calc(100vw - 32px));
+}
+.bv-corps {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 18px;
+  text-align: center;
+}
+.bv-jour {
+  font-size: 13px;
+}
+.bv-net {
+  font-size: 40px;
+  font-variant-numeric: tabular-nums;
+}
+.bv-grille {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  gap: 8px;
+  width: 100%;
+}
+.bv-grille > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  border: 1px solid var(--bordure);
+  border-radius: 8px;
+}
+.bv-grille span {
+  font-size: 11px;
+  color: var(--texte-muet);
+  text-transform: uppercase;
+}
+.bv-grille em {
+  font-style: normal;
+  font-size: 11px;
+}
+.bv-serie {
+  font-weight: 600;
+  color: #e5a812;
+}
+.bv-boutons {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
