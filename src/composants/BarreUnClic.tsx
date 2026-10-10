@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Alerte, Etat, Sens } from '../types';
 import { demanderNotifications } from '../alertes';
+import { jouer } from '../sons';
 import type { Tick } from '../binance';
 import { estBinance, useFluxBinance } from '../binance';
 import { cleCotation, estNegociable, formaterCotation, instrument, LOT_MAX, normaliserLots, symbolesConversion, useCotationsScanner } from '../instruments';
@@ -87,6 +88,7 @@ export function BarreUnClic({ etat, symbole, ticks, maj, lecture, signaler, chan
     }
     setErreur(null);
     maj({ portefeuille: r });
+    if (etat.parametres.son) jouer(sens === 'achat' ? 'achat' : 'vente');
     signaler(`${sens === 'achat' ? 'Achat' : 'Vente'} ${formaterLots(lots)} ${info?.code ?? symbole} à ${formaterCotation(symbole, prix)}`);
   };
 
@@ -143,6 +145,7 @@ export function BarreUnClic({ etat, symbole, ticks, maj, lecture, signaler, chan
     const r = cloturerPositions(p, tous, etat.parametres.frais ?? TAUX_FRAIS, (x) => x.symbole === symbole);
     if (r.fermees === 0) return;
     maj({ portefeuille: r.portefeuille });
+    if (etat.parametres.son) jouer(r.resultat >= 0 ? 'gain' : 'perte');
     signaler(`${r.fermees} position${r.fermees > 1 ? 's' : ''} ${info?.code ?? ''} fermée${r.fermees > 1 ? 's' : ''} : ${formaterUsdt(r.resultat, true)}`);
   };
 

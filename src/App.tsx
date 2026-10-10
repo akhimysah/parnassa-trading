@@ -38,6 +38,7 @@ import { useSynchro } from './synchro';
 import { useCompteTrading } from './comptes';
 import { evaluerDiscipline } from './discipline';
 import { nouveauxTrophees } from './trophees';
+import { jouer, sonDesOperations } from './sons';
 import { estCrypto, estWeekendMarche, regleWeekendActive } from './weekend';
 import { symbolesConversion, useCotationsScanner } from './instruments';
 import { estBinance, paireBinance } from './binance';
@@ -90,6 +91,7 @@ export function App() {
     setEtat((e) => ({ ...e, trophees: { ...(e.trophees ?? {}), ...Object.fromEntries(nouveaux.map((t) => [t.id, maintenant])) } }));
     const texte = nouveaux.length === 1 ? `${nouveaux[0]!.icone} Trophée débloqué : ${nouveaux[0]!.nom}` : `🏆 ${nouveaux.length} trophées débloqués : ${nouveaux.map((t) => t.icone).join(' ')}`;
     setToast(texte);
+    if (etat.parametres.son) jouer('trophee');
     notifier('Trophée', texte, undefined, `trophee-${nouveaux.map((t) => t.id).join('-')}`);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [etat.portefeuille.operations, etat.portefeuille.crameLe, etat.challenge, etat.challengesPasses]);
@@ -244,7 +246,13 @@ export function App() {
       const avecCapital = enregistrerCapital(portefeuille, capital, messages.length > 0);
       if (messages.length > 0) {
         setTimeout(() => setToast(messages.join(' · ')), 0);
-        if (e.parametres.son) sonner();
+        if (e.parametres.son) {
+          // Son selon ce qui s'est passé : stops et objectifs (gain ou perte), ordres déclenchés (achat ou vente).
+          const nouvelles = portefeuille.operations.filter((o) => !e.portefeuille.operations.includes(o));
+          const evenement = sonDesOperations(nouvelles);
+          if (evenement) jouer(evenement);
+          else sonner();
+        }
       }
       if (avecCapital === e.portefeuille && challenge === e.challenge) return e;
       return { ...e, portefeuille: avecCapital, challenge };

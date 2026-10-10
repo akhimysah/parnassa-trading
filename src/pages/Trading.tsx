@@ -30,6 +30,7 @@ import { CartePartage, type SujetPartage } from '../composants/CartePartage';
 import { JournalTrades } from '../composants/JournalTrades';
 import { PositionsGroupees } from '../composants/PositionsGroupees';
 import { genererRapport, ouvrirRapport } from '../rapport';
+import { jouer } from '../sons';
 import { BarreCompte, capitalDemande, FenetreComptes } from '../composants/ComptesTrading';
 import type { GestionCompte } from '../comptes';
 import { PanneauChallenge } from '../composants/PanneauChallenge';
@@ -315,6 +316,7 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
     }
     setErreur(null);
     maj({ portefeuille: resultat });
+    if (etat.parametres.son && typeOrdre === 'marche') jouer(sens === 'achat' ? 'achat' : 'vente');
     setNote('');
     if (typeOrdre !== 'marche') setOnglet('ordres');
   };
