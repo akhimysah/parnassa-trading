@@ -4901,3 +4901,84 @@ kbd {
 .coach .lien {
   margin-top: 6px;
 }
+
+.plan-du-jour {
+  padding: 4px 0 10px;
+}
+.plan-du-jour.compact {
+  padding: 0;
+}
+.plan-du-jour.manquant {
+  border-color: rgba(246, 168, 33, 0.5);
+}
+.plan-entete {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+}
+.plan-titre {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.plan-titre:disabled {
+  cursor: default;
+}
+.plan-titre span {
+  font-size: 12px;
+}
+.plan-requis {
+  color: #f6a821;
+  font-weight: 600;
+}
+.plan-texte {
+  margin: 0 14px 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--panneau-2);
+  white-space: pre-wrap;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.plan-hier {
+  opacity: 0.8;
+}
+.plan-vide {
+  margin: 0 14px 8px;
+}
+.plan-du-jour > .lien {
+  margin: 0 14px 4px;
+}
+.plan-edition {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 14px 12px;
+}
+.plan-edition textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border-radius: var(--rayon);
+  border: 1px solid var(--bordure-2);
+  background: var(--fond);
+  color: var(--texte);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  resize: vertical;
+}
+.plan-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

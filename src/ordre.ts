@@ -4,6 +4,7 @@ import { paireBinance } from './binance';
 import { LOT_MIN, estNegociable } from './instruments';
 import { cloturer, pnlLatent } from './trading';
 import { blocageDiscipline, finDuBlocage, pauseApresPerte } from './discipline';
+import { planManquant } from './plan';
 import { fermeAuWeekend, regleWeekendActive, reouverture } from './weekend';
 
 type Ticks = Record<string, Tick>;
@@ -27,6 +28,8 @@ export function controleOuverture(o: {
   if (discipline) return `Discipline du jour : ${discipline} Nouveaux ordres bloqués ${finDuBlocage(o.etat.portefeuille)}.`;
   const pause = pauseApresPerte(o.etat.portefeuille, o.etat.parametres.discipline);
   if (pause) return pause;
+  const plan = planManquant(o.etat.portefeuille, o.etat.parametres.discipline);
+  if (plan) return plan;
   if (o.etat.challenge && o.etat.challenge.statut !== 'en-cours') return 'Challenge terminé : démarrez-en un nouveau ou quittez le mode challenge (page Trading).';
   if (o.annonce) {
     const heure = new Date(o.annonce.date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });

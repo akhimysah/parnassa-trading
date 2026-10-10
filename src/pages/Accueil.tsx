@@ -23,6 +23,7 @@ import { mesurer, reglesCompletes } from '../challenge';
 import { blocageDiscipline, mesurerJournee, mesurerMois, pauseApresPerte } from '../discipline';
 import type { CompteDistant } from '../compteLocal';
 import { Jauge } from '../composants/Jauge';
+import { PlanDuJour } from '../composants/PlanDuJour';
 import { MiniCourbe } from '../composants/MiniCourbe';
 import { PrixAnime } from '../composants/PrixAnime';
 import { Sessions } from '../composants/Sessions';
@@ -220,6 +221,10 @@ export function Accueil({ etat, fil, ticks, maj, compte, lecture, aller, ouvrirS
               );
             })}
           </ul>
+        </div>
+
+        <div className="carte">
+          <PlanDuJour portefeuille={p} regles={regles} enregistrer={(portefeuille) => maj({ portefeuille })} lecture={lecture} />
         </div>
 
         <div className="carte">

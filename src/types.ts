@@ -228,6 +228,8 @@ export interface Portefeuille {
   archive?: { operations: number; clotures: number; resultat: number; frais: number; jusquAu: number };
   /** Compte « cramé » : 99 % du capital de départ perdu. Positions fermées, plus aucun ordre jusqu'à la remise à zéro. */
   crameLe?: number;
+  /** Plans de trading, un par jour (le plus récent d'abord). */
+  plans?: { date: string; texte: string; majLe: number }[];
 }
 
 export interface DispositionSauvee {
@@ -279,6 +281,8 @@ export interface ReglesDiscipline {
   pauseApresPerteMin?: number;
   /** Pertes d'affilée dans la journée qui arrêtent le trading jusqu'au lendemain. */
   pertesConsecutivesMax?: number;
+  /** Pas d'ouverture tant que le plan du jour n'est pas écrit. */
+  planObligatoire?: boolean;
   /** Fermer les positions quand la perte ou l'objectif du jour est atteint. */
   fermerAuto: boolean;
   /** Fermer les positions hors crypto avant le week-end et bloquer les ouvertures jusqu'au dimanche soir. */

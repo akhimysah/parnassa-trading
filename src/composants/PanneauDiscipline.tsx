@@ -33,6 +33,7 @@ export function PanneauDiscipline({ etat, capital, balance, maj }: Props) {
     regles.risqueTradePct && `risque max ${pct(regles.risqueTradePct)} par trade (${formaterUsdt((capital * regles.risqueTradePct) / 100)} au stop)`,
     regles.pauseApresPerteMin && `pause de ${regles.pauseApresPerteMin} min après une perte`,
     regles.pertesConsecutivesMax && `pertes d'affilée ${serie}/${regles.pertesConsecutivesMax}`,
+    regles.planObligatoire && 'plan du jour obligatoire',
   ].filter((x): x is string => Boolean(x));
   const changer = (modif: Partial<ReglesDiscipline>) => maj({ parametres: { ...etat.parametres, discipline: { ...regles, ...modif } } });
 
@@ -173,6 +174,10 @@ export function PanneauDiscipline({ etat, capital, balance, maj }: Props) {
           <label>
             <span className="muet">Pertes d'affilée max</span>
             <input inputMode="numeric" defaultValue={regles.pertesConsecutivesMax ?? ''} placeholder="illimité" onBlur={(e) => changer({ pertesConsecutivesMax: nombre(e.target.value) ? Math.round(nombre(e.target.value)!) : undefined })} />
+          </label>
+          <label className="case">
+            <input type="checkbox" checked={Boolean(regles.planObligatoire)} onChange={(e) => changer({ planObligatoire: e.target.checked })} />
+            Plan du jour obligatoire avant la première position
           </label>
           <label className="case">
             <input type="checkbox" checked={Boolean(regles.stopObligatoire)} onChange={(e) => changer({ stopObligatoire: e.target.checked })} />

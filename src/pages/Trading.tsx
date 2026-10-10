@@ -28,6 +28,8 @@ import { AnalyseAvancee } from '../composants/AnalyseAvancee';
 import { ProjectionMonteCarlo } from '../composants/ProjectionMonteCarlo';
 import { RisqueExposition } from '../composants/RisqueExposition';
 import { CoachTrading } from '../composants/CoachTrading';
+import { planManquant } from '../plan';
+import { PlanDuJour } from '../composants/PlanDuJour';
 import { EditeurProtections } from '../composants/EditeurProtections';
 import { CartePartage, type SujetPartage } from '../composants/CartePartage';
 import { JournalTrades } from '../composants/JournalTrades';
@@ -285,6 +287,11 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
       setErreur(pause);
       return;
     }
+    const plan = planManquant(p, etat.parametres.discipline);
+    if (plan) {
+      setErreur(plan);
+      return;
+    }
     if (etat.challenge && etat.challenge.statut !== 'en-cours') {
       setErreur('Challenge terminé : démarrez-en un nouveau ou quittez le mode challenge (en haut de la page).');
       return;
@@ -457,6 +464,7 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
       />
       <PanneauChallenge etat={etat} capital={capital} marges={immobilise} maj={maj} compte={session?.compte ?? null} ouvrirPhaseSuivante={() => void ouvrirPhaseSuivante()} />
       <PanneauDiscipline etat={etat} capital={capital} balance={etat.portefeuille.solde + immobilise} maj={maj} />
+      <PlanDuJour portefeuille={p} regles={etat.parametres.discipline} enregistrer={(portefeuille) => maj({ portefeuille })} lecture={lecture} compact />
       {p.crameLe ? (
         <div className="bandeau-crame" role="alert">
           <strong>🔥 Compte cramé</strong>
