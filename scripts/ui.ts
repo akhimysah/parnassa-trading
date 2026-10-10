@@ -150,6 +150,8 @@ try {
     await page.waitForTimeout(600);
     verifier('clôture : plus de position ouverte', (await page.getByRole('button', { name: /^Positions \(0\)/ }).count()) === 1);
     verifier('clôture : historique à 2 opérations', (await page.getByRole('button', { name: /^Historique \(2\)/ }).count()) === 1);
+    await page.getByRole('button', { name: /^Historique \(2\)/ }).click();
+    verifier('historique : ouverture et clôture affichées', (await page.locator('tbody tr', { hasText: 'BTCUSDT' }).count()) === 2);
     verifier('ordre et clôture sans erreur', erreurs.length === 0, erreurs.join(' | '));
     await c.close();
   }
