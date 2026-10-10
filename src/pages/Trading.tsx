@@ -25,6 +25,7 @@ import { CalendrierTrades } from '../composants/CalendrierTrades';
 import { ClassementTraders } from '../composants/ClassementTraders';
 import { VitrineTrophees } from '../composants/VitrineTrophees';
 import { AnalyseAvancee } from '../composants/AnalyseAvancee';
+import { ProjectionMonteCarlo } from '../composants/ProjectionMonteCarlo';
 import { EditeurProtections } from '../composants/EditeurProtections';
 import { CartePartage, type SujetPartage } from '../composants/CartePartage';
 import { JournalTrades } from '../composants/JournalTrades';
@@ -1141,6 +1142,7 @@ export function Trading({ etat, ticks, maj: majBrut, ouvrirSymbole, compte, lie,
                     </table>
                   </div>
                   <AnalyseAvancee portefeuille={p} />
+                  <ProjectionMonteCarlo portefeuille={p} challenge={etat.challenge} />
                 </>
               )}
             </div>
