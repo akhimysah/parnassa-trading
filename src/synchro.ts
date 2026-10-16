@@ -4,7 +4,7 @@ import { fusionnerEtat } from './stockage';
 import { ecrirePortefeuilleLocal, lirePortefeuilleLocal, lireSessionCompte, partieCompte, partieLocale } from './compteLocal';
 
 /** Compte Parnassa (néobanque) : liaison par jeton, puis synchronisation de l'état entre appareils. */
-export const URL_NEOBANQUE = 'https://parnassa.neobank.workers.dev';
+export const URL_NEOBANQUE = 'https://app.parnassapay.com';
 const API = `${URL_NEOBANQUE}/api/parnassa/trading/sync`;
 const CLE_JETON = 'parnassa-trading:jeton-parnassa:v1';
 const CLE_BASE = 'parnassa-trading:synchro-base:v1';
